@@ -76,11 +76,11 @@ func TestBuildPipeline_StageNames(t *testing.T) {
 	}
 	p := buildPipeline(cfg)
 
-	if len(p.Stages) != 3 {
-		t.Fatalf("got %d stages, want 3", len(p.Stages))
+	if len(p.Stages) != 4 {
+		t.Fatalf("got %d stages, want 4", len(p.Stages))
 	}
 
-	expected := []string{"clone", "preprocess", "verify"}
+	expected := []string{"clone", "sync-data", "preprocess", "verify"}
 	for i, name := range expected {
 		if string(p.Stages[i].Name) != name {
 			t.Errorf("Stages[%d].Name = %q, want %q", i, p.Stages[i].Name, name)

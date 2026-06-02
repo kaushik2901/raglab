@@ -68,6 +68,7 @@ func buildPipeline(cfg *config.Config) pipeline.Pipeline {
 		Config:  cfg,
 		Stages: []pipeline.Stage{
 			stagepkg.CloneStage(cfg),
+			stagepkg.SyncDataStage(cfg),
 			stagepkg.PreprocessStage(cfg),
 			stagepkg.VerifyStage(cfg),
 		},
