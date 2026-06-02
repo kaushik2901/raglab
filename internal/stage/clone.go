@@ -35,7 +35,7 @@ func CloneStage(cfg *config.Config) pipeline.Stage {
 }
 
 func gitClone(ctx context.Context, url, path string) error {
-	cmd := exec.CommandContext(ctx, "git", "clone", url, path)
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--single-branch", url, path)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	return cmd.Run()
@@ -46,9 +46,9 @@ func gitUpdate(ctx context.Context, path string) error {
 		args []string
 		desc string
 	}{
-		{[]string{"fetch", "--all"}, "git fetch"},
+		{[]string{"fetch", "--depth", "1", "origin", "main"}, "git fetch origin main"},
 		{[]string{"checkout", "main"}, "git checkout main"},
-		{[]string{"pull", "--ff-only"}, "git pull --ff-only"},
+		{[]string{"reset", "--hard", "origin/main"}, "git reset --hard origin/main"},
 	}
 	for _, c := range cmds {
 		cmd := exec.CommandContext(ctx, "git", c.args...)
