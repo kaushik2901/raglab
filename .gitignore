@@ -30,3 +30,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Project-specific build artifacts
+bin/
+output/
+.journal/
+preprocess.exe
