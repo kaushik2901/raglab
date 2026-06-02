@@ -60,8 +60,7 @@ root/
 │   │
 │   ├── store/                    # (future) vector store abstraction
 │   │   ├── store.go              # VectorStore interface
-│   │   ├── postgres.go           # pgvector backend
-│   │   └── lancedb.go            # LanceDB backend
+│   │   └── qdrant.go             # Qdrant backend
 │   │
 │   ├── retriever/                # (future) retrieval strategies
 │   │   ├── retriever.go
