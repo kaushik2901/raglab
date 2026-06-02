@@ -1,6 +1,13 @@
 @echo off
 setlocal
 
+set IMAGE=handbook-pipeline
+set MOUNT=-v "%CD%:/workspace"
+
+echo Building Docker image...
+docker build -t %IMAGE% -f Dockerfile .
+if %errorlevel% neq 0 exit /b %errorlevel%
+
 if /I "%1"=="run"    goto :run
 if /I "%1"=="clean"  goto :clean
 if /I "%1"=="test"   goto :test
@@ -8,14 +15,13 @@ goto :build
 
 :build
 echo Building...
-if not exist bin mkdir bin
-go build -o bin\preprocess.exe .\cmd\preprocess
-if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe
+docker run --rm %MOUNT% %IMAGE% go build -o bin/preprocess ./cmd/preprocess
+if %errorlevel% equ 0 echo Build succeeded: bin/preprocess
 goto :end
 
 :run
-call :build
-if %errorlevel% equ 0 bin\preprocess.exe
+echo Running...
+docker run --rm %MOUNT% %IMAGE% sh -c "go build -o bin/preprocess ./cmd/preprocess && ./bin/preprocess"
 goto :end
 
 :clean
@@ -27,7 +33,7 @@ goto :end
 
 :test
 echo Running tests...
-go test .\...
+docker run --rm %MOUNT% %IMAGE% go test ./...
 goto :end
 
 :end

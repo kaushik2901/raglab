@@ -46,9 +46,9 @@ func gitUpdate(ctx context.Context, path string) error {
 		args []string
 		desc string
 	}{
-		{[]string{"fetch", "--depth", "1", "origin", "main"}, "git fetch origin main"},
+		{[]string{"fetch", "--all"}, "git fetch"},
 		{[]string{"checkout", "main"}, "git checkout main"},
-		{[]string{"reset", "--hard", "origin/main"}, "git reset --hard origin/main"},
+		{[]string{"pull", "--ff-only"}, "git pull --ff-only"},
 	}
 	for _, c := range cmds {
 		cmd := exec.CommandContext(ctx, "git", c.args...)
