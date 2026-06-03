@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/riverqueue/river"
 	stagepkg "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/riverqueue/river"
 )
 
 type CloneArgs struct {

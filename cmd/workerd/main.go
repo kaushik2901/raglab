@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
 func main() {
