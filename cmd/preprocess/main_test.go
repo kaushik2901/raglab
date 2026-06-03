@@ -63,9 +63,9 @@ func TestBuildPipeline_StageNames(t *testing.T) {
 	}
 	p := buildPipeline(cfg)
 
-	require.Len(t, p.Stages, 4)
+	require.Len(t, p.Stages, 3)
 
-	expected := []string{"clone", "sync-data", "preprocess", "verify"}
+	expected := []string{"clone", "preprocess", "verify"}
 	for i, name := range expected {
 		assert.Equal(t, name, string(p.Stages[i].Name), "Stages[%d].Name", i)
 	}

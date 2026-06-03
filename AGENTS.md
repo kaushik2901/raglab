@@ -21,11 +21,10 @@ Zero external Go dependencies (no `go.sum` yet). No `vendor/` dir.
 | Order | Stage        | Requires            | What it does                                                                         |
 | ----- | ------------ | ------------------- | ------------------------------------------------------------------------------------ |
 | 1     | `clone`      | —                   | `git clone --depth 1`; if exists: `fetch --all` + `checkout main` + `pull --ff-only` |
-| 2     | `sync-data`  | `clone`             | Runs `handbook/scripts/sync-data.sh` inside cloned repo (requires `sh`)              |
-| 3     | `preprocess` | `clone`             | Reads `{repo}/content/`, writes cleaned markdown to `--output`                       |
-| 4     | `verify`     | `clone, preprocess` | Writes `_verification_report.json` to output dir                                     |
+| 2     | `preprocess` | `clone`             | Reads `{repo}/content/`, writes cleaned markdown to `--output`                       |
+| 3     | `verify`     | `clone, preprocess` | Writes `_verification_report.json` to output dir                                     |
 
-Stages are defined in `cmd/preprocess/main.go:69-74`. Use `--from <stage>` to resume.
+Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to resume.
 
 ## Quirks
 
