@@ -15,6 +15,17 @@ type Config struct {
 	MaxRetries   int
 	RetryBackoff time.Duration
 	LogLevel     string
+
+	ChunkStrategy  string
+	ChunkSize      int
+	ChunkOverlap   int
+	EmbeddingModel string
+	BatchSize      int
+
+	LLMBaseURL   string
+	LLMApiKey    string
+	QdrantURL    string
+	QdrantAPIKey string
 }
 
 func Load() (*Config, error) {
@@ -26,7 +37,18 @@ func Load() (*Config, error) {
 	flag.IntVar(&cfg.MaxRetries, "max-retries", intEnvOrDefault("MAX_RETRIES", 3), "Maximum retry count for stages")
 	flag.DurationVar(&cfg.RetryBackoff, "retry-backoff", durationEnvOrDefault("RETRY_BACKOFF", 5*time.Second), "Retry backoff duration")
 	flag.StringVar(&cfg.LogLevel, "log-level", envOrDefault("LOG_LEVEL", "info"), "Log level (debug/info/warn)")
+
+	flag.StringVar(&cfg.ChunkStrategy, "chunk-strategy", envOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed/semantic/recursive)")
+	flag.IntVar(&cfg.ChunkSize, "chunk-size", intEnvOrDefault("CHUNK_SIZE", 512), "Target token count per chunk")
+	flag.IntVar(&cfg.ChunkOverlap, "chunk-overlap", intEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
+	flag.StringVar(&cfg.EmbeddingModel, "embedding-model", envOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
+	flag.IntVar(&cfg.BatchSize, "batch-size", intEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
+	flag.StringVar(&cfg.LLMBaseURL, "llm-base-url", envOrDefault("LLM_BASE_URL", "https://api.openai.com/v1"), "LLM base URL (OpenAI-compatible)")
 	flag.Parse()
+
+	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
+	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6333")
+	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
 
 	return cfg, cfg.Validate()
 }
@@ -46,6 +68,29 @@ func (c *Config) Validate() error {
 	}
 	if c.RetryBackoff <= 0 {
 		return errors.New("retry-backoff must be positive")
+	}
+	switch c.ChunkStrategy {
+	case "fixed", "semantic", "recursive":
+	default:
+		return errors.New("chunk-strategy must be one of: fixed, semantic, recursive")
+	}
+	if c.ChunkSize <= 0 {
+		return errors.New("chunk-size must be positive")
+	}
+	if c.ChunkOverlap < 0 {
+		return errors.New("chunk-overlap must be non-negative")
+	}
+	if c.ChunkOverlap >= c.ChunkSize {
+		return errors.New("chunk-overlap must be less than chunk-size")
+	}
+	if c.EmbeddingModel == "" {
+		return errors.New("embedding-model is required")
+	}
+	if c.BatchSize <= 0 {
+		return errors.New("batch-size must be positive")
+	}
+	if c.LLMBaseURL == "" {
+		return errors.New("llm-base-url is required")
 	}
 	return nil
 }
