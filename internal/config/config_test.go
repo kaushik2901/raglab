@@ -181,7 +181,7 @@ func parseTestFlags(args []string) (*Config, error) {
 		return nil, err
 	}
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
-	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6333")
+	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
 
 	return cfg, cfg.Validate()
