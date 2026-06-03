@@ -3,29 +3,29 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"time"
 
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/journal"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
-	stagepkg "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(); err != nil {
 		slog.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(args []string) error {
-	fromStage := extractFromFlag(args)
-	cleanArgs := stripFromFlag(args)
-
+func run() error {
 	origArgs := os.Args
-	os.Args = append([]string{"preprocess"}, cleanArgs...)
+	os.Args = append([]string{"preprocess"}, os.Args[1:]...)
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	cfg, err := config.Load()
@@ -34,43 +34,57 @@ func run(args []string) error {
 		return err
 	}
 
-	p := buildPipeline(cfg)
+	ctx := context.Background()
 
-	if fromStage != "" {
-		return p.RunFrom(context.Background(), types.StageID(fromStage))
+	pool, err := db.Connect(ctx)
+	if err != nil {
+		return fmt.Errorf("db connect: %w", err)
 	}
-	return p.Run(context.Background())
+	defer pool.Close()
+
+	if err := db.Migrate(ctx, pool); err != nil {
+		return fmt.Errorf("db migrate: %w", err)
+	}
+
+	store := workflow.NewStore(pool)
+
+	cfg.Tag = resolveTag(cfg.Tag, "pre")
+
+	repoPath := filepath.Join("artifacts", "preprocessing", cfg.Tag, "repo")
+
+	wfID, err := store.CreateWorkflow(ctx, "preprocess", cfg.Tag, map[string]any{
+		"repo_url":     cfg.RepoURL,
+		"include_dirs": cfg.IncludeDirs,
+	})
+	if err != nil {
+		return fmt.Errorf("create workflow: %w", err)
+	}
+
+	slog.Info("created workflow", "id", wfID, "tag", cfg.Tag)
+
+	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	if err != nil {
+		return fmt.Errorf("river client: %w", err)
+	}
+
+	_, err = riverClient.Insert(ctx, &workflow.CloneArgs{
+		WorkflowID:  wfID,
+		Tag:         cfg.Tag,
+		RepoURL:     cfg.RepoURL,
+		RepoPath:    repoPath,
+		IncludeDirs: cfg.IncludeDirs,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("insert clone job: %w", err)
+	}
+
+	slog.Info("inserted clone job, waiting for completion")
+	return workflow.PollUntilDone(ctx, store, wfID, 2*time.Second)
 }
 
-func extractFromFlag(args []string) string {
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--from" && i+1 < len(args) {
-			return args[i+1]
-		}
+func resolveTag(tag, prefix string) string {
+	if tag != "" {
+		return tag
 	}
-	return ""
-}
-
-func stripFromFlag(args []string) []string {
-	var result []string
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--from" {
-			i++
-			continue
-		}
-		result = append(result, args[i])
-	}
-	return result
-}
-
-func buildPipeline(cfg *config.Config) pipeline.Pipeline {
-	return pipeline.Pipeline{
-		Journal: journal.NewGobFileJournal(".journal"),
-		Config:  cfg,
-		Stages: []pipeline.Stage{
-			stagepkg.CloneStage(cfg),
-			stagepkg.PreprocessStage(cfg),
-			stagepkg.VerifyStage(cfg),
-		},
-	}
+	return prefix + "-" + time.Now().Format("20060102-150405")
 }
