@@ -41,7 +41,7 @@ func TestStageRecordCreation(t *testing.T) {
 	assert.True(t, record.Succeeded)
 	assert.Equal(t, "", record.Error)
 	assert.True(t, record.StartedAt.Equal(now))
-	assert.True(t, record.FinishedAt.Equal(now.Add(5 * time.Second)))
+	assert.True(t, record.FinishedAt.Equal(now.Add(5*time.Second)))
 	assert.Equal(t, "abc123", record.InputHash)
 	assert.Equal(t, "/tmp/repo", record.Output["repo_path"])
 }

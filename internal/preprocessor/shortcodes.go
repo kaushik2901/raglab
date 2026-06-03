@@ -8,7 +8,7 @@ import (
 type ShortcodeAction int
 
 const (
-	Remove    ShortcodeAction = iota
+	Remove ShortcodeAction = iota
 	StripTags
 	Resolve
 )

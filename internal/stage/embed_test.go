@@ -34,9 +34,9 @@ func TestEmbedStage_Basic(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		LLMBaseURL:   srv.URL,
+		LLMBaseURL:     srv.URL,
 		EmbeddingModel: "test-model",
-		BatchSize:    10,
+		BatchSize:      10,
 	}
 	stage := EmbedStage(cfg)
 	result, err := stage.Run(context.Background(), state)
@@ -68,9 +68,9 @@ func TestEmbedStage_StateKey(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		LLMBaseURL:    srv.URL,
+		LLMBaseURL:     srv.URL,
 		EmbeddingModel: "m",
-		BatchSize:     10,
+		BatchSize:      10,
 	}
 	stage := EmbedStage(cfg)
 	result, err := stage.Run(context.Background(), state)
@@ -106,9 +106,9 @@ func TestEmbedStage_Count(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		LLMBaseURL:    srv.URL,
+		LLMBaseURL:     srv.URL,
 		EmbeddingModel: "m",
-		BatchSize:     10,
+		BatchSize:      10,
 	}
 	stage := EmbedStage(cfg)
 	result, err := stage.Run(context.Background(), state)
@@ -132,9 +132,9 @@ func TestEmbedStage_EmptyChunks(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		LLMBaseURL:    srv.URL,
+		LLMBaseURL:     srv.URL,
 		EmbeddingModel: "m",
-		BatchSize:     10,
+		BatchSize:      10,
 	}
 	stage := EmbedStage(cfg)
 	result, err := stage.Run(context.Background(), state)
@@ -167,9 +167,9 @@ func TestEmbedStage_ChunkEmbeddingPairing(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		LLMBaseURL:    srv.URL,
+		LLMBaseURL:     srv.URL,
 		EmbeddingModel: "m",
-		BatchSize:     10,
+		BatchSize:      10,
 	}
 	stage := EmbedStage(cfg)
 	result, err := stage.Run(context.Background(), state)
