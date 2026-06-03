@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
@@ -15,7 +15,8 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		log.Fatal(err)
+		slog.Error("fatal", "err", err)
+		os.Exit(1)
 	}
 }
 
