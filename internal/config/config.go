@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,8 @@ type Config struct {
 	LLMApiKey    string
 	QdrantURL    string
 	QdrantAPIKey string
+
+	IncludeDirs []string
 }
 
 func Load() (*Config, error) {
@@ -44,7 +47,19 @@ func Load() (*Config, error) {
 	flag.StringVar(&cfg.EmbeddingModel, "embedding-model", envOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
 	flag.IntVar(&cfg.BatchSize, "batch-size", intEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
 	flag.StringVar(&cfg.LLMBaseURL, "llm-base-url", envOrDefault("LLM_BASE_URL", "https://api.openai.com/v1"), "LLM base URL (OpenAI-compatible)")
+
+	var includeDirs string
+	flag.StringVar(&includeDirs, "include-dirs", envOrDefault("INCLUDE_DIRS", ""), "Comma-separated subdirectories to process (empty = process all)")
 	flag.Parse()
+
+	if includeDirs != "" {
+		for d := range strings.SplitSeq(includeDirs, ",") {
+			d = strings.TrimSpace(d)
+			if d != "" {
+				cfg.IncludeDirs = append(cfg.IncludeDirs, d)
+			}
+		}
+	}
 
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")

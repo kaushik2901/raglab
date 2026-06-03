@@ -48,35 +48,49 @@ func ProcessFile(filePath string, repoRoot string) (*types.Document, error) {
 	}, nil
 }
 
-func ProcessAllFiles(srcDir string, dstDir string, concurrency int) (int, error) {
+func ProcessAllFiles(srcRoot string, subdirs []string, dstDir string, concurrency int) (int, error) {
 	if concurrency <= 0 {
 		concurrency = 10
 	}
 
-	var mdFiles []string
-	_, statErr := os.Stat(srcDir)
-	if statErr != nil {
-		if os.IsNotExist(statErr) {
-			return 0, nil
+	var walkDirs []string
+	if len(subdirs) == 0 {
+		walkDirs = []string{srcRoot}
+	} else {
+		for _, sd := range subdirs {
+			walkDirs = append(walkDirs, filepath.Join(srcRoot, sd))
 		}
-		return 0, fmt.Errorf("stat source dir: %w", statErr)
 	}
 
-	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
+	var (
+		mdFiles []string
+		err     error
+	)
+	for _, wd := range walkDirs {
+		_, statErr := os.Stat(wd)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return 0, fmt.Errorf("stat walk dir %s: %w", wd, statErr)
 		}
-		if info.IsDir() {
+
+		err = filepath.Walk(wd, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			ext := strings.ToLower(filepath.Ext(info.Name()))
+			if ext == ".md" || ext == ".markdown" {
+				mdFiles = append(mdFiles, path)
+			}
 			return nil
+		})
+		if err != nil {
+			return 0, fmt.Errorf("walk dir %s: %w", wd, err)
 		}
-		ext := strings.ToLower(filepath.Ext(info.Name()))
-		if ext == ".md" || ext == ".markdown" {
-			mdFiles = append(mdFiles, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("walk source dir: %w", err)
 	}
 
 	g, _ := errgroup.WithContext(context.Background())
@@ -87,7 +101,7 @@ func ProcessAllFiles(srcDir string, dstDir string, concurrency int) (int, error)
 	for _, filePath := range mdFiles {
 		fp := filePath
 		g.Go(func() error {
-			doc, err := ProcessFile(fp, srcDir)
+			doc, err := ProcessFile(fp, srcRoot)
 			if err != nil {
 				return fmt.Errorf("process %s: %w", fp, err)
 			}

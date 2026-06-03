@@ -34,15 +34,16 @@ make.cmd test     # run all tests
 
 ### CLI Flags
 
-| Flag | Env Var | Default | Description |
-|------|---------|---------|-------------|
-| `--repo-url` | `REPO_URL` | `https://gitlab.com/gitlab-com/content-sites/handbook` | Handbook repository URL |
-| `--repo-path` | `REPO_PATH` | `./handbook` | Local clone path |
-| `--output` | `OUTPUT_PATH` | `./output` | Cleaned markdown output directory |
-| `--max-retries` | `MAX_RETRIES` | `3` | Max retries per stage on failure |
-| `--retry-backoff` | `RETRY_BACKOFF` | `5s` | Initial retry backoff duration |
-| `--log-level` | `LOG_LEVEL` | `info` | Log level (debug/info/warn) |
-| `--from` | — | — | Resume from a specific stage name |
+| Flag              | Env Var         | Default                                                | Description                                      |
+| ----------------- | --------------- | ------------------------------------------------------ | ------------------------------------------------ |
+| `--repo-url`      | `REPO_URL`      | `https://gitlab.com/gitlab-com/content-sites/handbook` | Handbook repository URL                          |
+| `--repo-path`     | `REPO_PATH`     | `./handbook`                                           | Local clone path                                 |
+| `--output`        | `OUTPUT_PATH`   | `./output`                                             | Cleaned markdown output directory                |
+| `--include-dirs`  | `INCLUDE_DIRS`  | `""`                                                   | Comma-separated subdirs to process (empty = all) |
+| `--max-retries`   | `MAX_RETRIES`   | `3`                                                    | Max retries per stage on failure                 |
+| `--retry-backoff` | `RETRY_BACKOFF` | `5s`                                                   | Initial retry backoff duration                   |
+| `--log-level`     | `LOG_LEVEL`     | `info`                                                 | Log level (debug/info/warn)                      |
+| `--from`          | —               | —                                                      | Resume from a specific stage name                |
 
 ### Examples
 
@@ -55,6 +56,9 @@ bin\preprocess.exe --from preprocess
 
 # Fewer retries for quick testing
 bin\preprocess.exe --max-retries 1 --retry-backoff 1s
+
+# Only process specific subdirectories
+bin\preprocess.exe --include-dirs handbook,company,jobs
 ```
 
 ## Indexing Pipeline
@@ -92,28 +96,28 @@ make.cmd clean-index
 
 ### CLI Flags (additional)
 
-| Flag | Env Var | Default | Description |
-|------|---------|---------|-------------|
-| `--chunk-strategy` | `CHUNK_STRATEGY` | `fixed` | Chunking strategy (fixed only) |
-| `--chunk-size` | `CHUNK_SIZE` | `512` | Target token count per chunk |
-| `--chunk-overlap` | `CHUNK_OVERLAP` | `64` | Token overlap between chunks |
-| `--embedding-model` | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
-| `--batch-size` | `BATCH_SIZE` | `20` | Embedding API batch size |
-| `--llm-base-url` | `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
-| | `LLM_API_KEY` | `""` | API key (empty for local servers like LM Studio) |
-| | `QDRANT_URL` | `http://localhost:6334` | Qdrant gRPC endpoint |
-| | `QDRANT_API_KEY` | `""` | Qdrant API key (optional) |
+| Flag                | Env Var           | Default                     | Description                                      |
+| ------------------- | ----------------- | --------------------------- | ------------------------------------------------ |
+| `--chunk-strategy`  | `CHUNK_STRATEGY`  | `fixed`                     | Chunking strategy (fixed only)                   |
+| `--chunk-size`      | `CHUNK_SIZE`      | `512`                       | Target token count per chunk                     |
+| `--chunk-overlap`   | `CHUNK_OVERLAP`   | `64`                        | Token overlap between chunks                     |
+| `--embedding-model` | `EMBEDDING_MODEL` | `text-embedding-3-small`    | Embedding model name                             |
+| `--batch-size`      | `BATCH_SIZE`      | `20`                        | Embedding API batch size                         |
+| `--llm-base-url`    | `LLM_BASE_URL`    | `https://api.openai.com/v1` | OpenAI-compatible API base URL                   |
+|                     | `LLM_API_KEY`     | `""`                        | API key (empty for local servers like LM Studio) |
+|                     | `QDRANT_URL`      | `http://localhost:6334`     | Qdrant gRPC endpoint                             |
+|                     | `QDRANT_API_KEY`  | `""`                        | Qdrant API key (optional)                        |
 
 Connection strings (`LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`) are read from environment variables only (not CLI flags) to keep secrets out of process listings.
 
 ### Provider Configuration
 
-| Provider | `LLM_BASE_URL` | `LLM_API_KEY` |
-|----------|----------------|---------------|
-| OpenAI API | `https://api.openai.com/v1` | Required |
-| OpenRouter | `https://openrouter.ai/api/v1` | Required |
-| LM Studio | `http://localhost:1234/v1` | Empty |
-| Ollama | `http://localhost:11434/v1` | Empty |
+| Provider   | `LLM_BASE_URL`                 | `LLM_API_KEY` |
+| ---------- | ------------------------------ | ------------- |
+| OpenAI API | `https://api.openai.com/v1`    | Required      |
+| OpenRouter | `https://openrouter.ai/api/v1` | Required      |
+| LM Studio  | `http://localhost:1234/v1`     | Empty         |
+| Ollama     | `http://localhost:11434/v1`    | Empty         |
 
 ### Resume
 

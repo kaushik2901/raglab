@@ -109,7 +109,7 @@ func TestProcessAllFiles_SingleFile(t *testing.T) {
 
 	os.WriteFile(filepath.Join(srcDir, "page.md"), []byte("# Hello"), 0644)
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 1)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 1)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 	assert.FileExists(t, filepath.Join(dstDir, "page.md"))
@@ -123,7 +123,7 @@ func TestProcessAllFiles_MultipleFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "b.md"), []byte("B"), 0644)
 	os.WriteFile(filepath.Join(srcDir, "c.md"), []byte("C"), 0644)
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 2)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 2)
 	require.NoError(t, err)
 	assert.Equal(t, 3, count)
 
@@ -140,7 +140,7 @@ func TestProcessAllFiles_PreservesDirectoryStructure(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "index.md"), []byte("# Index"), 0644)
 	os.WriteFile(filepath.Join(srcDir, "sub", "page.md"), []byte("# Sub Page"), 0644)
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 2)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
@@ -156,7 +156,7 @@ func TestProcessAllFiles_SkipsNonMarkdown(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "data.json"), []byte("{}"), 0644)
 	os.WriteFile(filepath.Join(srcDir, "notes.txt"), []byte("text"), 0644)
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 1)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 1)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 
@@ -168,7 +168,7 @@ func TestProcessAllFiles_EmptyDir(t *testing.T) {
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 1)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 1)
 	require.NoError(t, err)
 	assert.Zero(t, count)
 }
@@ -182,7 +182,7 @@ func TestProcessAllFiles_WithConcurrency(t *testing.T) {
 		os.WriteFile(filepath.Join(srcDir, name), []byte("# File "+name), 0644)
 	}
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 5)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 5)
 	require.NoError(t, err)
 	assert.Equal(t, 10, count)
 
@@ -198,7 +198,7 @@ func TestProcessAllFiles_DefaultConcurrency(t *testing.T) {
 
 	os.WriteFile(filepath.Join(srcDir, "x.md"), []byte("x"), 0644)
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 0)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 0)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
 }
@@ -220,7 +220,7 @@ See {{< ref "snippet" >}}`
 
 	os.WriteFile(filePath, []byte(content), 0644)
 
-	count, err := ProcessAllFiles(srcDir, dstDir, 1)
+	count, err := ProcessAllFiles(srcDir, nil, dstDir, 1)
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -177,9 +178,22 @@ func parseTestFlags(args []string) (*Config, error) {
 	fs.IntVar(&cfg.BatchSize, "batch-size", intEnvOrDefault("BATCH_SIZE", 20), "")
 	fs.StringVar(&cfg.LLMBaseURL, "llm-base-url", envOrDefault("LLM_BASE_URL", "https://api.openai.com/v1"), "")
 
+	var includeDirs string
+	fs.StringVar(&includeDirs, "include-dirs", envOrDefault("INCLUDE_DIRS", ""), "")
+
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
+
+	if includeDirs != "" {
+		for d := range strings.SplitSeq(includeDirs, ",") {
+			d = strings.TrimSpace(d)
+			if d != "" {
+				cfg.IncludeDirs = append(cfg.IncludeDirs, d)
+			}
+		}
+	}
+
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
@@ -203,6 +217,7 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "text-embedding-3-small", cfg.EmbeddingModel)
 	assert.Equal(t, 20, cfg.BatchSize)
 	assert.Equal(t, "https://api.openai.com/v1", cfg.LLMBaseURL)
+	assert.Empty(t, cfg.IncludeDirs)
 }
 
 func TestValidate_InvalidChunkStrategy(t *testing.T) {
@@ -415,4 +430,9 @@ func TestLoad_WithFlags(t *testing.T) {
 	assert.Equal(t, "custom-model", cfg.EmbeddingModel)
 	assert.Equal(t, 10, cfg.BatchSize)
 	assert.Equal(t, "http://localhost:8080/v1", cfg.LLMBaseURL)
+	assert.Empty(t, cfg.IncludeDirs)
+
+	cfg2, err2 := parseTestFlags([]string{"--include-dirs", "handbook,company"})
+	require.NoError(t, err2)
+	assert.Equal(t, []string{"handbook", "company"}, cfg2.IncludeDirs)
 }

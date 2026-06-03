@@ -22,7 +22,7 @@ func PreprocessStage(cfg *config.Config) pipeline.Stage {
 			}
 			srcDir := filepath.Join(repoPath, "content")
 			dstDir := cfg.OutputPath
-			count, err := preprocessor.ProcessAllFiles(srcDir, dstDir, 10)
+			count, err := preprocessor.ProcessAllFiles(srcDir, cfg.IncludeDirs, dstDir, 10)
 			if err != nil {
 				return nil, fmt.Errorf("preprocess: %w", err)
 			}
