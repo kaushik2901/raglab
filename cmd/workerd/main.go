@@ -1,0 +1,63 @@
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"os/signal"
+
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
+)
+
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
+	defer cancel()
+
+	if err := run(ctx); err != nil {
+		slog.Error("fatal", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error {
+	pool, err := db.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	if err := db.Migrate(ctx, pool); err != nil {
+		return err
+	}
+
+	store := workflow.NewStore(pool)
+
+	cloneWorker := &workflow.CloneWorker{Store: store}
+	preprocessWorker := &workflow.PreprocessWorker{Store: store}
+	verifyWorker := &workflow.VerifyWorker{Store: store}
+
+	workers := river.NewWorkers()
+	river.AddWorker(workers, cloneWorker)
+	river.AddWorker(workers, preprocessWorker)
+	river.AddWorker(workers, verifyWorker)
+
+	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		Queues: map[string]river.QueueConfig{
+			"default": {MaxWorkers: 5},
+		},
+		Workers: workers,
+	})
+	if err != nil {
+		return err
+	}
+
+	cloneWorker.Client = riverClient
+	preprocessWorker.Client = riverClient
+	verifyWorker.Client = riverClient
+
+	slog.Info("workerd started, waiting for jobs")
+	return riverClient.Start(ctx)
+}
