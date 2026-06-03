@@ -24,6 +24,10 @@ echo Running...
 docker run --rm %MOUNT% %IMAGE% sh -c "go build -o bin/preprocess ./cmd/preprocess && ./bin/preprocess"
 goto :end
 
+if /I "%1"=="build-index" goto :build-index
+if /I "%1"=="run-index"   goto :run-index
+if /I "%1"=="clean-index" goto :clean-index
+
 :clean
 echo Cleaning...
 if exist bin\      rmdir /s /q bin
@@ -34,6 +38,22 @@ goto :end
 :test
 echo Running tests...
 docker run --rm %MOUNT% %IMAGE% go test ./...
+goto :end
+
+:build-index
+echo Building index...
+docker run --rm %MOUNT% %IMAGE% go build -o bin/index.exe ./cmd/index
+if %errorlevel% equ 0 echo Build succeeded: bin/index.exe
+goto :end
+
+:run-index
+echo Running index...
+docker run --rm %MOUNT% %IMAGE% sh -c "go build -o bin/index.exe ./cmd/index && ./bin/index.exe"
+goto :end
+
+:clean-index
+echo Cleaning index journal...
+if exist .journal-index\ rmdir /s /q .journal-index
 goto :end
 
 :end

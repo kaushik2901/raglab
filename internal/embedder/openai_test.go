@@ -7,12 +7,19 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
+
+func newTestEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
+	e := New(baseURL, apiKey, model, batchSize)
+	e.retryBackoff = time.Millisecond
+	return e
+}
 
 func TestEmbed_Basic(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +212,7 @@ func TestEmbed_RateLimit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newTestEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
@@ -220,7 +227,7 @@ func TestEmbed_RateLimitExhausted(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newTestEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)

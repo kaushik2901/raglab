@@ -13,20 +13,24 @@ import (
 )
 
 type embedder struct {
-	baseURL   string
-	apiKey    string
-	model     string
-	batchSize int
-	client    *http.Client
+	baseURL          string
+	apiKey           string
+	model            string
+	batchSize        int
+	client           *http.Client
+	retryMaxAttempts int
+	retryBackoff     time.Duration
 }
 
 func New(baseURL, apiKey, model string, batchSize int) *embedder {
 	return &embedder{
-		baseURL:   baseURL,
-		apiKey:    apiKey,
-		model:     model,
-		batchSize: batchSize,
-		client:    &http.Client{Timeout: 60 * time.Second},
+		baseURL:          baseURL,
+		apiKey:           apiKey,
+		model:            model,
+		batchSize:        batchSize,
+		client:           &http.Client{Timeout: 60 * time.Second},
+		retryMaxAttempts: 5,
+		retryBackoff:     200 * time.Millisecond,
 	}
 }
 
@@ -121,19 +125,16 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 }
 
 func (e *embedder) doWithRetry(req *http.Request, respVal interface{}) error {
-	maxRetries := 5
-	backoff := 200 * time.Millisecond
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; attempt <= e.retryMaxAttempts; attempt++ {
+		backoff := e.retryBackoff * (1 << attempt)
 		resp, err := e.client.Do(req)
 		if err != nil {
 			return fmt.Errorf("http request: %w", err)
 		}
 
-		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxRetries {
+		if resp.StatusCode == http.StatusTooManyRequests && attempt < e.retryMaxAttempts {
 			resp.Body.Close()
 			time.Sleep(backoff)
-			backoff *= 2
 			continue
 		}
 
@@ -151,7 +152,7 @@ func (e *embedder) doWithRetry(req *http.Request, respVal interface{}) error {
 		return nil
 	}
 
-	return fmt.Errorf("rate limit exceeded after %d retries", maxRetries)
+	return fmt.Errorf("rate limit exceeded after %d retries", e.retryMaxAttempts)
 }
 
 func (e *embedder) Dimensions() int {
