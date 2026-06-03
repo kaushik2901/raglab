@@ -31,7 +31,7 @@ func CloneStage(repoURL, repoPath string) types.Stage {
 }
 
 func gitClone(ctx context.Context, url, path string) error {
-	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--single-branch", url, path)
+	cmd := exec.CommandContext(ctx, "git", "-c", "core.longpaths=true", "clone", "--depth", "1", "--single-branch", url, path)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	return cmd.Run()
@@ -43,7 +43,6 @@ func gitUpdate(ctx context.Context, path string) error {
 		desc string
 	}{
 		{[]string{"fetch", "--all"}, "git fetch"},
-		{[]string{"checkout", "main"}, "git checkout main"},
 		{[]string{"pull", "--ff-only"}, "git pull --ff-only"},
 	}
 	for _, c := range cmds {

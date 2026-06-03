@@ -5,11 +5,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"time"
+
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
 func main() {
@@ -27,9 +29,9 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer pool.Close()
 
 	if err := db.Migrate(ctx, pool); err != nil {
+		pool.Close()
 		return err
 	}
 
@@ -53,12 +55,14 @@ func run(ctx context.Context) error {
 	river.AddWorker(workers, storeWorker)
 
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		JobTimeout: 5 * time.Minute,
 		Queues: map[string]river.QueueConfig{
 			"default": {MaxWorkers: 5},
 		},
 		Workers: workers,
 	})
 	if err != nil {
+		pool.Close()
 		return err
 	}
 
@@ -70,6 +74,19 @@ func run(ctx context.Context) error {
 	embedWorker.Client = riverClient
 	storeWorker.Client = riverClient
 
+	if err := riverClient.Start(ctx); err != nil {
+		pool.Close()
+		return err
+	}
+
 	slog.Info("workerd started, waiting for jobs")
-	return riverClient.Start(ctx)
+
+	<-ctx.Done()
+
+	slog.Info("shutting down...")
+	if err := riverClient.Stop(context.Background()); err != nil {
+		slog.Error("stop failed", "err", err)
+	}
+	pool.Close()
+	return nil
 }
