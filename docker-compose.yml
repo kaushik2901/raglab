@@ -1,4 +1,15 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
   qdrant:
     image: qdrant/qdrant:latest
     ports:
@@ -8,4 +19,5 @@ services:
       - qdrant_storage:/qdrant/storage
 
 volumes:
+  pg_data:
   qdrant_storage:

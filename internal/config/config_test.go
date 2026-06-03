@@ -181,9 +181,15 @@ func parseTestFlags(args []string) (*Config, error) {
 	var includeDirs string
 	fs.StringVar(&includeDirs, "include-dirs", envOrDefault("INCLUDE_DIRS", ""), "")
 
+	var tag string
+	fs.StringVar(&tag, "tag", "", "")
+	fs.StringVar(&cfg.InputTag, "input-tag", "", "")
+
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
+
+	cfg.Tag = tag
 
 	if includeDirs != "" {
 		for d := range strings.SplitSeq(includeDirs, ",") {
@@ -197,6 +203,7 @@ func parseTestFlags(args []string) (*Config, error) {
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
+	cfg.DatabaseURL = envOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
 
 	return cfg, cfg.Validate()
 }

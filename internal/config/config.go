@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +30,10 @@ type Config struct {
 	QdrantAPIKey string
 
 	IncludeDirs []string
+
+	DatabaseURL string
+	Tag         string
+	InputTag    string
 }
 
 func Load() (*Config, error) {
@@ -50,6 +55,11 @@ func Load() (*Config, error) {
 
 	var includeDirs string
 	flag.StringVar(&includeDirs, "include-dirs", envOrDefault("INCLUDE_DIRS", ""), "Comma-separated subdirectories to process (empty = process all)")
+
+	var tag string
+	flag.StringVar(&tag, "tag", envOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
+	flag.StringVar(&cfg.InputTag, "input-tag", envOrDefault("INPUT_TAG", ""), "Source preprocessed tag (for indexing)")
+
 	flag.Parse()
 
 	if includeDirs != "" {
@@ -64,6 +74,13 @@ func Load() (*Config, error) {
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
+
+	cfg.DatabaseURL = envOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
+
+	cfg.Tag = tag
+	if cfg.Tag == "" {
+		cfg.Tag = autoGenerateTag()
+	}
 
 	return cfg, cfg.Validate()
 }
@@ -122,6 +139,10 @@ func intEnvOrDefault(key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
+}
+
+func autoGenerateTag() string {
+	return fmt.Sprintf("%s", time.Now().Format("20060102-150405"))
 }
 
 func durationEnvOrDefault(key string, defaultVal time.Duration) time.Duration {
