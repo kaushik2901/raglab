@@ -7,7 +7,7 @@
 | Cleaned markdown files | ~4,496 (in `output/`)          |
 | Total content size     | ~44 MB                         |
 | Chunking strategies    | 3 (fixed, semantic, recursive) |
-| Embedding backends     | 2 (OpenAI, local)              |
+| Embedding backends     | 1 (OpenAI-compatible)          |
 | Vector store backends  | 1 (Qdrant)                     |
 | Pipeline stages        | 4 (parse, chunk, embed, store) |
 
@@ -54,8 +54,7 @@ root/
 │   │
 │   ├── embedder/                 # NEW: embedding model abstraction
 │   │   ├── embedder.go           # Embedder interface
-│   │   ├── openai.go             # OpenAI-compatible API
-│   │   └── local.go              # Local model (sentence-transformers via HTTP)
+│   │   └── openai.go             # Single impl — works with any OpenAI-compatible endpoint
 │   │
 │   └── store/                    # NEW: vector store abstraction
 │       ├── store.go              # VectorStore interface
@@ -149,21 +148,23 @@ type DocumentChunk struct {
 
 **Logic:**
 
-1. Read `embedding_model` from config (openai / local)
-2. Instantiate the appropriate embedder
-3. Batch chunks (e.g., 20 at a time for OpenAI)
+1. Read `cfg.EmbeddingModel` to select model name
+2. Create `openai.Embedder` with `cfg.LLMBaseURL` and `cfg.LLMAPIKey`
+3. Batch chunks (e.g., 20 at a time)
 4. Generate embeddings for each batch
 5. Pair chunks with their embeddings → `[]types.DocumentChunk`
 6. Store in state as `"document_chunks"`
 
-**Embedding backends:**
-
-| Backend | Configuration                                      | Notes                       |
-| ------- | -------------------------------------------------- | --------------------------- |
-| OpenAI  | `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional)     | Uses text-embedding-3-small |
-| Local   | `LOCAL_EMBED_URL` (default: http://localhost:8080) | sentence-transformers API   |
-
 **Batching:** Send chunks in batches to avoid token limits. Default batch size: 20.
+
+The embedder talks the OpenAI-compatible API format, which all supported providers speak:
+
+| Provider          | `LLMBaseURL`                       | `LLMAPIKey`            |
+| ----------------- | ---------------------------------- | ---------------------- |
+| OpenAI API        | `https://api.openai.com/v1`        | Required               |
+| OpenRouter        | `https://openrouter.ai/api/v1`     | Required               |
+| LM Studio         | `http://localhost:1234/v1`         | Empty                  |
+| Ollama            | `http://localhost:11434/v1`        | Empty                  |
 
 ---
 
@@ -219,13 +220,12 @@ type Config struct {
     ChunkStrategy  string        // fixed / semantic / recursive
     ChunkSize      int           // tokens per chunk (default: 512)
     ChunkOverlap   int           // overlap between chunks (default: 64)
-    EmbeddingModel string        // openai / local
+    EmbeddingModel string        // model name, e.g. text-embedding-3-small
     BatchSize      int           // embedding batch size (default: 20)
 
     // Connection strings (env vars)
-    OpenAIApiKey   string        // OPENAI_API_KEY
-    OpenAIBaseURL  string        // OPENAI_BASE_URL
-    LocalEmbedURL  string        // LOCAL_EMBED_URL
+    LLMBaseURL     string        // LLM_BASE_URL
+    LLMApiKey      string        // LLM_API_KEY (optional — empty for local servers)
     QdrantURL      string        // QDRANT_URL (default: http://localhost:6333)
     QdrantAPIKey   string        // QDRANT_API_KEY (optional)
 }
@@ -269,16 +269,15 @@ Each pipeline maintains its own journal (`.journal/` vs `.journal-index/`) so th
 | 7    | `internal/chunker/recursive.go` — recursive character splitting              | Compatible with LangChain patterns     |
 | 8    | `internal/stage/parse.go` — wire parser as pipeline stage                    | Stage 1 of indexing                    |
 | 9    | `internal/stage/chunk.go` — wire chunker as pipeline stage                   | Stage 2 of indexing                    |
-| 10   | `internal/embedder/embedder.go` — Embedder interface                         | Abstraction for pluggable backends     |
-| 11   | `internal/embedder/openai.go` — OpenAI embedding API                         | Primary embedding backend              |
-| 12   | `internal/embedder/local.go` — local model via HTTP                          | Offline/self-hosted option             |
-| 13   | `internal/stage/embed.go` — wire embedder as pipeline stage                  | Stage 3 of indexing                    |
-| 14   | `internal/store/store.go` — VectorStore interface                            | Abstraction for pluggable backends     |
-| 15   | `internal/store/qdrant.go` — Qdrant backend                                  | Vector store with gRPC API            |
-| 17   | `internal/stage/store.go` — wire store as pipeline stage                     | Stage 4 of indexing                    |
-| 18   | `cmd/index/main.go` — wire complete indexing pipeline CLI                    | Complete CLI flow                      |
-| 19   | Extend `make.cmd` with index build/run commands                              | Developer workflow                     |
-| 20   | Integration test on preprocessed handbook data                               | End-to-end verification                |
+| 10   | `internal/embedder/embedder.go` — Embedder interface                         | Abstraction                      |
+| 11   | `internal/embedder/openai.go` — OpenAI-compatible embedder                   | Single impl for all providers     |
+| 12   | `internal/stage/embed.go` — wire embedder as pipeline stage                  | Stage 3 of indexing               |
+| 13   | `internal/store/store.go` — VectorStore interface                            | Abstraction for pluggable backends|
+| 14   | `internal/store/qdrant.go` — Qdrant backend                                  | Vector store with gRPC API       |
+| 15   | `internal/stage/store.go` — wire store as pipeline stage                     | Stage 4 of indexing               |
+| 16   | `cmd/index/main.go` — wire complete indexing pipeline CLI                    | Complete CLI flow                      |
+| 17   | Extend `make.cmd` with index build/run commands                              | Developer workflow                     |
+| 18   | Integration test on preprocessed handbook data                               | End-to-end verification                |
 
 ## Dependencies (go.mod)
 
@@ -296,8 +295,7 @@ The embedder stages use HTTP calls (standard library) — no additional deps nee
 | `internal/chunker` (fixed)                 | 8          | Token counting, boundary conditions, overlap, empty doc     |
 | `internal/chunker` (semantic)              | 8          | Heading splitting, no headings, nested headings, edge cases |
 | `internal/chunker` (recursive)             | 6          | Separator priority, max size, no splits possible            |
-| `internal/embedder` (openai)               | 4          | API call, batching, error handling, rate limiting           |
-| `internal/embedder` (local)                | 3          | HTTP call, response parsing, connection error               |
+| `internal/embedder` (openai)               | 6          | API call, batching, error handling, rate limiting, provider agnostic |
 | `internal/store` (qdrant)                  | 4          | Collection creation, upsert, query, connection error        |
 | `internal/stage` (parse/chunk/embed/store) | 12         | Stage wiring, state passing, error propagation              |
 | `cmd/index`                                | 6          | CLI parsing, pipeline wiring, resume, config validation     |
@@ -315,10 +313,9 @@ Phase 2 (Parser + Chunkers — depends on Phase 1, parallelizable)
   ├── 2.3 Semantic chunker
   └── 2.4 Recursive chunker
 
-Phase 3 (Embedders — depends on Phase 1)
+Phase 3 (Embedder — depends on Phase 1)
   ├── 3.1 Embedder interface
-  ├── 3.2 OpenAI backend
-  └── 3.3 Local backend
+  └── 3.2 OpenAI-compatible embedder
 
 Phase 4 (Store — depends on Phase 1)
   ├── 4.1 VectorStore interface
@@ -341,7 +338,7 @@ Phase 6 (CLI + Integration — depends on Phase 5)
 The indexing pipeline follows the same patterns as the preprocessing pipeline:
 
 - **Pluggable chunkers** — implement `Chunker` interface, register in config
-- **Pluggable embedders** — implement `Embedder` interface, add backend
+- **Pluggable embedders** — implement `Embedder` interface, add alternative impl (unlikely needed — all providers use OpenAI-compatible API)
 - **Pluggable stores** — implement `VectorStore` interface, add backend
 - **Same pipeline runner** — journaling, retry, resume work unchanged
 

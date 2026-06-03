@@ -17,10 +17,9 @@ Phase 2 (Parser + Chunkers — depends on Phase 1, parallelizable within phase)
   ├── 2.3 Semantic chunker
   └── 2.4 Recursive chunker
        │
-Phase 3 (Embedders — depends on Phase 1, parallelizable with Phase 2 & 4)
+Phase 3 (Embedder — depends on Phase 1, parallelizable with Phase 2 & 4)
   ├── 3.1 Embedder interface
-  ├── 3.2 OpenAI backend
-  └── 3.3 Local backend
+  └── 3.2 OpenAI-compatible embedder (single impl for all providers)
        │
 Phase 4 (Store — depends on Phase 1, parallelizable with Phase 2 & 3)
   ├── 4.1 VectorStore interface
@@ -115,40 +114,39 @@ type Config struct {
     ChunkStrategy  string   // fixed / semantic / recursive
     ChunkSize      int      // tokens per chunk (default: 512)
     ChunkOverlap   int      // overlap between chunks (default: 64)
-    EmbeddingModel string   // openai / local
+    EmbeddingModel string   // model name, e.g. text-embedding-3-small
     BatchSize      int      // embedding batch size (default: 20)
 
     // Connection strings (env vars only, no CLI flags)
-    OpenAIApiKey   string // OPENAI_API_KEY
-    OpenAIBaseURL  string // OPENAI_BASE_URL
-    LocalEmbedURL  string // LOCAL_EMBED_URL
-    QdrantURL      string // QDRANT_URL
-    QdrantAPIKey   string // QDRANT_API_KEY
+    LLMBaseURL     string // LLM_BASE_URL (default: https://api.openai.com/v1)
+    LLMApiKey      string // LLM_API_KEY (optional — empty for local servers)
+    QdrantURL      string // QDRANT_URL (default: http://localhost:6333)
+    QdrantAPIKey   string // QDRANT_API_KEY (optional)
 }
 ```
 
 **CLI flags to add:**
 ```
---chunk-strategy   (default: "fixed")
---chunk-size       (default: 512)
---chunk-overlap    (default: 64)
---embedding-model  (default: "openai")
---batch-size       (default: 20)
+--chunk-strategy    (default: "fixed")
+--chunk-size        (default: 512)
+--chunk-overlap     (default: 64)
+--embedding-model   (default: "text-embedding-3-small")
+--batch-size        (default: 20)
+--llm-base-url      (default: "https://api.openai.com/v1")
 ```
 
 **Validation rules to add:**
 - `ChunkStrategy` must be one of: `fixed`, `semantic`, `recursive`
 - `ChunkSize` must be > 0
 - `ChunkOverlap` must be >= 0 and < `ChunkSize`
-- `EmbeddingModel` must be one of: `openai`, `local`
+- `EmbeddingModel` must be non-empty
 - `BatchSize` must be > 0
-- Missing `OpenAIApiKey` when `EmbeddingModel == "openai"` → error
-- Missing `LocalEmbedURL` when `EmbeddingModel == "local"` → error
+- `LLMBaseURL` must be non-empty
 
 **Acceptance criteria:**
 - New CLI flags parsed correctly via `flag` package
 - New env vars fall back to defaults (e.g. `CHUNK_STRATEGY`, `CHUNK_SIZE`)
-- Validation rejects invalid strategy, model, negative chunk size, overlap >= chunk size
+- Validation rejects invalid strategy, negative chunk size, overlap >= chunk size, empty base URL
 - Connection strings read from env vars only (no CLI flags for secrets)
 - Backward compatible: existing fields unchanged, old configs still validate
 
@@ -162,20 +160,16 @@ type Config struct {
 | `TestValidate_NegativeChunkSize` | ChunkSize < 0 rejected |
 | `TestValidate_NegativeChunkOverlap` | ChunkOverlap < 0 rejected |
 | `TestValidate_OverlapGTEChunkSize` | Overlap >= Size rejected; overlap = size-1 accepted |
-| `TestValidate_InvalidEmbeddingModel` | Rejects model not in {openai, local} |
-| `TestValidate_ValidEmbeddingModels` | Both models accepted |
+| `TestValidate_EmptyEmbeddingModel` | Empty model name rejected |
 | `TestValidate_ZeroBatchSize` | BatchSize = 0 rejected |
 | `TestValidate_NegativeBatchSize` | BatchSize < 0 rejected |
-| `TestValidate_MissingOpenAIKey` | OpenAI model without key → error |
-| `TestValidate_MissingLocalURL` | Local model without URL → error |
-| `TestValidate_OpenAIWithKey` | OpenAI model with key → valid |
-| `TestValidate_LocalWithURL` | Local model with URL → valid |
+| `TestValidate_EmptyBaseURL` | Empty LLMBaseURL rejected |
 | `TestValidate_DefaultsValid` | Default values pass validation |
 | `TestChunkStrategyEnv` | Env var `CHUNK_STRATEGY` overrides default |
 | `TestChunkSizeEnv` | Env var `CHUNK_SIZE` parsed as int |
 | `TestChunkOverlapEnv` | Env var `CHUNK_OVERLAP` parsed as int |
 | `TestBatchSizeEnv` | Env var `BATCH_SIZE` parsed as int |
-| `TestOpenAIApiKeyEnv` | Env var `OPENAI_API_KEY` read correctly |
+| `TestLLMBaseURLEnv` | Env var `LLM_BASE_URL` read correctly |
 | `TestQdrantURLEnv` | Env var `QDRANT_URL` read correctly |
 
 ---
@@ -441,7 +435,7 @@ func NewRecursiveChunker(maxSize, overlap int) *RecursiveChunker
 
 ---
 
-## Phase 3: Embedders
+## Phase 3: Embedder
 
 ### 3.1 — Embedder Interface (`internal/embedder/embedder.go`)
 
@@ -473,34 +467,36 @@ type Embedder interface {
 - Methods cover batch embedding, dimensionality query, model name
 - Context is first parameter (Go convention)
 
-**Unit tests are embedded in the backend implementations below — no standalone interface test needed.**
+**Unit tests are embedded in the implementation below — no standalone interface test needed.**
 
 ---
 
-### 3.2 — OpenAI Embedder (`internal/embedder/openai.go`)
+### 3.2 — OpenAI-Compatible Embedder (`internal/embedder/openai.go`)
 
 **Depends on:** 3.1 (interface)
-**Parallelizable with:** 2.x, 3.3, 4.x
+**Parallelizable with:** 2.x, 4.x
 
-**Input:** `[]types.Chunk`, API config
+This is the **only** embedder implementation. All providers (OpenAI, OpenRouter, LM Studio, Ollama, vLLM, etc.) speak the same OpenAI-compatible wire format — only the `baseURL` and `apiKey` differ.
+
+**Input:** `[]types.Chunk`, provider config
 **Output:** `[]types.Embedding`
 
 **Interface:**
 
 ```go
-type OpenAIEmbedder struct {
-    apiKey  string
-    baseURL string // defaults to https://api.openai.com/v1
-    model   string // defaults to "text-embedding-3-small"
+type Embedder struct {
+    baseURL   string // e.g. https://api.openai.com/v1
+    apiKey    string // may be empty for local servers
+    model     string // embedding model name
     batchSize int
-    client  *http.Client
+    client    *http.Client
 }
 
-func NewOpenAIEmbedder(apiKey, baseURL, model string, batchSize int) *OpenAIEmbedder
+func New(baseURL, apiKey, model string, batchSize int) *Embedder
 ```
 
 **Logic:**
-1. Build HTTP request to `{baseURL}/embeddings`
+1. Build HTTP POST to `{baseURL}/embeddings`
 2. Send chunks in batches of `batchSize`
 3. Parse JSON response, extract vectors
 4. Create `types.Embedding` for each chunk with model name, dimensions, vector
@@ -535,91 +531,42 @@ func NewOpenAIEmbedder(apiKey, baseURL, model string, batchSize int) *OpenAIEmbe
 - Empty chunk content → API accepts empty string, vector returned
 
 **Acceptance criteria:**
-- Sends batched HTTP requests to OpenAI-compatible API
+- Sends batched HTTP requests to any OpenAI-compatible endpoint
+- Works with OpenAI, OpenRouter, LM Studio, Ollama, etc. by just changing `baseURL`
 - Returns embeddings for all input chunks
 - Model name and dimensions populated in Embedding struct
 - Rate limiting handled with backoff
 - Empty input returns empty output (no API call)
 
+**Provider configuration (configured via env vars / flags, no code changes needed):**
+
+| Provider          | `LLM_BASE_URL`                    | `LLM_API_KEY`      |
+| ----------------- | ---------------------------------- | ------------------ |
+| OpenAI API        | `https://api.openai.com/v1`        | Required           |
+| OpenRouter        | `https://openrouter.ai/api/v1`     | Required           |
+| LM Studio         | `http://localhost:1234/v1`         | Empty              |
+| Ollama            | `http://localhost:11434/v1`        | Empty              |
+
 **Unit tests (`internal/embedder/openai_test.go`):**
 
 | Test | What it validates |
 |------|------------------|
-| `TestOpenAIEmbed_Basic` | Mock server returns valid response, embeddings extracted correctly |
-| `TestOpenAIEmbed_Batching` | 25 chunks with batchSize=10 → 3 API calls |
-| `TestOpenAIEmbed_EmptyInput` | Empty chunk slice → empty embeddings, no HTTP call |
-| `TestOpenAIEmbed_ModelName` | Embedding.Model matches configured model |
-| `TestOpenAIEmbed_Dimensions` | Embedding.Dimensions matches vector length |
-| `TestOpenAIEmbed_ChunkID` | Embedding.ChunkID matches original Chunk.ID |
-| `TestOpenAIEmbed_APIClient` | Request sent with correct URL, headers, body |
-| `TestOpenAIEmbed_APIBadStatus` | API returns 500 → error |
-| `TestOpenAIEmbed_RateLimit` | API returns 429 then 200 → retries and succeeds |
-| `TestOpenAIEmbed_RateLimitExhausted` | Persistent 429 → error after retries |
-| `TestOpenAIEmbed_ResponseMismatch` | API returns fewer embeddings → error |
-| `TestOpenAIEmbed_ModelField` | API response model field used if present, falls back to configured |
-| `TestOpenAIEmbed_EmptyChunkContent` | Empty string chunk content handled cleanly |
-| `TestNewOpenAIEmbedder_Defaults` | Default baseURL and model set correctly |
+| `TestEmbed_Basic` | Mock server returns valid response, embeddings extracted correctly |
+| `TestEmbed_Batching` | 25 chunks with batchSize=10 → 3 API calls |
+| `TestEmbed_EmptyInput` | Empty chunk slice → empty embeddings, no HTTP call |
+| `TestEmbed_ModelName` | Embedding.Model matches configured model |
+| `TestEmbed_Dimensions` | Embedding.Dimensions matches vector length |
+| `TestEmbed_ChunkID` | Embedding.ChunkID matches original Chunk.ID |
+| `TestEmbed_APIClient` | Request sent with correct URL, headers, body |
+| `TestEmbed_APIBadStatus` | API returns 500 → error |
+| `TestEmbed_RateLimit` | API returns 429 then 200 → retries and succeeds |
+| `TestEmbed_RateLimitExhausted` | Persistent 429 → error after retries |
+| `TestEmbed_ResponseMismatch` | API returns fewer embeddings → error |
+| `TestEmbed_ModelField` | API response model field used if present, falls back to configured |
+| `TestEmbed_EmptyChunkContent` | Empty string chunk content handled cleanly |
+| `TestNewEmbedder_Defaults` | Default baseURL and model set correctly |
 
 **Test dependency:** `net/http/httptest` for mock server.
-
----
-
-### 3.3 — Local Embedder (`internal/embedder/local.go`)
-
-**Depends on:** 3.1 (interface)
-**Parallelizable with:** 2.x, 3.2, 4.x
-
-**Input:** `[]types.Chunk`, local server URL
-**Output:** `[]types.Embedding`
-
-**Interface:**
-
-```go
-type LocalEmbedder struct {
-    baseURL   string // e.g. http://localhost:8080
-    model     string // model name reported in Embedding
-    batchSize int
-    client    *http.Client
-}
-
-func NewLocalEmbedder(baseURL, model string, batchSize int) *LocalEmbedder
-```
-
-**Logic:**
-1. Send HTTP POST to `{baseURL}/embed` with JSON body `{"inputs": ["text1", "text2"]}`
-2. Parse response `{"embeddings": [[0.001, ...], [0.002, ...]]}`
-3. Create `types.Embedding` with configured model name
-4. On connection error → return error (caller retry)
-
-**Edge cases:**
-- Server unreachable → connection error
-- Server returns malformed JSON → parse error
-- Empty input → empty result (no API call)
-- Server returns wrong number of embeddings → error
-
-**Acceptance criteria:**
-- Sends HTTP POST to local embed endpoint
-- Returns embeddings for all input chunks
-- Connection error propagated
-- Model name populated in Embedding struct
-
-**Unit tests (`internal/embedder/local_test.go`):**
-
-| Test | What it validates |
-|------|------------------|
-| `TestLocalEmbed_Basic` | Mock server returns valid embeddings |
-| `TestLocalEmbed_EmptyInput` | Empty input → empty result, no HTTP call |
-| `TestLocalEmbed_ConnectionError` | Unreachable server → error |
-| `TestLocalEmbed_MalformedResponse` | Invalid JSON → error |
-| `TestLocalEmbed_WrongDimensions` | Response embeddings have inconsistent lengths → error |
-| `TestLocalEmbed_MismatchedCount` | Response has fewer/more embeddings than input → error |
-| `TestLocalEmbed_ModelName` | Embedding.Model set to configured name |
-| `TestLocalEmbed_Dimensions` | Embedding.Dimensions matches vector length |
-| `TestLocalEmbed_POSTMethod` | Request uses POST method |
-| `TestLocalEmbed_RequestBody` | Request body has correct JSON structure |
-| `TestLocalEmbed_ContentType` | Content-Type header is application/json |
-| `TestLocalEmbed_ChunkOrderPreserved` | Embeddings returned in same order as input chunks |
-| `TestLocalEmbed_EmptyChunkContent` | Empty string in content handled |
 
 ---
 
@@ -812,10 +759,10 @@ func ChunkStage(cfg *config.Config) pipeline.Stage
 
 ### 5.3 — Embed Stage (`internal/stage/embed.go`)
 
-**Depends on:** 3.2, 3.3 (embedders), Phase 1
+**Depends on:** 3.2 (embedder), Phase 1
 **Parallelizable with:** 5.1, 5.2, 5.4
 
-**Input:** `state["chunks"]` + `cfg.EmbeddingModel`, `cfg.BatchSize`
+**Input:** `state["chunks"]` + `cfg.EmbeddingModel`, `cfg.LLMBaseURL`, `cfg.LLMApiKey`, `cfg.BatchSize`
 **Output:** `state["document_chunks"]` — `[]types.DocumentChunk`
 
 ```go
@@ -823,7 +770,7 @@ func EmbedStage(cfg *config.Config) pipeline.Stage
 ```
 
 **Logic:**
-1. Read `cfg.EmbeddingModel` to pick embedder (check API key presence)
+1. Create embedder with `embedder.New(cfg.LLMBaseURL, cfg.LLMApiKey, cfg.EmbeddingModel, cfg.BatchSize)`
 2. Read `state["chunks"]` (assert as `[]types.Chunk`)
 3. Call `embedder.Embed(ctx, chunks)`
 4. Pair chunks with embeddings → `[]types.DocumentChunk`
@@ -831,10 +778,10 @@ func EmbedStage(cfg *config.Config) pipeline.Stage
 6. Return `"embedding_count"` in output
 
 **Acceptance criteria:**
-- Selects correct embedder based on model config
+- Creates the single embedder with correct config
 - Returns embeddings for all chunks
 - DocumentChunk pairs chunk with its embedding correctly
-- Missing API key → error for OpenAI, ok for local
+- Empty API key is accepted (for local servers like LM Studio)
 
 **Unit tests (`internal/stage/embed_test.go`):**
 
@@ -844,7 +791,6 @@ func EmbedStage(cfg *config.Config) pipeline.Stage
 | `TestEmbedStage_StateKey` | `state["document_chunks"]` is `[]types.DocumentChunk` |
 | `TestEmbedStage_Count` | Output "embedding_count" matches chunk count |
 | `TestEmbedStage_EmptyChunks` | No chunks → zero embeddings |
-| `TestEmbedStage_ModelSelection` | openai → OpenAIEmbedder, local → LocalEmbedder |
 | `TestEmbedStage_ChunkEmbeddingPairing` | Each DocumentChunk links correct Chunk and Embedding by ID |
 
 ---
@@ -1012,20 +958,19 @@ Unit tests are written **within each phase** alongside the implementation, not d
 | Package | Est. tests | Key areas |
 |---------|-----------|-----------|
 | `internal/types` (indexing.go) | 8 | Chunk, Embedding, DocumentChunk creation/zero-value |
-| `internal/config` (additions) | 23 | Validation rules, env overrides, defaults |
+| `internal/config` (additions) | 17 | Validation rules, env overrides, defaults |
 | `internal/parser` | 14 | File walking, filtering, edge cases |
 | `internal/chunker` (fixed) | 12 | Size/overlap, boundaries, IDs, empty |
 | `internal/chunker` (semantic) | 11 | Heading split, hierarchy, no headings, nesting |
 | `internal/chunker` (recursive) | 12 | Separator priority, max size, fallback |
-| `internal/embedder` (openai) | 14 | API call, batching, rate limit, errors |
-| `internal/embedder` (local) | 13 | HTTP call, connection error, response parse |
+| `internal/embedder` (openai) | 14 | OpenAI-compatible API, batching, rate limit, errors |
 | `internal/store` (qdrant) | 14 | Connect, collection, upsert, point conversion |
 | `internal/stage` (parse) | 4 | State passing, error, empty dir |
 | `internal/stage` (chunk) | 6 | Strategy selection, empty, count |
-| `internal/stage` (embed) | 6 | Model selection, pairing, empty |
+| `internal/stage` (embed) | 5 | Pairing, empty, count |
 | `internal/stage` (store) | 5 | Connection, count, empty, error |
 | `cmd/index` | 7 | Pipeline wiring, resume, journal |
-| **Total** | **149** | All passing via `go test ./...` |
+| **Total** | **123** | All passing via `go test ./...` |
 
 ---
 
@@ -1039,24 +984,23 @@ Unit tests are written **within each phase** alongside the implementation, not d
 | D | 2.2 (chunker interface + fixed) | Medium | Phase 1 |
 | E | 2.3 (semantic chunker) | Small | Phase 1 |
 | F | 2.4 (recursive chunker) | Medium | Phase 1 |
-| G | 3.1 + 3.2 (interface + openai) | Medium | Phase 1 |
-| H | 3.1 + 3.3 (interface + local) | Medium | Phase 1 |
-| I | 4.1 + 4.2 (interface + qdrant) | Medium | Phase 1 |
-| J | 5.1 (parse stage) | Small | Phase 1 + 2.1 |
-| K | 5.2 (chunk stage) | Small | Phase 1 + 2.2/2.3/2.4 |
-| L | 5.3 (embed stage) | Small | Phase 1 + 3.2/3.3 |
-| M | 5.4 (store stage) | Small | Phase 1 + 4.2 |
-| N | 6.1 (CLI main.go) | Small | Phase 5 |
-| O | 6.2 (make.cmd) | Tiny | 6.1 |
-| P | 6.3 (integration test) | Small | Phase 6 |
+| G | 3.1 + 3.2 (interface + openai-compatible embedder) | Medium | Phase 1 |
+| H | 4.1 + 4.2 (interface + qdrant) | Medium | Phase 1 |
+| I | 5.1 (parse stage) | Small | Phase 1 + 2.1 |
+| J | 5.2 (chunk stage) | Small | Phase 1 + 2.2/2.3/2.4 |
+| K | 5.3 (embed stage) | Small | Phase 1 + 3.2 |
+| L | 5.4 (store stage) | Small | Phase 1 + 4.2 |
+| M | 6.1 (CLI main.go) | Small | Phase 5 |
+| N | 6.2 (make.cmd) | Tiny | 6.1 |
+| O | 6.3 (integration test) | Small | Phase 6 |
 
 **Parallelization strategy:**
 - **Wave 1:** A, B (Phase 1 — types + config)
-- **Wave 2:** C, D, E, F, G, H, I (parser, chunkers, embedders, store — all depend only on Phase 1)
-- **Wave 3:** J, K, L, M (pipeline stages — each depends on one component from Wave 2)
-- **Wave 4:** N, O, P (CLI, make.cmd, integration)
+- **Wave 2:** C, D, E, F, G, H (parser, chunkers, embedder, store — all depend only on Phase 1)
+- **Wave 3:** I, J, K, L (pipeline stages — each depends on one component from Wave 2)
+- **Wave 4:** M, N, O (CLI, make.cmd, integration)
 
-Total: ~16 agent tasks, completed in 4 waves with up to 7 agents in parallel in Wave 2.
+Total: ~15 agent tasks, completed in 4 waves with up to 6 agents in parallel in Wave 2.
 
 ---
 
@@ -1064,17 +1008,16 @@ Total: ~16 agent tasks, completed in 4 waves with up to 7 agents in parallel in 
 
 ```
 internal/types/indexing_test.go        — 8 tests
-internal/config/config_test.go         — +23 tests (additions to existing)
+internal/config/config_test.go         — +17 tests (additions to existing)
 internal/parser/parser_test.go         — 14 tests
 internal/chunker/fixed_test.go         — 12 tests
 internal/chunker/semantic_test.go      — 11 tests
 internal/chunker/recursive_test.go     — 12 tests
 internal/embedder/openai_test.go       — 14 tests
-internal/embedder/local_test.go        — 13 tests
 internal/store/qdrant_test.go          — 14 tests
 internal/stage/parse_test.go           — 4 tests
 internal/stage/chunk_test.go           — 6 tests
-internal/stage/embed_test.go           — 6 tests
+internal/stage/embed_test.go           — 5 tests
 internal/stage/store_test.go           — 5 tests
 cmd/index/main_test.go                 — 7 tests
 ```
