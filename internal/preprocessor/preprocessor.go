@@ -1,12 +1,15 @@
 package preprocessor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"golang.org/x/sync/errgroup"
 )
 
 func ProcessFile(filePath string, repoRoot string) (*types.Document, error) {
@@ -76,54 +79,32 @@ func ProcessAllFiles(srcDir string, dstDir string, concurrency int) (int, error)
 		return 0, fmt.Errorf("walk source dir: %w", err)
 	}
 
-	sem := make(chan struct{}, concurrency)
-	errCh := make(chan error, len(mdFiles))
-	type result struct {
-		doc *types.Document
-		err error
-	}
-	resultCh := make(chan result, len(mdFiles))
+	g, _ := errgroup.WithContext(context.Background())
+	g.SetLimit(concurrency)
+
+	var processed atomic.Int32
 
 	for _, filePath := range mdFiles {
-		sem <- struct{}{}
-		go func(fp string) {
-			defer func() { <-sem }()
-
+		fp := filePath
+		g.Go(func() error {
 			doc, err := ProcessFile(fp, srcDir)
 			if err != nil {
-				errCh <- fmt.Errorf("process %s: %w", fp, err)
-				resultCh <- result{err: err}
-				return
+				return fmt.Errorf("process %s: %w", fp, err)
 			}
-			resultCh <- result{doc: doc}
-		}(filePath)
+
+			outPath := filepath.Join(dstDir, doc.Path)
+			outDir := filepath.Dir(outPath)
+			if err := os.MkdirAll(outDir, 0755); err != nil {
+				return fmt.Errorf("create output dir: %w", err)
+			}
+			if err := os.WriteFile(outPath, []byte(doc.Content), 0644); err != nil {
+				return fmt.Errorf("write output: %w", err)
+			}
+			processed.Add(1)
+			return nil
+		})
 	}
 
-	for i := 0; i < cap(sem); i++ {
-		sem <- struct{}{}
-	}
-
-	close(resultCh)
-	close(errCh)
-
-	processed := 0
-	for r := range resultCh {
-		if r.err != nil {
-			continue
-		}
-		doc := r.doc
-
-		outPath := filepath.Join(dstDir, doc.Path)
-		outDir := filepath.Dir(outPath)
-		if err := os.MkdirAll(outDir, 0755); err != nil {
-			return processed, fmt.Errorf("create output dir: %w", err)
-		}
-
-		if err := os.WriteFile(outPath, []byte(doc.Content), 0644); err != nil {
-			return processed, fmt.Errorf("write output: %w", err)
-		}
-		processed++
-	}
-
-	return processed, nil
+	err = g.Wait()
+	return int(processed.Load()), err
 }
