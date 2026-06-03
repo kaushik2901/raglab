@@ -60,6 +60,14 @@ The indexing pipeline (`cmd/index/`) builds on the preprocessing output. Current
 
 Only the `fixed` chunking strategy is active. Semantic and recursive chunkers will be added after the end-to-end pipeline is complete.
 
+## Project Vision
+
+`docs/project-vision-and-roadmap.md` captures the full vision: durable workflows, UI/API, evaluation system, observability, and a QA chatbot. It contains detailed architecture, phase plan, and open questions.
+
+## Key Decision: River for Workflow Engine
+
+We use **River** (`github.com/riverqueue/river`) as the job engine — a lightweight Go queue backed by Postgres, not Temporal. River provides durable at-least-once execution, retries with backoff, and concurrency control. A thin coordination layer handles linear DAG step sequencing (each worker enqueues the next step on success). Postgres is the single source of truth for workflow state; River's internal tables are secondary.
+
 ## Future Evaluation
 
 `docs/` also contains plans for an evaluation system — not yet implemented.
