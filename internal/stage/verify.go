@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -28,8 +27,8 @@ type CheckResult struct {
 var shortcodePattern = regexp.MustCompile(`\{\{(?:%|<)`)
 var htmlTagPattern = regexp.MustCompile(`<[a-z]+[^>]*>`)
 
-func VerifyStage(cfg *config.Config) pipeline.Stage {
-	return pipeline.Stage{
+func VerifyStage(cfg *config.Config) types.Stage {
+	return types.Stage{
 		Name:     "verify",
 		Requires: []types.StageID{"clone", "preprocess"},
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {

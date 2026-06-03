@@ -6,12 +6,11 @@ import (
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func EmbedStage(cfg *config.Config) pipeline.Stage {
-	return pipeline.Stage{
+func EmbedStage(cfg *config.Config) types.Stage {
+	return types.Stage{
 		Name:     "embed",
 		Requires: []types.StageID{"chunk"},
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {

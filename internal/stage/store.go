@@ -5,13 +5,12 @@ import (
 	"fmt"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func StoreStage(cfg *config.Config) pipeline.Stage {
-	return pipeline.Stage{
+func StoreStage(cfg *config.Config) types.Stage {
+	return types.Stage{
 		Name:     "store",
 		Requires: []types.StageID{"embed"},
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {

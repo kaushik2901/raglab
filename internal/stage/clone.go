@@ -7,12 +7,11 @@ import (
 	"os/exec"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func CloneStage(cfg *config.Config) pipeline.Stage {
-	return pipeline.Stage{
+func CloneStage(cfg *config.Config) types.Stage {
+	return types.Stage{
 		Name: "clone",
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 			repoPath := cfg.RepoPath

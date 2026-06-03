@@ -6,12 +6,11 @@ import (
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func ChunkStage(cfg *config.Config) pipeline.Stage {
-	return pipeline.Stage{
+func ChunkStage(cfg *config.Config) types.Stage {
+	return types.Stage{
 		Name:     "chunk",
 		Requires: []types.StageID{"parse"},
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {

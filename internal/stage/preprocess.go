@@ -6,13 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/pipeline"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/preprocessor"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func PreprocessStage(cfg *config.Config) pipeline.Stage {
-	return pipeline.Stage{
+func PreprocessStage(cfg *config.Config) types.Stage {
+	return types.Stage{
 		Name:     "preprocess",
 		Requires: []types.StageID{"clone"},
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
