@@ -38,7 +38,7 @@ func Load() (*Config, error) {
 	flag.DurationVar(&cfg.RetryBackoff, "retry-backoff", durationEnvOrDefault("RETRY_BACKOFF", 5*time.Second), "Retry backoff duration")
 	flag.StringVar(&cfg.LogLevel, "log-level", envOrDefault("LOG_LEVEL", "info"), "Log level (debug/info/warn)")
 
-	flag.StringVar(&cfg.ChunkStrategy, "chunk-strategy", envOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed/semantic/recursive)")
+	flag.StringVar(&cfg.ChunkStrategy, "chunk-strategy", envOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed only)")
 	flag.IntVar(&cfg.ChunkSize, "chunk-size", intEnvOrDefault("CHUNK_SIZE", 512), "Target token count per chunk")
 	flag.IntVar(&cfg.ChunkOverlap, "chunk-overlap", intEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
 	flag.StringVar(&cfg.EmbeddingModel, "embedding-model", envOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
@@ -69,10 +69,8 @@ func (c *Config) Validate() error {
 	if c.RetryBackoff <= 0 {
 		return errors.New("retry-backoff must be positive")
 	}
-	switch c.ChunkStrategy {
-	case "fixed", "semantic", "recursive":
-	default:
-		return errors.New("chunk-strategy must be one of: fixed, semantic, recursive")
+	if c.ChunkStrategy != "fixed" {
+		return errors.New("chunk-strategy must be 'fixed'")
 	}
 	if c.ChunkSize <= 0 {
 		return errors.New("chunk-size must be positive")

@@ -11,11 +11,9 @@ Phase 1 (Types + Config)
   ├── 1.1 Extend types: Chunk, Embedding, DocumentChunk
   └── 1.2 Extend config: indexing fields + validation
        │
-Phase 2 (Parser + Chunkers — depends on Phase 1, parallelizable within phase)
+Phase 2 (Parser + Chunker — depends on Phase 1)
   ├── 2.1 Parser (internal/parser/parser.go)
-  ├── 2.2 Chunker interface + fixed.go
-  ├── 2.3 Semantic chunker
-  └── 2.4 Recursive chunker
+  └── 2.2 Chunker interface + fixed.go
        │
 Phase 3 (Embedder — depends on Phase 1, parallelizable with Phase 2 & 4)
   ├── 3.1 Embedder interface
@@ -111,7 +109,7 @@ type Config struct {
     LogLevel     string
 
     // New indexing fields
-    ChunkStrategy  string   // fixed / semantic / recursive
+    ChunkStrategy  string   // fixed only (other strategies added later)
     ChunkSize      int      // tokens per chunk (default: 512)
     ChunkOverlap   int      // overlap between chunks (default: 64)
     EmbeddingModel string   // model name, e.g. text-embedding-3-small
@@ -136,7 +134,7 @@ type Config struct {
 ```
 
 **Validation rules to add:**
-- `ChunkStrategy` must be one of: `fixed`, `semantic`, `recursive`
+- `ChunkStrategy` must be `fixed` (other strategies added after pipeline completion)
 - `ChunkSize` must be > 0
 - `ChunkOverlap` must be >= 0 and < `ChunkSize`
 - `EmbeddingModel` must be non-empty
@@ -154,7 +152,7 @@ type Config struct {
 
 | Test | What it validates |
 |------|------------------|
-| `TestValidate_InvalidChunkStrategy` | Rejects strategy not in {fixed, semantic, recursive} |
+| `TestValidate_InvalidChunkStrategy` | Rejects strategy other than fixed |
 | `TestValidate_ValidChunkStrategies` | All three strategies accepted |
 | `TestValidate_ZeroChunkSize` | ChunkSize = 0 rejected |
 | `TestValidate_NegativeChunkSize` | ChunkSize < 0 rejected |
@@ -179,7 +177,7 @@ type Config struct {
 ### 2.1 — Parser (`internal/parser/parser.go`)
 
 **Depends on:** Phase 1 (types)
-**Parallelizable with:** 2.2, 2.3, 2.4
+**Parallelizable with:** Phase 3, Phase 4
 
 **Input:** Directory path containing cleaned `.md` files
 **Output:** `[]types.Document`
@@ -244,7 +242,7 @@ func ParseFile(filePath string, relPath string) (types.Document, error)
 ### 2.2 — Chunker Interface + Fixed-Size Chunker (`internal/chunker/`)
 
 **Depends on:** Phase 1 (types)
-**Parallelizable with:** 2.1, 2.3, 2.4
+**Parallelizable with:** Phase 3, Phase 4
 
 **Input:** `types.Document`
 **Output:** `[]types.Chunk`
@@ -315,123 +313,6 @@ func estimateTokens(text string) int
 | `TestFixedChunker_DocumentPath` | All chunks have correct DocumentPath |
 | `TestFixedChunker_TokenCount` | TokenCount ~= len(content)/4 |
 | `TestFixedChunker_MetadataNil` | Metadata is nil (not empty map) for plain text |
-
----
-
-### 2.3 — Semantic Chunker (`internal/chunker/semantic.go`)
-
-**Depends on:** Phase 1 (types)
-**Parallelizable with:** 2.1, 2.2, 2.4
-
-**Input:** `types.Document`
-**Output:** `[]types.Chunk`
-
-**Interface:**
-
-```go
-type SemanticChunker struct{}
-
-func NewSemanticChunker() *SemanticChunker
-```
-
-**Logic:**
-1. Split document content on markdown headings (`^# `, `^## `, `^### `, etc.)
-2. Each heading + its content becomes one chunk
-3. If no headings found, return entire document as single chunk
-4. Heading text stored in `chunk.Metadata["heading"]`
-5. Full heading path (e.g., "Installation > Configuration") built from parent headings
-6. Set `chunk.Metadata["heading_path"]` for hierarchy
-
-**Edge cases:**
-- No headings → single chunk, empty metadata
-- Document starts with text before first heading → that text is a chunk with empty heading
-- Nested headings (e.g., `##` under `#`) → separate chunks, heading_path includes both
-- Consecutive headings with no body text → empty content chunk (or skip)
-- Only heading with no body → single chunk with heading text only
-- Very deep nesting (6+ levels) → still splits on any `#`-prefixed line
-
-**Acceptance criteria:**
-- Splits on `# heading` lines (level 1-6)
-- Metadata includes "heading" and "heading_path"
-- No headings → single chunk, nil metadata
-- Text before first heading → separate chunk with empty heading metadata
-- Heading_path reflects hierarchy
-
-**Unit tests (`internal/chunker/semantic_test.go`):**
-
-| Test | What it validates |
-|------|------------------|
-| `TestSemanticChunker_Basic` | Simple headings splits into correct chunks |
-| `TestSemanticChunker_NoHeadings` | Plain text → single chunk |
-| `TestSemanticChunker_EmptyDoc` | Empty content → single chunk with empty content |
-| `TestSemanticChunker_TextBeforeFirstHeading` | Preamble text becomes its own chunk |
-| `TestSemanticChunker_NestedHeadings` | `# A\n## B` → two chunks with correct heading_path |
-| `TestSemanticChunker_ConsecutiveHeadings` | `## A\n## B\nbody` → B chunk includes only body |
-| `TestSemanticChunker_HeadingLevels` | All 6 levels (`#` to `######`) split correctly |
-| `TestSemanticChunker_HeadingPathHierarchy` | `# Install\n## Config\n### SSL` → paths build hierarchy |
-| `TestSemanticChunker_H1Only` | Single `# Title` → one chunk with heading metadata |
-| `TestSemanticChunker_ChunkIndices` | Indices are 0-based and sequential |
-| `TestSemanticChunker_DocumentPath` | DocumentPath preserved from input |
-
----
-
-### 2.4 — Recursive Chunker (`internal/chunker/recursive.go`)
-
-**Depends on:** Phase 1 (types)
-**Parallelizable with:** 2.1, 2.2, 2.3
-
-**Input:** `types.Document`
-**Output:** `[]types.Chunk`
-
-**Interface:**
-
-```go
-type RecursiveChunker struct {
-    MaxSize     int // max characters per chunk
-    Overlap     int // overlap in characters
-    Separators  []string // ordered list of separators to split on
-}
-
-func NewRecursiveChunker(maxSize, overlap int) *RecursiveChunker
-```
-
-**Logic:**
-1. Default separators: `["\n\n", "\n", ". ", " ", ""]`
-2. For each chunk, try to split on the first separator that keeps chunks under MaxSize
-3. If a split is still too large, recurse with the next separator in the list
-4. Apply character-level overlap between adjacent chunks
-5. Merge small chunks that end up below a minimum threshold
-
-**Edge cases:**
-- Content fits in one chunk → single chunk
-- Single character separator needed (fallback to character split)
-- Empty document → zero chunks
-- Separator not found → fall through to next separator
-- Very long word with no spaces → splits at MaxSize (last separator is "")
-
-**Acceptance criteria:**
-- Recursive splitting with ordered separator priority
-- Configurable max size and overlap
-- Fallback to character-level split when no separator found
-- Chunks never exceed MaxSize
-- Empty doc returns zero chunks
-
-**Unit tests (`internal/chunker/recursive_test.go`):**
-
-| Test | What it validates |
-|------|------------------|
-| `TestRecursiveChunker_Basic` | Paragraph-separated text splits on `\n\n` |
-| `TestRecursiveChunker_SingleChunk` | Short content fits in one chunk |
-| `TestRecursiveChunker_EmptyDoc` | Empty content → empty slice |
-| `TestRecursiveChunker_NoSeparatorFound` | Content with no spaces/periods/newlines → splits at MaxSize |
-| `TestRecursiveChunker_SeparatorPriority` | Uses `\n\n` before `\n` before `. ` etc. |
-| `TestRecursiveChunker_Overlap` | Adjacent chunks share overlap characters |
-| `TestRecursiveChunker_CustomSeparators` | Custom separator list works correctly |
-| `TestRecursiveChunker_MaxSizeEnforced` | No chunk exceeds MaxSize |
-| `TestRecursiveChunker_SingleParagraph` | Long paragraph splits on `. ` then ` ` |
-| `TestRecursiveChunker_ChunkIndices` | Sequential 0-based indices |
-| `TestRecursiveChunker_DocumentPath` | DocumentPath preserved |
-| `TestRecursiveChunker_TokenCount` | Token estimate populated for each chunk |
 
 ---
 
@@ -749,7 +630,7 @@ func ChunkStage(cfg *config.Config) pipeline.Stage
 | Test | What it validates |
 |------|------------------|
 | `TestChunkStage_Basic` | Fixed chunker with valid config → chunks in state |
-| `TestChunkStage_StrategySelection` | Each strategy (fixed/semantic/recursive) selected correctly |
+| `TestChunkStage_StrategySelection` | Fixed strategy selected correctly |
 | `TestChunkStage_StateKey` | `state["chunks"]` is `[]types.Chunk` |
 | `TestChunkStage_ChunkCount` | Output "chunk_count" matches actual count |
 | `TestChunkStage_EmptyDocuments` | No documents → zero chunks |
@@ -961,8 +842,6 @@ Unit tests are written **within each phase** alongside the implementation, not d
 | `internal/config` (additions) | 17 | Validation rules, env overrides, defaults |
 | `internal/parser` | 14 | File walking, filtering, edge cases |
 | `internal/chunker` (fixed) | 12 | Size/overlap, boundaries, IDs, empty |
-| `internal/chunker` (semantic) | 11 | Heading split, hierarchy, no headings, nesting |
-| `internal/chunker` (recursive) | 12 | Separator priority, max size, fallback |
 | `internal/embedder` (openai) | 14 | OpenAI-compatible API, batching, rate limit, errors |
 | `internal/store` (qdrant) | 14 | Connect, collection, upsert, point conversion |
 | `internal/stage` (parse) | 4 | State passing, error, empty dir |
@@ -970,7 +849,7 @@ Unit tests are written **within each phase** alongside the implementation, not d
 | `internal/stage` (embed) | 5 | Pairing, empty, count |
 | `internal/stage` (store) | 5 | Connection, count, empty, error |
 | `cmd/index` | 7 | Pipeline wiring, resume, journal |
-| **Total** | **123** | All passing via `go test ./...` |
+| **Total** | **100** | All passing via `go test ./...` |
 
 ---
 
@@ -982,25 +861,23 @@ Unit tests are written **within each phase** alongside the implementation, not d
 | B | 1.2 (config) | Medium | None |
 | C | 2.1 (parser) | Medium | Phase 1 |
 | D | 2.2 (chunker interface + fixed) | Medium | Phase 1 |
-| E | 2.3 (semantic chunker) | Small | Phase 1 |
-| F | 2.4 (recursive chunker) | Medium | Phase 1 |
-| G | 3.1 + 3.2 (interface + openai-compatible embedder) | Medium | Phase 1 |
-| H | 4.1 + 4.2 (interface + qdrant) | Medium | Phase 1 |
-| I | 5.1 (parse stage) | Small | Phase 1 + 2.1 |
-| J | 5.2 (chunk stage) | Small | Phase 1 + 2.2/2.3/2.4 |
-| K | 5.3 (embed stage) | Small | Phase 1 + 3.2 |
-| L | 5.4 (store stage) | Small | Phase 1 + 4.2 |
-| M | 6.1 (CLI main.go) | Small | Phase 5 |
-| N | 6.2 (make.cmd) | Tiny | 6.1 |
-| O | 6.3 (integration test) | Small | Phase 6 |
+| E | 3.1 + 3.2 (interface + openai-compatible embedder) | Medium | Phase 1 |
+| F | 4.1 + 4.2 (interface + qdrant) | Medium | Phase 1 |
+| G | 5.1 (parse stage) | Small | Phase 1 + 2.1 |
+| H | 5.2 (chunk stage) | Small | Phase 1 + 2.2 |
+| I | 5.3 (embed stage) | Small | Phase 1 + 3.2 |
+| J | 5.4 (store stage) | Small | Phase 1 + 4.2 |
+| K | 6.1 (CLI main.go) | Small | Phase 5 |
+| L | 6.2 (make.cmd) | Tiny | 6.1 |
+| M | 6.3 (integration test) | Small | Phase 6 |
 
 **Parallelization strategy:**
 - **Wave 1:** A, B (Phase 1 — types + config)
-- **Wave 2:** C, D, E, F, G, H (parser, chunkers, embedder, store — all depend only on Phase 1)
-- **Wave 3:** I, J, K, L (pipeline stages — each depends on one component from Wave 2)
-- **Wave 4:** M, N, O (CLI, make.cmd, integration)
+- **Wave 2:** C, D, E, F (parser, chunker, embedder, store — all depend only on Phase 1)
+- **Wave 3:** G, H, I, J (pipeline stages — each depends on one component from Wave 2)
+- **Wave 4:** K, L, M (CLI, make.cmd, integration)
 
-Total: ~15 agent tasks, completed in 4 waves with up to 6 agents in parallel in Wave 2.
+Total: ~12 agent tasks, completed in 4 waves with up to 4 agents in parallel in Wave 2.
 
 ---
 
@@ -1011,8 +888,6 @@ internal/types/indexing_test.go        — 8 tests
 internal/config/config_test.go         — +17 tests (additions to existing)
 internal/parser/parser_test.go         — 14 tests
 internal/chunker/fixed_test.go         — 12 tests
-internal/chunker/semantic_test.go      — 11 tests
-internal/chunker/recursive_test.go     — 12 tests
 internal/embedder/openai_test.go       — 14 tests
 internal/store/qdrant_test.go          — 14 tests
 internal/stage/parse_test.go           — 4 tests

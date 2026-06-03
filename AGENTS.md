@@ -49,6 +49,17 @@ Stages are defined in `cmd/preprocess/main.go:69-74`. Use `--from <stage>` to re
 - Flag-based tests must call `resetFlags()` (sets `flag.NewFlagSet`) before each test to avoid global state conflicts.
 - Preprocessor tests write files to temp dirs then run `ProcessFile` / `ProcessAllFiles`.
 
-## Future Pipelines
+## Indexing Pipeline (In Progress)
 
-`docs/` contains plans for an indexing pipeline (`cmd/index/`) and an evaluation system. These are NOT yet implemented — only the preprocessing pipeline exists.
+The indexing pipeline (`cmd/index/`) builds on the preprocessing output. Currently implemented:
+
+- **Types:** `internal/types/indexing.go` — `Chunk`, `Embedding`, `DocumentChunk`
+- **Config:** `internal/config/config.go` — indexing fields (`--chunk-strategy`, `--chunk-size`, etc.)
+- **Parser:** `internal/parser/parser.go` — walks output dir, reads `.md` files into `[]types.Document`
+- **Fixed chunker:** `internal/chunker/` — word-window splitting with configurable size/overlap
+
+Only the `fixed` chunking strategy is active. Semantic and recursive chunkers will be added after the end-to-end pipeline is complete.
+
+## Future Evaluation
+
+`docs/` also contains plans for an evaluation system — not yet implemented.

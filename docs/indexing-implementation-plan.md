@@ -6,7 +6,7 @@
 | ---------------------- | ------------------------------ |
 | Cleaned markdown files | ~4,496 (in `output/`)          |
 | Total content size     | ~44 MB                         |
-| Chunking strategies    | 3 (fixed, semantic, recursive) |
+| Chunking strategies    | 1 (fixed) — others added after pipeline completion |
 | Embedding backends     | 1 (OpenAI-compatible)          |
 | Vector store backends  | 1 (Qdrant)                     |
 | Pipeline stages        | 4 (parse, chunk, embed, store) |
@@ -49,8 +49,7 @@ root/
 │   ├── chunker/                  # NEW: chunking strategies
 │   │   ├── chunker.go            # Chunker interface
 │   │   ├── fixed.go              # Fixed-size token chunking
-│   │   ├── semantic.go           # Section-based (heading) chunking
-│   │   └── recursive.go          # Recursive character splitting
+
 │   │
 │   ├── embedder/                 # NEW: embedding model abstraction
 │   │   ├── embedder.go           # Embedder interface
@@ -124,7 +123,7 @@ type DocumentChunk struct {
 
 **Logic:**
 
-1. Read `chunk_strategy` from config (fixed / semantic / recursive)
+1. Read `chunk_strategy` from config (fixed only)
 2. Instantiate the appropriate chunker
 3. For each document, call `chunker.Chunk(doc)` → `[]types.Chunk`
 4. Accumulate all chunks into state as `"chunks"`
@@ -217,7 +216,7 @@ type Config struct {
     LogLevel     string
 
     // New fields (indexing)
-    ChunkStrategy  string        // fixed / semantic / recursive
+    ChunkStrategy  string        // fixed only (other strategies added later)
     ChunkSize      int           // tokens per chunk (default: 512)
     ChunkOverlap   int           // overlap between chunks (default: 64)
     EmbeddingModel string        // model name, e.g. text-embedding-3-small
@@ -265,8 +264,7 @@ Each pipeline maintains its own journal (`.journal/` vs `.journal-index/`) so th
 | 3    | `internal/parser/parser.go` — walk output dir, read .md files into Documents | Data ingestion stage                   |
 | 4    | `internal/chunker/chunker.go` — Chunker interface                            | Abstraction for pluggable strategies   |
 | 5    | `internal/chunker/fixed.go` — fixed-size token chunking                      | Simplest strategy, good baseline       |
-| 6    | `internal/chunker/semantic.go` — section-based chunking on headings          | Best for handbook structure            |
-| 7    | `internal/chunker/recursive.go` — recursive character splitting              | Compatible with LangChain patterns     |
+
 | 8    | `internal/stage/parse.go` — wire parser as pipeline stage                    | Stage 1 of indexing                    |
 | 9    | `internal/stage/chunk.go` — wire chunker as pipeline stage                   | Stage 2 of indexing                    |
 | 10   | `internal/embedder/embedder.go` — Embedder interface                         | Abstraction                      |
@@ -293,8 +291,7 @@ The embedder stages use HTTP calls (standard library) — no additional deps nee
 | ------------------------------------------ | ---------- | ----------------------------------------------------------- |
 | `internal/parser`                          | 6          | File walking, non-md skipping, empty dir, large files       |
 | `internal/chunker` (fixed)                 | 8          | Token counting, boundary conditions, overlap, empty doc     |
-| `internal/chunker` (semantic)              | 8          | Heading splitting, no headings, nested headings, edge cases |
-| `internal/chunker` (recursive)             | 6          | Separator priority, max size, no splits possible            |
+
 | `internal/embedder` (openai)               | 6          | API call, batching, error handling, rate limiting, provider agnostic |
 | `internal/store` (qdrant)                  | 4          | Collection creation, upsert, query, connection error        |
 | `internal/stage` (parse/chunk/embed/store) | 12         | Stage wiring, state passing, error propagation              |

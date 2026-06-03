@@ -295,16 +295,14 @@ func TestValidate_InvalidChunkStrategy(t *testing.T) {
 }
 
 func TestValidate_ValidChunkStrategies(t *testing.T) {
-	for _, strategy := range []string{"fixed", "semantic", "recursive"} {
-		cfg := &Config{
-			RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
-			MaxRetries: 3, RetryBackoff: 5 * time.Second, ChunkSize: 512, ChunkOverlap: 64,
-			EmbeddingModel: "text-embedding-3-small", BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
-			ChunkStrategy: strategy,
-		}
-		if err := cfg.Validate(); err != nil {
-			t.Errorf("unexpected error for strategy %q: %v", strategy, err)
-		}
+	cfg := &Config{
+		RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
+		MaxRetries: 3, RetryBackoff: 5 * time.Second, ChunkSize: 512, ChunkOverlap: 64,
+		EmbeddingModel: "text-embedding-3-small", BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
+		ChunkStrategy: "fixed",
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error for strategy 'fixed': %v", err)
 	}
 }
 
@@ -434,14 +432,14 @@ func TestValidate_DefaultsValid(t *testing.T) {
 }
 
 func TestChunkStrategyEnv(t *testing.T) {
-	os.Setenv("CHUNK_STRATEGY", "semantic")
+	os.Setenv("CHUNK_STRATEGY", "fixed")
 	defer os.Unsetenv("CHUNK_STRATEGY")
 	cfg, err := parseTestFlags([]string{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.ChunkStrategy != "semantic" {
-		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "semantic")
+	if cfg.ChunkStrategy != "fixed" {
+		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "fixed")
 	}
 }
 
@@ -525,7 +523,7 @@ func TestLoad_WithFlags(t *testing.T) {
 		"--max-retries", "5",
 		"--retry-backoff", "10s",
 		"--log-level", "debug",
-		"--chunk-strategy", "semantic",
+		"--chunk-strategy", "fixed",
 		"--chunk-size", "256",
 		"--chunk-overlap", "32",
 		"--embedding-model", "custom-model",
@@ -544,8 +542,8 @@ func TestLoad_WithFlags(t *testing.T) {
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
 	}
-	if cfg.ChunkStrategy != "semantic" {
-		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "semantic")
+	if cfg.ChunkStrategy != "fixed" {
+		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "fixed")
 	}
 	if cfg.ChunkSize != 256 {
 		t.Errorf("ChunkSize = %d, want %d", cfg.ChunkSize, 256)
