@@ -1,75 +1,132 @@
 package preprocessor
 
 import (
-	"regexp"
 	"strings"
-)
 
-var (
-	styleRe    = regexp.MustCompile(`(?s)<style[^>]*>.*?</style>`)
-	scriptRe   = regexp.MustCompile(`(?s)<script[^>]*>.*?</script>`)
-	iframeRe   = regexp.MustCompile(`(?s)<iframe[^>]*>.*?</iframe>|<iframe[^>]*/>`)
-	imgRe      = regexp.MustCompile(`(?s)<img\s+[^>]*alt\s*=\s*"([^"]*)"[^>]*/?>`)
-	imgReNoAlt = regexp.MustCompile(`(?s)<img\s+[^>]*/?>`)
-	aTagRe     = regexp.MustCompile(`(?s)<a\s+[^>]*href\s*=\s*"([^"]*)"[^>]*>(.*?)</a>`)
-	tableRe    = regexp.MustCompile(`(?s)<table[^>]*>.*?</table>`)
-	anyTagRe   = regexp.MustCompile(`(?s)<[^>]+>`)
+	"golang.org/x/net/html"
 )
 
 func ProcessHTML(content string) string {
-	content = styleRe.ReplaceAllString(content, "")
-	content = scriptRe.ReplaceAllString(content, "")
-	content = iframeRe.ReplaceAllString(content, "")
+	z := html.NewTokenizer(strings.NewReader(content))
+	var out strings.Builder
 
-	content = imgRe.ReplaceAllStringFunc(content, func(match string) string {
-		matches := imgRe.FindStringSubmatch(match)
-		if len(matches) > 1 {
-			return strings.TrimSpace(matches[1])
-		}
-		return ""
-	})
-	content = imgReNoAlt.ReplaceAllString(content, "")
-
-	content = aTagRe.ReplaceAllStringFunc(content, func(match string) string {
-		matches := aTagRe.FindStringSubmatch(match)
-		if len(matches) > 2 {
-			href := strings.TrimSpace(matches[1])
-			text := strings.TrimSpace(matches[2])
-			if text == "" {
-				return href
-			}
-			return text + " [" + href + "]"
-		}
-		return match
-	})
-
-	content = tableRe.ReplaceAllStringFunc(content, func(match string) string {
-		inner := tableRe.ReplaceAllString(match, "")
-		text := stripTags(inner)
-		return strings.Join(strings.Fields(text), " ")
-	})
-
-	content = anyTagRe.ReplaceAllStringFunc(content, func(match string) string {
-		tag := extractTagName(match)
-		if tag == "style" || tag == "script" || tag == "iframe" || tag == "img" || tag == "a" || tag == "table" {
-			return match
-		}
-		inner := anyTagRe.ReplaceAllString(match, "")
-		return inner
-	})
-
-	return content
-}
-
-func extractTagName(tag string) string {
-	tag = strings.TrimPrefix(tag, "</")
-	tag = strings.TrimPrefix(tag, "<")
-	if idx := strings.IndexAny(tag, " \t\n/>"); idx >= 0 {
-		return strings.ToLower(tag[:idx])
+	var skipDepth int
+	var inTable bool
+	var tableBuf strings.Builder
+	var anchor struct {
+		href string
+		text strings.Builder
 	}
-	return strings.ToLower(tag)
+
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+
+		switch tt {
+		case html.StartTagToken, html.SelfClosingTagToken:
+			name, hasAttr := z.TagName()
+			tagName := string(name)
+			isSelfClosing := tt == html.SelfClosingTagToken
+
+			if skipDepth > 0 && !isSelfClosing {
+				skipDepth++
+			}
+			if skipDepth > 0 {
+				continue
+			}
+
+			switch tagName {
+			case "style", "script", "iframe":
+				if !isSelfClosing {
+					skipDepth = 1
+				}
+				continue
+			case "img":
+				alt := extractAttr(z, hasAttr, "alt")
+				out.WriteString(alt)
+				continue
+			case "a":
+				href := extractAttr(z, hasAttr, "href")
+				anchor.href = href
+				anchor.text.Reset()
+				continue
+			case "table":
+				inTable = true
+				tableBuf.Reset()
+				continue
+			default:
+				continue
+			}
+
+		case html.EndTagToken:
+			name, _ := z.TagName()
+			tagName := string(name)
+
+			if skipDepth > 0 {
+				skipDepth--
+				if skipDepth == 0 {
+					continue
+				}
+			}
+
+			switch tagName {
+			case "a":
+				text := strings.TrimSpace(anchor.text.String())
+				if text == "" {
+					out.WriteString(anchor.href)
+				} else {
+					out.WriteString(text)
+					out.WriteString(" [")
+					out.WriteString(anchor.href)
+					out.WriteString("]")
+				}
+				anchor.href = ""
+				anchor.text.Reset()
+			case "table":
+				inTable = false
+				text := strings.Join(strings.Fields(tableBuf.String()), " ")
+				out.WriteString(text)
+				tableBuf.Reset()
+			default:
+				continue
+			}
+
+		case html.TextToken:
+			if skipDepth > 0 {
+				continue
+			}
+			text := string(z.Text())
+			if inTable {
+				tableBuf.WriteString(text)
+				tableBuf.WriteString(" ")
+			} else if anchor.href != "" {
+				anchor.text.WriteString(text)
+			} else {
+				out.WriteString(text)
+			}
+
+		case html.CommentToken, html.DoctypeToken:
+			continue
+		}
+	}
+
+	return out.String()
 }
 
-func stripTags(s string) string {
-	return anyTagRe.ReplaceAllString(s, "")
+func extractAttr(z *html.Tokenizer, hasAttr bool, key string) string {
+	if !hasAttr {
+		return ""
+	}
+	for {
+		k, v, more := z.TagAttr()
+		if string(k) == key {
+			return string(v)
+		}
+		if !more {
+			break
+		}
+	}
+	return ""
 }
