@@ -68,6 +68,10 @@ Only the `fixed` chunking strategy is active. Semantic and recursive chunkers wi
 
 We use **River** (`github.com/riverqueue/river`) as the job engine — a lightweight Go queue backed by Postgres, not Temporal. River provides durable at-least-once execution, retries with backoff, and concurrency control. A thin coordination layer handles linear DAG step sequencing (each worker enqueues the next step on success). Postgres is the single source of truth for workflow state; River's internal tables are secondary.
 
+## Phase 1: River Implementation
+
+`docs/river-implementation-plan.md` contains the detailed implementation plan for wrapping preprocessing and indexing as durable River workflows. The plan is organized into 6 sub-phases: Postgres/River infra → workflow DB layer → preprocessing workers → indexing workers → thin CLI wrappers → journal cleanup.
+
 ## Future Evaluation
 
 `docs/` also contains plans for an evaluation system — not yet implemented.

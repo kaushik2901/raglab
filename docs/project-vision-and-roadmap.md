@@ -168,11 +168,13 @@ Downstream pipelines reference upstream outputs via `input_tag`, not by sharing 
 ```
 # Pre-processing — produces cleaned markdown, tagged "pre-v2"
 Preprocess( tag: "pre-v2", repo: "...", includeDirs: [...] )
-    → output: { tag: "pre-v2", output_path: "./output/pre-v2/" }
+    → clones to: artifacts/preprocessing/pre-v2/repo/
+    → writes output to: artifacts/preprocessing/pre-v2/output/
+    → output: { tag: "pre-v2", repo_path: "artifacts/preprocessing/pre-v2/repo/", output_path: "artifacts/preprocessing/pre-v2/output/" }
 
 # Indexing — consumes preprocessed output, produces a Qdrant collection, tagged "idx-v2"
 Index( tag: "idx-v2", input_tag: "pre-v2", chunk_size: 512, ... )
-    → reads artifacts from tag "pre-v2"
+    → reads from artifacts/preprocessing/pre-v2/output/
     → stores vectors in Qdrant collection "idx-v2"
     → output: { tag: "idx-v2", collection: "idx-v2" }
 
@@ -184,7 +186,7 @@ Query( tag: "idx-v2", question: "..." )
 This CI/CD-like model means:
 
 - **One preprocessing run, many indexing strategies**: `Index(tag="idx-v2-fixed-512", input_tag="pre-v2")` and `Index(tag="idx-v2-recursive-256", input_tag="pre-v2")` reuse the same cleaned markdown.
-- **Each pipeline owns its artifact namespace**: preprocessing outputs go under `./output/{tag}/`, Qdrant collections are named `{tag}`. No collision.
+- **Each pipeline owns its artifact namespace**: preprocessing outputs go under `artifacts/preprocessing/{tag}/`, Qdrant collections are named `{tag}`. No collision.
 - **Full traceability**: given a query tag, you can look up which index params were used, and from that which preprocessed artifacts.
 
 Tags can be:
@@ -223,14 +225,21 @@ The API supports:
 **Input parameters:**
 
 - `repo_url` (string, required)
-- `repo_path` (string, optional, default: auto-generated temp dir)
 - `include_dirs` (string[], optional, default: all)
 - `tag` (string, optional, default: auto-generated)
 
+Paths are derived from the tag:
+
+| Artifact | Path |
+|----------|------|
+| Cloned repo | `artifacts/preprocessing/{tag}/repo/` |
+| Preprocessed output | `artifacts/preprocessing/{tag}/output/` |
+| Verification report | `artifacts/preprocessing/{tag}/output/_verification_report.json` |
+
 **Output artifacts:**
 
-- Cleaned markdown files (blob)
-- Verification report (blob)
+- Cleaned markdown files (filesystem)
+- Verification report (filesystem)
 - Workflow metadata (Postgres)
 
 ### 2. Indexing Workflow
@@ -457,7 +466,15 @@ All Go services use the **OpenTelemetry SDK** to:
   - Steps within a pipeline share the same `Tag`: `Clone(tag="pre-v2")` → `Preprocess(tag="pre-v2")` → `Verify(tag="pre-v2")`. The tag is the pipeline's run identity.
   - Indexing steps carry both their own tag and the upstream reference: `Parse(tag="idx-v2", input_tag="pre-v2")` → `Store(tag="idx-v2", input_tag="pre-v2")`. Collection name derives from their own tag: `"idx-v2"`.
 - **CLIs become thin**: `cmd/preprocess/main.go` validates args, inserts a River job, and polls until completion (or exits immediately for async usage). `cmd/index/main.go` accepts both `--tag` and `--input-tag`.
-- **Artifact tagging**: preprocessed output goes to `./output/{tag}/`. Qdrant collection is named `{tag}`.
+- **Artifact structure**:
+
+  | Content | Path |
+  |---------|------|
+  | Cloned repo | `artifacts/preprocessing/{tag}/repo/` |
+  | Preprocessed output | `artifacts/preprocessing/{tag}/output/` |
+  | Qdrant collection | `{tag}` (in Qdrant, not filesystem) |
+
+  Paths are always derived from the workflow type and tag — never hardcoded.
 
 **Files to create:**
 
@@ -469,9 +486,9 @@ All Go services use the **OpenTelemetry SDK** to:
 
 **Deliverables:**
 
-- `bin\preprocess.exe --tag handbook-v2` runs durably via River
-- `bin\index.exe --tag handbook-v2` runs durably, creates Qdrant collection `handbook-v2`
-- Crash safety: restart the process and incomplete jobs resume
+- `bin\preprocess.exe --tag pre-v2` clones to `artifacts/preprocessing/pre-v2/repo/`, writes output to `artifacts/preprocessing/pre-v2/output/`
+- `bin\index.exe --tag idx-v2 --input-tag pre-v2` reads from `artifacts/preprocessing/pre-v2/output/`, creates Qdrant collection `idx-v2`
+- Crash safety: restart the process and incomplete jobs resume (River + Postgres)
 - Preprocessed artifacts and vector collections are namespaced by tag
 
 ### Phase 2: Query System
