@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -27,12 +26,7 @@ func TestChunkStage_Basic(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: "fixed",
-		ChunkSize:     30,
-		ChunkOverlap:  10,
-	}
-	stage := ChunkStage(cfg)
+	stage := ChunkStage("fixed", 30, 10)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -49,12 +43,7 @@ func TestChunkStage_StrategySelection(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: "fixed",
-		ChunkSize:     10,
-		ChunkOverlap:  0,
-	}
-	stage := ChunkStage(cfg)
+	stage := ChunkStage("fixed", 10, 0)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -71,12 +60,7 @@ func TestChunkStage_StateKey(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: "fixed",
-		ChunkSize:     10,
-		ChunkOverlap:  0,
-	}
-	stage := ChunkStage(cfg)
+	stage := ChunkStage("fixed", 10, 0)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -94,12 +78,7 @@ func TestChunkStage_ChunkCount(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: "fixed",
-		ChunkSize:     30,
-		ChunkOverlap:  0,
-	}
-	stage := ChunkStage(cfg)
+	stage := ChunkStage("fixed", 30, 0)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -115,12 +94,7 @@ func TestChunkStage_EmptyDocuments(t *testing.T) {
 		"documents": []types.Document{},
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: "fixed",
-		ChunkSize:     10,
-		ChunkOverlap:  0,
-	}
-	stage := ChunkStage(cfg)
+	stage := ChunkStage("fixed", 10, 0)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -140,12 +114,7 @@ func TestChunkStage_InvalidStrategy(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: "invalid",
-		ChunkSize:     10,
-		ChunkOverlap:  0,
-	}
-	stage := ChunkStage(cfg)
+	stage := ChunkStage("invalid", 10, 0)
 	_, err := stage.Run(context.Background(), state)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown chunk strategy")

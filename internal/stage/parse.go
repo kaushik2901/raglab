@@ -4,17 +4,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/parser"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func ParseStage(cfg *config.Config) types.Stage {
+func ParseStage(outputPath string) types.Stage {
 	return types.Stage{
 		Name:     "parse",
 		Requires: nil,
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-			docs, err := parser.ParseDir(cfg.OutputPath)
+			docs, err := parser.ParseDir(outputPath)
 			if err != nil {
 				return nil, fmt.Errorf("parse: %w", err)
 			}

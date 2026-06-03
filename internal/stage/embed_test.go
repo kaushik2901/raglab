@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -33,12 +32,7 @@ func TestEmbedStage_Basic(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		LLMBaseURL:     srv.URL,
-		EmbeddingModel: "test-model",
-		BatchSize:      10,
-	}
-	stage := EmbedStage(cfg)
+	stage := EmbedStage(srv.URL, "", "test-model", 10)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -67,12 +61,7 @@ func TestEmbedStage_StateKey(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		LLMBaseURL:     srv.URL,
-		EmbeddingModel: "m",
-		BatchSize:      10,
-	}
-	stage := EmbedStage(cfg)
+	stage := EmbedStage(srv.URL, "", "m", 10)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -105,12 +94,7 @@ func TestEmbedStage_Count(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		LLMBaseURL:     srv.URL,
-		EmbeddingModel: "m",
-		BatchSize:      10,
-	}
-	stage := EmbedStage(cfg)
+	stage := EmbedStage(srv.URL, "", "m", 10)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -131,12 +115,7 @@ func TestEmbedStage_EmptyChunks(t *testing.T) {
 		"chunks": []types.Chunk{},
 	}
 
-	cfg := &config.Config{
-		LLMBaseURL:     srv.URL,
-		EmbeddingModel: "m",
-		BatchSize:      10,
-	}
-	stage := EmbedStage(cfg)
+	stage := EmbedStage(srv.URL, "", "m", 10)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -166,12 +145,7 @@ func TestEmbedStage_ChunkEmbeddingPairing(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		LLMBaseURL:     srv.URL,
-		EmbeddingModel: "m",
-		BatchSize:      10,
-	}
-	stage := EmbedStage(cfg)
+	stage := EmbedStage(srv.URL, "", "m", 10)
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)

@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -27,14 +26,14 @@ type CheckResult struct {
 var shortcodePattern = regexp.MustCompile(`\{\{(?:%|<)`)
 var htmlTagPattern = regexp.MustCompile(`<[a-z]+[^>]*>`)
 
-func VerifyStage(cfg *config.Config) types.Stage {
+func VerifyStage(outputPath string) types.Stage {
 	return types.Stage{
 		Name:     "verify",
 		Requires: []types.StageID{"clone", "preprocess"},
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 			repoPath, _ := state["repo_path"].(string)
 			srcDir := filepath.Join(repoPath, "content")
-			dstDir := cfg.OutputPath
+			dstDir := outputPath
 
 			report := VerificationReport{Passed: true}
 
@@ -253,7 +252,7 @@ func computeTotalSize(dir string) int64 {
 		if err != nil || fi.IsDir() {
 			return nil
 		}
-		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
+		if strings.HasSuffix(fi.Name(), ".md") && strings.HasSuffix(fi.Name(), ".markdown") {
 			total += fi.Size()
 		}
 		return nil

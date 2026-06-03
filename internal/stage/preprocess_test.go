@@ -8,8 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
 func TestPreprocessStage_Execute(t *testing.T) {
@@ -20,11 +18,7 @@ func TestPreprocessStage_Execute(t *testing.T) {
 
 	dstDir := t.TempDir()
 
-	cfg := &config.Config{
-		OutputPath: dstDir,
-	}
-	stage := PreprocessStage(cfg)
-
+	stage := PreprocessStage(dstDir, nil)
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
@@ -40,11 +34,7 @@ func TestPreprocessStage_Execute_EmptyDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(srcDir, "content"), 0755)
 	dstDir := t.TempDir()
 
-	cfg := &config.Config{
-		OutputPath: dstDir,
-	}
-	stage := PreprocessStage(cfg)
-
+	stage := PreprocessStage(dstDir, nil)
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
@@ -53,14 +43,12 @@ func TestPreprocessStage_Execute_EmptyDir(t *testing.T) {
 }
 
 func TestPreprocessStage_Name(t *testing.T) {
-	cfg := &config.Config{OutputPath: t.TempDir()}
-	stage := PreprocessStage(cfg)
+	stage := PreprocessStage(t.TempDir(), nil)
 	assert.Equal(t, "preprocess", string(stage.Name))
 }
 
 func TestPreprocessStage_Requires(t *testing.T) {
-	cfg := &config.Config{OutputPath: t.TempDir()}
-	stage := PreprocessStage(cfg)
+	stage := PreprocessStage(t.TempDir(), nil)
 	assert.Equal(t, 1, len(stage.Requires))
 	assert.Equal(t, "clone", string(stage.Requires[0]))
 }

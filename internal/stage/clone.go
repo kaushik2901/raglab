@@ -6,16 +6,13 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func CloneStage(cfg *config.Config) types.Stage {
+func CloneStage(repoURL, repoPath string) types.Stage {
 	return types.Stage{
 		Name: "clone",
 		Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-			repoPath := cfg.RepoPath
-			repoURL := cfg.RepoURL
 			if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 				if err := gitClone(ctx, repoURL, repoPath); err != nil {
 					return nil, fmt.Errorf("git clone: %w", err)

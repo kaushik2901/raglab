@@ -8,8 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
 func TestVerifyStage_Execute(t *testing.T) {
@@ -21,11 +19,7 @@ func TestVerifyStage_Execute(t *testing.T) {
 	dstDir := t.TempDir()
 	os.WriteFile(filepath.Join(dstDir, "good.md"), []byte("# Valid\n\nSome content."), 0644)
 
-	cfg := &config.Config{
-		OutputPath: dstDir,
-	}
-	stage := VerifyStage(cfg)
-
+	stage := VerifyStage(dstDir)
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
@@ -42,11 +36,7 @@ func TestVerifyStage_EmptyDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(srcDir, "content"), 0755)
 	dstDir := t.TempDir()
 
-	cfg := &config.Config{
-		OutputPath: dstDir,
-	}
-	stage := VerifyStage(cfg)
-
+	stage := VerifyStage(dstDir)
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
@@ -59,14 +49,12 @@ func TestVerifyStage_EmptyDir(t *testing.T) {
 }
 
 func TestVerifyStage_Name(t *testing.T) {
-	cfg := &config.Config{OutputPath: t.TempDir()}
-	stage := VerifyStage(cfg)
+	stage := VerifyStage(t.TempDir())
 	assert.Equal(t, "verify", string(stage.Name))
 }
 
 func TestVerifyStage_Requires(t *testing.T) {
-	cfg := &config.Config{OutputPath: t.TempDir()}
-	stage := VerifyStage(cfg)
+	stage := VerifyStage(t.TempDir())
 	assert.Equal(t, 2, len(stage.Requires))
 	assert.Equal(t, "clone", string(stage.Requires[0]))
 	assert.Equal(t, "preprocess", string(stage.Requires[1]))

@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func StoreStage(cfg *config.Config) types.Stage {
+func StoreStage(qdrantURL, qdrantAPIKey string) types.Stage {
 	return types.Stage{
 		Name:     "store",
 		Requires: []types.StageID{"embed"},
@@ -28,8 +27,8 @@ func StoreStage(cfg *config.Config) types.Stage {
 
 			vectorSize := docChunks[0].Embedding.Dimensions
 
-			qStore := store.NewQdrantStore(cfg.QdrantAPIKey)
-			if err := qStore.Connect(ctx, cfg.QdrantURL); err != nil {
+			qStore := store.NewQdrantStore(qdrantAPIKey)
+			if err := qStore.Connect(ctx, qdrantURL); err != nil {
 				return nil, fmt.Errorf("connect: %w", err)
 			}
 			defer qStore.Close()

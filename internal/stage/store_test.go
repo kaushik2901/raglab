@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -33,11 +32,7 @@ func TestStoreStage_Basic(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		QdrantURL:    "http://localhost:6334",
-		QdrantAPIKey: "",
-	}
-	stage := StoreStage(cfg)
+	stage := StoreStage("http://localhost:6334", "")
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -52,11 +47,7 @@ func TestStoreStage_EmptyChunks(t *testing.T) {
 		"document_chunks": []types.DocumentChunk{},
 	}
 
-	cfg := &config.Config{
-		QdrantURL:    "http://localhost:6334",
-		QdrantAPIKey: "",
-	}
-	stage := StoreStage(cfg)
+	stage := StoreStage("http://localhost:6334", "")
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -111,11 +102,7 @@ func TestStoreStage_CollectionName(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		QdrantURL:    "http://localhost:6334",
-		QdrantAPIKey: "",
-	}
-	stage := StoreStage(cfg)
+	stage := StoreStage("http://localhost:6334", "")
 	result, err := stage.Run(context.Background(), state)
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -147,11 +134,7 @@ func TestStoreStage_ConnectionError(t *testing.T) {
 		},
 	}
 
-	cfg := &config.Config{
-		QdrantURL:    "http://localhost:1",
-		QdrantAPIKey: "",
-	}
-	stage := StoreStage(cfg)
+	stage := StoreStage("http://localhost:1", "")
 	_, err := stage.Run(context.Background(), state)
 	require.Error(t, err)
 }

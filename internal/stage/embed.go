@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func EmbedStage(cfg *config.Config) types.Stage {
+func EmbedStage(baseURL, apiKey, model string, batchSize int) types.Stage {
 	return types.Stage{
 		Name:     "embed",
 		Requires: []types.StageID{"chunk"},
@@ -19,7 +18,7 @@ func EmbedStage(cfg *config.Config) types.Stage {
 				return nil, fmt.Errorf("chunks not found in state")
 			}
 
-			e := embedder.New(cfg.LLMBaseURL, cfg.LLMApiKey, cfg.EmbeddingModel, cfg.BatchSize)
+			e := embedder.New(baseURL, apiKey, model, batchSize)
 			embeddings, err := e.Embed(ctx, chunks)
 			if err != nil {
 				return nil, fmt.Errorf("embed: %w", err)

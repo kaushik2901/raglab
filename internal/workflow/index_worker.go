@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	stagepkg "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
@@ -76,9 +75,6 @@ func (w *ParseWorker) Work(ctx context.Context, job *river.Job[ParseArgs]) error
 	}
 
 	inputPath := filepath.Join("artifacts", "preprocessing", job.Args.InputTag, "output")
-	cfg := &config.Config{
-		OutputPath: inputPath,
-	}
 
 	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
 	if err != nil {
@@ -87,7 +83,7 @@ func (w *ParseWorker) Work(ctx context.Context, job *river.Job[ParseArgs]) error
 		return fmt.Errorf("load state: %w", err)
 	}
 
-	stage := stagepkg.ParseStage(cfg)
+	stage := stagepkg.ParseStage(inputPath)
 	result, err := stage.Run(ctx, state)
 	if err != nil {
 		errStr := err.Error()
@@ -130,12 +126,6 @@ func (w *ChunkWorker) Work(ctx context.Context, job *river.Job[ChunkArgs]) error
 		return fmt.Errorf("mark step running: %w", err)
 	}
 
-	cfg := &config.Config{
-		ChunkStrategy: job.Args.ChunkStrategy,
-		ChunkSize:     job.Args.ChunkSize,
-		ChunkOverlap:  job.Args.ChunkOverlap,
-	}
-
 	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
 	if err != nil {
 		errStr := err.Error()
@@ -143,7 +133,7 @@ func (w *ChunkWorker) Work(ctx context.Context, job *river.Job[ChunkArgs]) error
 		return fmt.Errorf("load state: %w", err)
 	}
 
-	stage := stagepkg.ChunkStage(cfg)
+	stage := stagepkg.ChunkStage(job.Args.ChunkStrategy, job.Args.ChunkSize, job.Args.ChunkOverlap)
 	result, err := stage.Run(ctx, state)
 	if err != nil {
 		errStr := err.Error()
@@ -191,12 +181,6 @@ func (w *EmbedWorker) Work(ctx context.Context, job *river.Job[EmbedArgs]) error
 	if apiKey == "" {
 		apiKey = os.Getenv("LLM_API_KEY")
 	}
-	cfg := &config.Config{
-		EmbeddingModel: job.Args.EmbeddingModel,
-		BatchSize:      job.Args.BatchSize,
-		LLMBaseURL:     job.Args.LLMBaseURL,
-		LLMApiKey:      apiKey,
-	}
 
 	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
 	if err != nil {
@@ -205,7 +189,7 @@ func (w *EmbedWorker) Work(ctx context.Context, job *river.Job[EmbedArgs]) error
 		return fmt.Errorf("load state: %w", err)
 	}
 
-	stage := stagepkg.EmbedStage(cfg)
+	stage := stagepkg.EmbedStage(job.Args.LLMBaseURL, apiKey, job.Args.EmbeddingModel, job.Args.BatchSize)
 	result, err := stage.Run(ctx, state)
 	if err != nil {
 		errStr := err.Error()
@@ -319,20 +303,12 @@ func (w *StoreWorker) Work(ctx context.Context, job *river.Job[StoreArgs]) error
 }
 
 func RunParseStep(ctx context.Context, args ParseArgs, state map[string]any) (*types.StageResult, error) {
-	cfg := &config.Config{
-		OutputPath: filepath.Join("artifacts", "preprocessing", args.InputTag, "output"),
-	}
-	stage := stagepkg.ParseStage(cfg)
+	stage := stagepkg.ParseStage(filepath.Join("artifacts", "preprocessing", args.InputTag, "output"))
 	return stage.Run(ctx, state)
 }
 
 func RunChunkStep(ctx context.Context, args ChunkArgs, state map[string]any) (*types.StageResult, error) {
-	cfg := &config.Config{
-		ChunkStrategy: args.ChunkStrategy,
-		ChunkSize:     args.ChunkSize,
-		ChunkOverlap:  args.ChunkOverlap,
-	}
-	stage := stagepkg.ChunkStage(cfg)
+	stage := stagepkg.ChunkStage(args.ChunkStrategy, args.ChunkSize, args.ChunkOverlap)
 	return stage.Run(ctx, state)
 }
 
@@ -341,13 +317,7 @@ func RunEmbedStep(ctx context.Context, args EmbedArgs, state map[string]any) (*t
 	if apiKey == "" {
 		apiKey = os.Getenv("LLM_API_KEY")
 	}
-	cfg := &config.Config{
-		EmbeddingModel: args.EmbeddingModel,
-		BatchSize:      args.BatchSize,
-		LLMBaseURL:     args.LLMBaseURL,
-		LLMApiKey:      apiKey,
-	}
-	stage := stagepkg.EmbedStage(cfg)
+	stage := stagepkg.EmbedStage(args.LLMBaseURL, apiKey, args.EmbeddingModel, args.BatchSize)
 	return stage.Run(ctx, state)
 }
 

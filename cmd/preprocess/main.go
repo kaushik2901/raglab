@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -28,11 +29,16 @@ func run() error {
 	os.Args = append([]string{"preprocess"}, os.Args[1:]...)
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
+	repoURL := flag.String("repo-url", envOrDefault("REPO_URL", "https://gitlab.com/gitlab-com/content-sites/handbook"), "Repository URL to clone")
+	tag := flag.String("tag", envOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
+	includeDirsRaw := flag.String("include-dirs", envOrDefault("INCLUDE_DIRS", ""), "Comma-separated subdirectories to process (empty = process all)")
+
 	cfg, err := config.Load()
 	os.Args = origArgs
 	if err != nil {
 		return err
 	}
+	_ = cfg
 
 	ctx := context.Background()
 
@@ -48,19 +54,29 @@ func run() error {
 
 	store := workflow.NewStore(pool)
 
-	cfg.Tag = resolveTag(cfg.Tag, "pre")
+	resolvedTag := resolveTag(*tag, "pre")
 
-	repoPath := filepath.Join("artifacts", "preprocessing", cfg.Tag, "repo")
+	var includeDirs []string
+	if *includeDirsRaw != "" {
+		for d := range strings.SplitSeq(*includeDirsRaw, ",") {
+			d = strings.TrimSpace(d)
+			if d != "" {
+				includeDirs = append(includeDirs, d)
+			}
+		}
+	}
 
-	wfID, err := store.CreateWorkflow(ctx, "preprocess", cfg.Tag, map[string]any{
-		"repo_url":     cfg.RepoURL,
-		"include_dirs": cfg.IncludeDirs,
+	repoPath := filepath.Join("artifacts", "preprocessing", resolvedTag, "repo")
+
+	wfID, err := store.CreateWorkflow(ctx, "preprocess", resolvedTag, map[string]any{
+		"repo_url":     *repoURL,
+		"include_dirs": includeDirs,
 	})
 	if err != nil {
 		return fmt.Errorf("create workflow: %w", err)
 	}
 
-	slog.Info("created workflow", "id", wfID, "tag", cfg.Tag)
+	slog.Info("created workflow", "id", wfID, "tag", resolvedTag)
 
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
 	if err != nil {
@@ -69,10 +85,10 @@ func run() error {
 
 	_, err = riverClient.Insert(ctx, &workflow.CloneArgs{
 		WorkflowID:  wfID,
-		Tag:         cfg.Tag,
-		RepoURL:     cfg.RepoURL,
+		Tag:         resolvedTag,
+		RepoURL:     *repoURL,
 		RepoPath:    repoPath,
-		IncludeDirs: cfg.IncludeDirs,
+		IncludeDirs: includeDirs,
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("insert clone job: %w", err)
@@ -87,4 +103,11 @@ func resolveTag(tag, prefix string) string {
 		return tag
 	}
 	return prefix + "-" + time.Now().Format("20060102-150405")
+}
+
+func envOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
 }

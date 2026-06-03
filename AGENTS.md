@@ -31,7 +31,8 @@ Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to re
 - Package `internal/stage/` is named `stageimport` (not `stage`) — imports use `stagepkg "..."`.
 - `handbook/` is the default clone target, NOT tracked in git (but not gitignored either).
 - Journal caching lives in `.journal/` (gob files per stage). Delete it to force re-run.
-- Config reads CLI flags first, falls back to env vars: `REPO_URL`, `REPO_PATH`, `OUTPUT_PATH`, `MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`.
+- `config.Config` is system-level only: `MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`.
+- Pipeline inputs (repo URL, chunk params, etc.) are parsed inline by each `cmd/*/main.go`, not in config. Stage functions accept explicit parameters instead of `*config.Config` — see per-stage signatures.
 - `go mod tidy` is only needed if adding external deps (currently none).
 - Pipeline retries use exponential backoff + jitter. `MaxRetries=0` means no retries. `RetryBackoff` must be > 0.
 
@@ -53,7 +54,7 @@ Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to re
 The indexing pipeline (`cmd/index/`) builds on the preprocessing output. Currently implemented:
 
 - **Types:** `internal/types/indexing.go` — `Chunk`, `Embedding`, `DocumentChunk`
-- **Config:** `internal/config/config.go` — indexing fields (`--chunk-strategy`, `--chunk-size`, etc.)
+- **Config:** system-level only (`MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`); indexing params are parsed inline in `cmd/index/main.go`
 - **Parser:** `internal/parser/parser.go` — walks output dir, reads `.md` files into `[]types.Document`
 - **Fixed chunker:** `internal/chunker/` — word-window splitting with configurable size/overlap
 - **Embedder:** `internal/embedder/` — interface + OpenAI-compatible HTTP embedder with batching and rate-limit retry

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -20,8 +19,7 @@ func TestParseStage_Basic(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "sub"), 0755)
 	os.WriteFile(filepath.Join(dir, "sub", "nested.md"), []byte("# Nested"), 0644)
 
-	cfg := &config.Config{OutputPath: dir}
-	stage := ParseStage(cfg)
+	stage := ParseStage(dir)
 	result, err := stage.Run(context.Background(), map[string]any{})
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -35,8 +33,7 @@ func TestParseStage_StateKey(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "doc.md"), []byte("# Content"), 0644)
 
-	cfg := &config.Config{OutputPath: dir}
-	stage := ParseStage(cfg)
+	stage := ParseStage(dir)
 	result, err := stage.Run(context.Background(), map[string]any{})
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -51,8 +48,7 @@ func TestParseStage_StateKey(t *testing.T) {
 func TestParseStage_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 
-	cfg := &config.Config{OutputPath: dir}
-	stage := ParseStage(cfg)
+	stage := ParseStage(dir)
 	result, err := stage.Run(context.Background(), map[string]any{})
 	require.NoError(t, err)
 	require.NoError(t, result.Err)
@@ -67,8 +63,7 @@ func TestParseStage_EmptyDir(t *testing.T) {
 }
 
 func TestParseStage_Error(t *testing.T) {
-	cfg := &config.Config{OutputPath: filepath.Join(t.TempDir(), "nonexistent")}
-	stage := ParseStage(cfg)
+	stage := ParseStage(filepath.Join(t.TempDir(), "nonexistent"))
 	_, err := stage.Run(context.Background(), map[string]any{})
 	require.Error(t, err)
 }

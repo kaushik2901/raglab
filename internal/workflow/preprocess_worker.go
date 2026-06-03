@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	stagepkg "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -61,11 +60,6 @@ func (w *CloneWorker) Work(ctx context.Context, job *river.Job[CloneArgs]) error
 		return fmt.Errorf("mark step running: %w", err)
 	}
 
-	cfg := &config.Config{
-		RepoURL:  job.Args.RepoURL,
-		RepoPath: job.Args.RepoPath,
-	}
-
 	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
 	if err != nil {
 		errStr := err.Error()
@@ -73,7 +67,7 @@ func (w *CloneWorker) Work(ctx context.Context, job *river.Job[CloneArgs]) error
 		return fmt.Errorf("load state: %w", err)
 	}
 
-	stage := stagepkg.CloneStage(cfg)
+	stage := stagepkg.CloneStage(job.Args.RepoURL, job.Args.RepoPath)
 	result, err := stage.Run(ctx, state)
 	if err != nil {
 		errStr := err.Error()
@@ -117,12 +111,6 @@ func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessAr
 		return fmt.Errorf("mark step running: %w", err)
 	}
 
-	cfg := &config.Config{
-		RepoPath:    job.Args.RepoPath,
-		OutputPath:  job.Args.OutputPath,
-		IncludeDirs: job.Args.IncludeDirs,
-	}
-
 	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
 	if err != nil {
 		errStr := err.Error()
@@ -130,7 +118,7 @@ func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessAr
 		return fmt.Errorf("load state: %w", err)
 	}
 
-	stage := stagepkg.PreprocessStage(cfg)
+	stage := stagepkg.PreprocessStage(job.Args.OutputPath, job.Args.IncludeDirs)
 	result, err := stage.Run(ctx, state)
 	if err != nil {
 		errStr := err.Error()
@@ -173,11 +161,6 @@ func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) err
 		return fmt.Errorf("mark step running: %w", err)
 	}
 
-	cfg := &config.Config{
-		RepoPath:   job.Args.RepoPath,
-		OutputPath: job.Args.OutputPath,
-	}
-
 	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
 	if err != nil {
 		errStr := err.Error()
@@ -185,7 +168,7 @@ func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) err
 		return fmt.Errorf("load state: %w", err)
 	}
 
-	stage := stagepkg.VerifyStage(cfg)
+	stage := stagepkg.VerifyStage(job.Args.OutputPath)
 	result, err := stage.Run(ctx, state)
 	if err != nil {
 		errStr := err.Error()
@@ -205,29 +188,16 @@ func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) err
 }
 
 func RunCloneStep(ctx context.Context, args CloneArgs, state map[string]any) (*types.StageResult, error) {
-	cfg := &config.Config{
-		RepoURL:  args.RepoURL,
-		RepoPath: args.RepoPath,
-	}
-	stage := stagepkg.CloneStage(cfg)
+	stage := stagepkg.CloneStage(args.RepoURL, args.RepoPath)
 	return stage.Run(ctx, state)
 }
 
 func RunPreprocessStep(ctx context.Context, args PreprocessArgs, state map[string]any) (*types.StageResult, error) {
-	cfg := &config.Config{
-		RepoPath:    args.RepoPath,
-		OutputPath:  args.OutputPath,
-		IncludeDirs: args.IncludeDirs,
-	}
-	stage := stagepkg.PreprocessStage(cfg)
+	stage := stagepkg.PreprocessStage(args.OutputPath, args.IncludeDirs)
 	return stage.Run(ctx, state)
 }
 
 func RunVerifyStep(ctx context.Context, args VerifyArgs, state map[string]any) (*types.StageResult, error) {
-	cfg := &config.Config{
-		RepoPath:   args.RepoPath,
-		OutputPath: args.OutputPath,
-	}
-	stage := stagepkg.VerifyStage(cfg)
+	stage := stagepkg.VerifyStage(args.OutputPath)
 	return stage.Run(ctx, state)
 }

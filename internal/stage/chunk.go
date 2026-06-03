@@ -5,11 +5,10 @@ import (
 	"fmt"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func ChunkStage(cfg *config.Config) types.Stage {
+func ChunkStage(chunkStrategy string, chunkSize, chunkOverlap int) types.Stage {
 	return types.Stage{
 		Name:     "chunk",
 		Requires: []types.StageID{"parse"},
@@ -20,11 +19,11 @@ func ChunkStage(cfg *config.Config) types.Stage {
 			}
 
 			var ch chunker.Chunker
-			switch cfg.ChunkStrategy {
+			switch chunkStrategy {
 			case "fixed":
-				ch = chunker.NewFixedChunker(cfg.ChunkSize, cfg.ChunkOverlap)
+				ch = chunker.NewFixedChunker(chunkSize, chunkOverlap)
 			default:
-				return nil, fmt.Errorf("unknown chunk strategy: %s", cfg.ChunkStrategy)
+				return nil, fmt.Errorf("unknown chunk strategy: %s", chunkStrategy)
 			}
 
 			var allChunks []types.Chunk

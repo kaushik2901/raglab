@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/preprocessor"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-func PreprocessStage(cfg *config.Config) types.Stage {
+func PreprocessStage(outputPath string, includeDirs []string) types.Stage {
 	return types.Stage{
 		Name:     "preprocess",
 		Requires: []types.StageID{"clone"},
@@ -20,8 +19,8 @@ func PreprocessStage(cfg *config.Config) types.Stage {
 				return nil, fmt.Errorf("repo_path not found in state")
 			}
 			srcDir := filepath.Join(repoPath, "content")
-			dstDir := cfg.OutputPath
-			count, err := preprocessor.ProcessAllFiles(srcDir, cfg.IncludeDirs, dstDir, 10)
+			dstDir := outputPath
+			count, err := preprocessor.ProcessAllFiles(srcDir, includeDirs, dstDir, 10)
 			if err != nil {
 				return nil, fmt.Errorf("preprocess: %w", err)
 			}
