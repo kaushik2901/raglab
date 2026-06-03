@@ -57,6 +57,7 @@ The indexing pipeline (`cmd/index/`) builds on the preprocessing output. Current
 - **Config:** `internal/config/config.go` — indexing fields (`--chunk-strategy`, `--chunk-size`, etc.)
 - **Parser:** `internal/parser/parser.go` — walks output dir, reads `.md` files into `[]types.Document`
 - **Fixed chunker:** `internal/chunker/` — word-window splitting with configurable size/overlap
+- **Embedder:** `internal/embedder/` — interface + OpenAI-compatible HTTP embedder with batching and rate-limit retry
 
 Only the `fixed` chunking strategy is active. Semantic and recursive chunkers will be added after the end-to-end pipeline is complete.
 
