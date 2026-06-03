@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
@@ -18,16 +21,14 @@ func TestCloneStage_Execute_NewClone(t *testing.T) {
 	srcDir := t.TempDir()
 	cmd := exec.Command("git", "init", "--bare", filepath.Join(srcDir, ".git"))
 	cmd.Dir = srcDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init --bare: %v\n%s", err, out)
-	}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git init --bare failed: %s", out)
 
 	workDir := t.TempDir()
 	cmd = exec.Command("git", "init")
 	cmd.Dir = workDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v\n%s", err, out)
-	}
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, "git init failed: %s", out)
 
 	cmd = exec.Command("git", "config", "user.email", "test@test.com")
 	cmd.Dir = workDir
@@ -48,15 +49,13 @@ func TestCloneStage_Execute_NewClone(t *testing.T) {
 
 	cmd = exec.Command("git", "symbolic-ref", "HEAD", "refs/heads/master")
 	cmd.Dir = srcDir + "/.git"
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git symbolic-ref: %v\n%s", err, out)
-	}
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, "git symbolic-ref failed: %s", out)
 
 	cmd = exec.Command("git", "push", srcDir+"/.git", "master")
 	cmd.Dir = workDir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git push: %v\n%s", err, out)
-	}
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, "git push failed: %s", out)
 
 	cfg := &config.Config{
 		RepoURL:  srcDir + "/.git",
@@ -65,19 +64,12 @@ func TestCloneStage_Execute_NewClone(t *testing.T) {
 	stage := CloneStage(cfg)
 
 	result, err := stage.Run(context.Background(), map[string]any{})
-	if err != nil {
-		t.Fatalf("CloneStage.Run: %v", err)
-	}
-	if result.Name != "clone" {
-		t.Errorf("Name = %q, want %q", result.Name, "clone")
-	}
-	if result.Err != nil {
-		t.Fatalf("result.Err = %v", result.Err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
+	assert.Equal(t, "clone", string(result.Name))
 
-	if _, err := os.Stat(filepath.Join(cfg.RepoPath, "test.md")); os.IsNotExist(err) {
-		t.Error("test.md not cloned")
-	}
+	_, err = os.Stat(filepath.Join(cfg.RepoPath, "test.md"))
+	assert.False(t, os.IsNotExist(err), "test.md should be cloned")
 }
 
 func TestCloneStage_Name(t *testing.T) {
@@ -86,7 +78,5 @@ func TestCloneStage_Name(t *testing.T) {
 		RepoPath: t.TempDir(),
 	}
 	stage := CloneStage(cfg)
-	if stage.Name != "clone" {
-		t.Errorf("got %q, want %q", stage.Name, "clone")
-	}
+	assert.Equal(t, "clone", string(stage.Name))
 }

@@ -7,15 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
 func newTestJournal(t *testing.T) (*GobFileJournal, string) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "journal-test-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
-	}
+	require.NoError(t, err)
 	return NewGobFileJournal(dir), dir
 }
 
@@ -28,9 +29,7 @@ func TestNewGobFileJournal(t *testing.T) {
 	j, dir := newTestJournal(t)
 	defer cleanupJournal(t, dir)
 
-	if j.dir != dir {
-		t.Errorf("dir = %q, want %q", j.dir, dir)
-	}
+	assert.Equal(t, dir, j.dir)
 }
 
 func TestRecordAndLoad(t *testing.T) {
@@ -48,35 +47,20 @@ func TestRecordAndLoad(t *testing.T) {
 		Output:     map[string]any{"repo_path": "/tmp/repo"},
 	}
 
-	if err := j.Record("clone", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", record))
 
 	got, err := j.Load("clone")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got == nil {
-		t.Fatal("Load returned nil, want non-nil")
-	}
-	if got.Name != record.Name {
-		t.Errorf("Name = %q, want %q", got.Name, record.Name)
-	}
-	if got.Succeeded != record.Succeeded {
-		t.Errorf("Succeeded = %t, want %t", got.Succeeded, record.Succeeded)
-	}
-	if got.InputHash != record.InputHash {
-		t.Errorf("InputHash = %q, want %q", got.InputHash, record.InputHash)
-	}
-	if !got.StartedAt.Equal(record.StartedAt) {
-		t.Errorf("StartedAt mismatch: %v vs %v", got.StartedAt, record.StartedAt)
-	}
-	if !got.FinishedAt.Equal(record.FinishedAt) {
-		t.Errorf("FinishedAt mismatch: %v vs %v", got.FinishedAt, record.FinishedAt)
-	}
-	if v, ok := got.Output["repo_path"]; !ok || v != "/tmp/repo" {
-		t.Errorf("Output[repo_path] = %v, want %v", v, "/tmp/repo")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	assert.Equal(t, record.Name, got.Name)
+	assert.Equal(t, record.Succeeded, got.Succeeded)
+	assert.Equal(t, record.InputHash, got.InputHash)
+	assert.True(t, got.StartedAt.Equal(record.StartedAt))
+	assert.True(t, got.FinishedAt.Equal(record.FinishedAt))
+	v, ok := got.Output["repo_path"]
+	assert.True(t, ok)
+	assert.Equal(t, "/tmp/repo", v)
 }
 
 func TestLoad_MissingStage(t *testing.T) {
@@ -84,12 +68,8 @@ func TestLoad_MissingStage(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	got, err := j.Load("nonexistent")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got != nil {
-		t.Fatal("Load should return nil for missing stage")
-	}
+	require.NoError(t, err)
+	assert.Nil(t, got)
 }
 
 func TestHasSucceeded_True(t *testing.T) {
@@ -97,17 +77,11 @@ func TestHasSucceeded_True(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	record := types.StageRecord{Name: "clone", Succeeded: true, InputHash: "hash1"}
-	if err := j.Record("clone", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", record))
 
 	ok, err := j.HasSucceeded("clone", "hash1")
-	if err != nil {
-		t.Fatalf("HasSucceeded: %v", err)
-	}
-	if !ok {
-		t.Fatal("HasSucceeded = false, want true")
-	}
+	require.NoError(t, err)
+	assert.True(t, ok)
 }
 
 func TestHasSucceeded_NoRecord(t *testing.T) {
@@ -115,12 +89,8 @@ func TestHasSucceeded_NoRecord(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	ok, err := j.HasSucceeded("clone", "hash1")
-	if err != nil {
-		t.Fatalf("HasSucceeded: %v", err)
-	}
-	if ok {
-		t.Fatal("HasSucceeded = true, want false")
-	}
+	require.NoError(t, err)
+	assert.False(t, ok)
 }
 
 func TestHasSucceeded_WrongHash(t *testing.T) {
@@ -128,17 +98,11 @@ func TestHasSucceeded_WrongHash(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	record := types.StageRecord{Name: "clone", Succeeded: true, InputHash: "hash1"}
-	if err := j.Record("clone", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", record))
 
 	ok, err := j.HasSucceeded("clone", "hash2")
-	if err != nil {
-		t.Fatalf("HasSucceeded: %v", err)
-	}
-	if ok {
-		t.Fatal("HasSucceeded = true, want false (hash mismatch)")
-	}
+	require.NoError(t, err)
+	assert.False(t, ok)
 }
 
 func TestHasSucceeded_EmptyHashIgnoresHash(t *testing.T) {
@@ -146,17 +110,11 @@ func TestHasSucceeded_EmptyHashIgnoresHash(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	record := types.StageRecord{Name: "clone", Succeeded: true, InputHash: "some-specific-hash"}
-	if err := j.Record("clone", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", record))
 
 	ok, err := j.HasSucceeded("clone", "")
-	if err != nil {
-		t.Fatalf("HasSucceeded: %v", err)
-	}
-	if !ok {
-		t.Fatal("HasSucceeded with empty inputHash = false, want true (should ignore hash)")
-	}
+	require.NoError(t, err)
+	assert.True(t, ok)
 }
 
 func TestHasSucceeded_NotSucceeded(t *testing.T) {
@@ -164,42 +122,26 @@ func TestHasSucceeded_NotSucceeded(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	record := types.StageRecord{Name: "clone", Succeeded: false, InputHash: "hash1"}
-	if err := j.Record("clone", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", record))
 
 	ok, err := j.HasSucceeded("clone", "hash1")
-	if err != nil {
-		t.Fatalf("HasSucceeded: %v", err)
-	}
-	if ok {
-		t.Fatal("HasSucceeded = true, want false (not succeeded)")
-	}
+	require.NoError(t, err)
+	assert.False(t, ok)
 }
 
 func TestClear_RemovesGobFiles(t *testing.T) {
 	j, dir := newTestJournal(t)
 	defer cleanupJournal(t, dir)
 
-	if err := j.Record("clone", types.StageRecord{Name: "clone", Succeeded: true}); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
-	if err := j.Record("preprocess", types.StageRecord{Name: "preprocess", Succeeded: true}); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", types.StageRecord{Name: "clone", Succeeded: true}))
+	require.NoError(t, j.Record("preprocess", types.StageRecord{Name: "preprocess", Succeeded: true}))
 
-	if err := j.Clear(); err != nil {
-		t.Fatalf("Clear: %v", err)
-	}
+	require.NoError(t, j.Clear())
 
 	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
+	require.NoError(t, err)
 	for _, e := range entries {
-		if filepath.Ext(e.Name()) == ".gob" {
-			t.Errorf("gob file remains after Clear: %s", e.Name())
-		}
+		assert.NotEqual(t, ".gob", filepath.Ext(e.Name()), "gob file remains after Clear: %s", e.Name())
 	}
 }
 
@@ -207,30 +149,20 @@ func TestClear_LeavesNonGobFiles(t *testing.T) {
 	j, dir := newTestJournal(t)
 	defer cleanupJournal(t, dir)
 
-	if err := j.Record("clone", types.StageRecord{Name: "clone", Succeeded: true}); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", types.StageRecord{Name: "clone", Succeeded: true}))
 
 	nonGobPath := filepath.Join(dir, "readme.txt")
-	if err := os.WriteFile(nonGobPath, []byte("hello"), 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
+	require.NoError(t, os.WriteFile(nonGobPath, []byte("hello"), 0644))
 
-	if err := j.Clear(); err != nil {
-		t.Fatalf("Clear: %v", err)
-	}
+	require.NoError(t, j.Clear())
 
-	if _, err := os.Stat(nonGobPath); os.IsNotExist(err) {
-		t.Fatal("Clear removed non-gob file readme.txt")
-	}
+	_, err := os.Stat(nonGobPath)
+	assert.False(t, os.IsNotExist(err), "Clear should not remove non-gob files")
 }
 
 func TestClear_NoDir(t *testing.T) {
 	j := NewGobFileJournal(os.TempDir() + "/nonexistent-journal-" + time.Now().Format("150405.000"))
-
-	if err := j.Clear(); err != nil {
-		t.Fatalf("Clear on non-existent dir: %v", err)
-	}
+	assert.NoError(t, j.Clear())
 }
 
 func TestRecord_OverwritesExisting(t *testing.T) {
@@ -238,25 +170,16 @@ func TestRecord_OverwritesExisting(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	r1 := types.StageRecord{Name: "clone", Succeeded: true, InputHash: "hash1"}
-	if err := j.Record("clone", r1); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", r1))
 
 	r2 := types.StageRecord{Name: "clone", Succeeded: false, InputHash: "hash2"}
-	if err := j.Record("clone", r2); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("clone", r2))
 
 	got, err := j.Load("clone")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got.Succeeded != false {
-		t.Errorf("Succeeded = %t, want false (overwritten)", got.Succeeded)
-	}
-	if got.InputHash != "hash2" {
-		t.Errorf("InputHash = %q, want %q", got.InputHash, "hash2")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.False(t, got.Succeeded)
+	assert.Equal(t, "hash2", got.InputHash)
 }
 
 func TestGobEncoding_ComplexOutput(t *testing.T) {
@@ -274,37 +197,16 @@ func TestGobEncoding_ComplexOutput(t *testing.T) {
 		},
 	}
 
-	if err := j.Record("test", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("test", record))
 
 	got, err := j.Load("test")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got == nil {
-		t.Fatal("Load returned nil")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got)
 
-	cases := []struct {
-		key  string
-		want any
-	}{
-		{"string_val", "hello"},
-		{"int_val", 42},
-		{"bool_val", true},
-		{"float_val", 3.14},
-	}
-	for _, c := range cases {
-		gotVal, ok := got.Output[c.key]
-		if !ok {
-			t.Errorf("Output[%q] missing", c.key)
-			continue
-		}
-		if gotVal != c.want {
-			t.Errorf("Output[%q] = %v (type: %T), want %v (type: %T)", c.key, gotVal, gotVal, c.want, c.want)
-		}
-	}
+	assert.Equal(t, "hello", got.Output["string_val"])
+	assert.Equal(t, 42, got.Output["int_val"])
+	assert.Equal(t, true, got.Output["bool_val"])
+	assert.Equal(t, 3.14, got.Output["float_val"])
 }
 
 func TestConcurrentAccess(t *testing.T) {
@@ -323,22 +225,16 @@ func TestConcurrentAccess(t *testing.T) {
 				InputHash: "hash",
 				Output:    map[string]any{"index": i},
 			}
-			if err := j.Record(stage, record); err != nil {
-				t.Errorf("concurrent Record: %v", err)
-			}
-			if _, err := j.Load(stage); err != nil {
-				t.Errorf("concurrent Load: %v", err)
-			}
-			if _, err := j.HasSucceeded(stage, "hash"); err != nil {
-				t.Errorf("concurrent HasSucceeded: %v", err)
-			}
+			assert.NoError(t, j.Record(stage, record))
+			_, err := j.Load(stage)
+			assert.NoError(t, err)
+			_, err = j.HasSucceeded(stage, "hash")
+			assert.NoError(t, err)
 		}(i)
 	}
 	wg.Wait()
 
-	if err := j.Clear(); err != nil {
-		t.Fatalf("Clear after concurrent access: %v", err)
-	}
+	assert.NoError(t, j.Clear())
 }
 
 func TestGobEncoding_NilOutput(t *testing.T) {
@@ -346,20 +242,12 @@ func TestGobEncoding_NilOutput(t *testing.T) {
 	defer cleanupJournal(t, dir)
 
 	record := types.StageRecord{Name: "test", Succeeded: true}
-	if err := j.Record("test", record); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	require.NoError(t, j.Record("test", record))
 
 	got, err := j.Load("test")
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got == nil {
-		t.Fatal("Load returned nil")
-	}
-	if got.Output != nil {
-		t.Errorf("Output = %v, want nil", got.Output)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Nil(t, got.Output)
 }
 
 func TestRecordAndLoadMultipleStages(t *testing.T) {
@@ -373,22 +261,14 @@ func TestRecordAndLoadMultipleStages(t *testing.T) {
 	}
 
 	for _, s := range stages {
-		if err := j.Record(s.Name, s); err != nil {
-			t.Fatalf("Record(%q): %v", s.Name, err)
-		}
+		require.NoError(t, j.Record(s.Name, s))
 	}
 
 	for _, want := range stages {
 		got, err := j.Load(want.Name)
-		if err != nil {
-			t.Fatalf("Load(%q): %v", want.Name, err)
-		}
-		if got == nil {
-			t.Fatalf("Load(%q) returned nil", want.Name)
-		}
-		if got.Succeeded != want.Succeeded {
-			t.Errorf("Load(%q).Succeeded = %t, want %t", want.Name, got.Succeeded, want.Succeeded)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, want.Succeeded, got.Succeeded)
 	}
 }
 
@@ -403,16 +283,10 @@ func TestConcurrentDifferentStages(t *testing.T) {
 		go func(n types.StageID) {
 			defer wg.Done()
 			record := types.StageRecord{Name: n, Succeeded: true, InputHash: "h"}
-			if err := j.Record(n, record); err != nil {
-				t.Errorf("Record(%q): %v", n, err)
-			}
+			assert.NoError(t, j.Record(n, record))
 			got, err := j.Load(n)
-			if err != nil {
-				t.Errorf("Load(%q): %v", n, err)
-			}
-			if got == nil {
-				t.Errorf("Load(%q) returned nil", n)
-			}
+			assert.NoError(t, err)
+			assert.NotNil(t, got)
 		}(name)
 	}
 	wg.Wait()

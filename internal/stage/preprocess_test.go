@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
@@ -25,16 +28,11 @@ func TestPreprocessStage_Execute(t *testing.T) {
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
-	if err != nil {
-		t.Fatalf("PreprocessStage.Run: %v", err)
-	}
-	if result.Err != nil {
-		t.Fatalf("result.Err = %v", result.Err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
 
-	if _, err := os.Stat(filepath.Join(dstDir, "page.md")); os.IsNotExist(err) {
-		t.Error("page.md not written to output")
-	}
+	_, err = os.Stat(filepath.Join(dstDir, "page.md"))
+	assert.False(t, os.IsNotExist(err), "page.md should exist in output")
 }
 
 func TestPreprocessStage_Execute_EmptyDir(t *testing.T) {
@@ -50,26 +48,19 @@ func TestPreprocessStage_Execute_EmptyDir(t *testing.T) {
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
-	if err != nil {
-		t.Fatalf("PreprocessStage.Run: %v", err)
-	}
-	if result.Err != nil {
-		t.Fatalf("result.Err = %v", result.Err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
 }
 
 func TestPreprocessStage_Name(t *testing.T) {
 	cfg := &config.Config{OutputPath: t.TempDir()}
 	stage := PreprocessStage(cfg)
-	if stage.Name != "preprocess" {
-		t.Errorf("got %q, want %q", stage.Name, "preprocess")
-	}
+	assert.Equal(t, "preprocess", string(stage.Name))
 }
 
 func TestPreprocessStage_Requires(t *testing.T) {
 	cfg := &config.Config{OutputPath: t.TempDir()}
 	stage := PreprocessStage(cfg)
-	if len(stage.Requires) != 1 || stage.Requires[0] != "clone" {
-		t.Errorf("Requires = %v, want [clone]", stage.Requires)
-	}
+	assert.Equal(t, 1, len(stage.Requires))
+	assert.Equal(t, "clone", string(stage.Requires[0]))
 }

@@ -5,30 +5,27 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidate_EmptyRepoURL(t *testing.T) {
 	cfg := &Config{RepoPath: "/path", OutputPath: "/out", MaxRetries: 3, RetryBackoff: 5 * time.Second}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for empty RepoURL")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_EmptyRepoPath(t *testing.T) {
 	cfg := &Config{RepoURL: "https://example.com", OutputPath: "/out", MaxRetries: 3, RetryBackoff: 5 * time.Second}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for empty RepoPath")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_EmptyOutputPath(t *testing.T) {
 	cfg := &Config{RepoURL: "https://example.com", RepoPath: "/path", MaxRetries: 3, RetryBackoff: 5 * time.Second}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for empty OutputPath")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_Valid(t *testing.T) {
@@ -46,168 +43,120 @@ func TestValidate_Valid(t *testing.T) {
 		BatchSize:      20,
 		LLMBaseURL:     "https://api.openai.com/v1",
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
 }
 
 func TestValidate_NegativeMaxRetries(t *testing.T) {
 	cfg := &Config{
-		RepoURL:      "https://example.com",
-		RepoPath:     "/path",
-		OutputPath:   "/out",
-		MaxRetries:   -1,
-		RetryBackoff: 5 * time.Second,
+		RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
+		MaxRetries: -1, RetryBackoff: 5 * time.Second,
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for negative MaxRetries")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_ZeroMaxRetries(t *testing.T) {
 	cfg := &Config{
-		RepoURL:        "https://example.com",
-		RepoPath:       "/path",
-		OutputPath:     "/out",
-		MaxRetries:     0,
-		RetryBackoff:   5 * time.Second,
-		ChunkStrategy:  "fixed",
-		ChunkSize:      512,
-		ChunkOverlap:   64,
-		EmbeddingModel: "text-embedding-3-small",
-		BatchSize:      20,
-		LLMBaseURL:     "https://api.openai.com/v1",
+		RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
+		MaxRetries: 0, RetryBackoff: 5 * time.Second, ChunkStrategy: "fixed",
+		ChunkSize: 512, ChunkOverlap: 64, EmbeddingModel: "text-embedding-3-small",
+		BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("expected nil for zero MaxRetries, got: %v", err)
-	}
+	err := cfg.Validate()
+	assert.NoError(t, err)
 }
 
 func TestValidate_ZeroRetryBackoff(t *testing.T) {
 	cfg := &Config{
-		RepoURL:      "https://example.com",
-		RepoPath:     "/path",
-		OutputPath:   "/out",
-		MaxRetries:   3,
-		RetryBackoff: 0,
+		RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
+		MaxRetries: 3, RetryBackoff: 0,
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for zero RetryBackoff")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_NegativeRetryBackoff(t *testing.T) {
 	cfg := &Config{
-		RepoURL:      "https://example.com",
-		RepoPath:     "/path",
-		OutputPath:   "/out",
-		MaxRetries:   3,
-		RetryBackoff: -5 * time.Second,
+		RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
+		MaxRetries: 3, RetryBackoff: -5 * time.Second,
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for negative RetryBackoff")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_AllEmpty(t *testing.T) {
 	cfg := &Config{RetryBackoff: 5 * time.Second}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for all empty required fields")
-	}
+	assert.Error(t, err)
 }
 
 func TestEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_ENV_KEY", "from_env")
 	defer os.Unsetenv("TEST_ENV_KEY")
 
-	if got := envOrDefault("TEST_ENV_KEY", "default"); got != "from_env" {
-		t.Errorf("envOrDefault = %q, want %q", got, "from_env")
-	}
+	assert.Equal(t, "from_env", envOrDefault("TEST_ENV_KEY", "default"))
 }
 
 func TestEnvOrDefault_Fallback(t *testing.T) {
-	if got := envOrDefault("TEST_ENV_KEY_NONEXISTENT", "default"); got != "default" {
-		t.Errorf("envOrDefault = %q, want %q", got, "default")
-	}
+	assert.Equal(t, "default", envOrDefault("TEST_ENV_KEY_NONEXISTENT", "default"))
 }
 
 func TestEnvOrDefault_EmptyVar(t *testing.T) {
 	os.Setenv("TEST_ENV_EMPTY", "")
 	defer os.Unsetenv("TEST_ENV_EMPTY")
 
-	if got := envOrDefault("TEST_ENV_EMPTY", "default"); got != "default" {
-		t.Errorf("envOrDefault = %q, want %q", got, "default")
-	}
+	assert.Equal(t, "default", envOrDefault("TEST_ENV_EMPTY", "default"))
 }
 
 func TestIntEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_INT_KEY", "42")
 	defer os.Unsetenv("TEST_INT_KEY")
 
-	if got := intEnvOrDefault("TEST_INT_KEY", 1); got != 42 {
-		t.Errorf("intEnvOrDefault = %d, want %d", got, 42)
-	}
+	assert.Equal(t, 42, intEnvOrDefault("TEST_INT_KEY", 1))
 }
 
 func TestIntEnvOrDefault_Fallback(t *testing.T) {
-	if got := intEnvOrDefault("TEST_INT_NONEXISTENT", 10); got != 10 {
-		t.Errorf("intEnvOrDefault = %d, want %d", got, 10)
-	}
+	assert.Equal(t, 10, intEnvOrDefault("TEST_INT_NONEXISTENT", 10))
 }
 
 func TestIntEnvOrDefault_InvalidValue(t *testing.T) {
 	os.Setenv("TEST_INT_INVALID", "not-a-number")
 	defer os.Unsetenv("TEST_INT_INVALID")
 
-	if got := intEnvOrDefault("TEST_INT_INVALID", 7); got != 7 {
-		t.Errorf("intEnvOrDefault = %d, want %d", got, 7)
-	}
+	assert.Equal(t, 7, intEnvOrDefault("TEST_INT_INVALID", 7))
 }
 
 func TestIntEnvOrDefault_EmptyValue(t *testing.T) {
 	os.Setenv("TEST_INT_EMPTY", "")
 	defer os.Unsetenv("TEST_INT_EMPTY")
 
-	if got := intEnvOrDefault("TEST_INT_EMPTY", 5); got != 5 {
-		t.Errorf("intEnvOrDefault = %d, want %d", got, 5)
-	}
+	assert.Equal(t, 5, intEnvOrDefault("TEST_INT_EMPTY", 5))
 }
 
 func TestDurationEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_DUR_KEY", "10s")
 	defer os.Unsetenv("TEST_DUR_KEY")
 
-	if got := durationEnvOrDefault("TEST_DUR_KEY", time.Second); got != 10*time.Second {
-		t.Errorf("durationEnvOrDefault = %v, want %v", got, 10*time.Second)
-	}
+	assert.Equal(t, 10*time.Second, durationEnvOrDefault("TEST_DUR_KEY", time.Second))
 }
 
 func TestDurationEnvOrDefault_Fallback(t *testing.T) {
-	if got := durationEnvOrDefault("TEST_DUR_NONEXISTENT", 30*time.Second); got != 30*time.Second {
-		t.Errorf("durationEnvOrDefault = %v, want %v", got, 30*time.Second)
-	}
+	assert.Equal(t, 30*time.Second, durationEnvOrDefault("TEST_DUR_NONEXISTENT", 30*time.Second))
 }
 
 func TestDurationEnvOrDefault_InvalidValue(t *testing.T) {
 	os.Setenv("TEST_DUR_INVALID", "not-a-duration")
 	defer os.Unsetenv("TEST_DUR_INVALID")
 
-	if got := durationEnvOrDefault("TEST_DUR_INVALID", 3*time.Second); got != 3*time.Second {
-		t.Errorf("durationEnvOrDefault = %v, want %v", got, 3*time.Second)
-	}
+	assert.Equal(t, 3*time.Second, durationEnvOrDefault("TEST_DUR_INVALID", 3*time.Second))
 }
 
 func TestDurationEnvOrDefault_EmptyValue(t *testing.T) {
 	os.Setenv("TEST_DUR_EMPTY", "")
 	defer os.Unsetenv("TEST_DUR_EMPTY")
 
-	if got := durationEnvOrDefault("TEST_DUR_EMPTY", 2*time.Second); got != 2*time.Second {
-		t.Errorf("durationEnvOrDefault = %v, want %v", got, 2*time.Second)
-	}
+	assert.Equal(t, 2*time.Second, durationEnvOrDefault("TEST_DUR_EMPTY", 2*time.Second))
 }
 
 func parseTestFlags(args []string) (*Config, error) {
@@ -240,45 +189,20 @@ func parseTestFlags(args []string) (*Config, error) {
 
 func TestLoad_Defaults(t *testing.T) {
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("Load() unexpected error: %v", err)
-	}
-	if cfg.RepoURL != "https://gitlab.com/gitlab-com/content-sites/handbook" {
-		t.Errorf("RepoURL = %q, want %q", cfg.RepoURL, "https://gitlab.com/gitlab-com/content-sites/handbook")
-	}
-	if cfg.RepoPath != "./handbook" {
-		t.Errorf("RepoPath = %q, want %q", cfg.RepoPath, "./handbook")
-	}
-	if cfg.OutputPath != "./output" {
-		t.Errorf("OutputPath = %q, want %q", cfg.OutputPath, "./output")
-	}
-	if cfg.MaxRetries != 3 {
-		t.Errorf("MaxRetries = %d, want %d", cfg.MaxRetries, 3)
-	}
-	if cfg.RetryBackoff != 5*time.Second {
-		t.Errorf("RetryBackoff = %v, want %v", cfg.RetryBackoff, 5*time.Second)
-	}
-	if cfg.LogLevel != "info" {
-		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "info")
-	}
-	if cfg.ChunkStrategy != "fixed" {
-		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "fixed")
-	}
-	if cfg.ChunkSize != 512 {
-		t.Errorf("ChunkSize = %d, want %d", cfg.ChunkSize, 512)
-	}
-	if cfg.ChunkOverlap != 64 {
-		t.Errorf("ChunkOverlap = %d, want %d", cfg.ChunkOverlap, 64)
-	}
-	if cfg.EmbeddingModel != "text-embedding-3-small" {
-		t.Errorf("EmbeddingModel = %q, want %q", cfg.EmbeddingModel, "text-embedding-3-small")
-	}
-	if cfg.BatchSize != 20 {
-		t.Errorf("BatchSize = %d, want %d", cfg.BatchSize, 20)
-	}
-	if cfg.LLMBaseURL != "https://api.openai.com/v1" {
-		t.Errorf("LLMBaseURL = %q, want %q", cfg.LLMBaseURL, "https://api.openai.com/v1")
-	}
+	require.NoError(t, err)
+
+	assert.Equal(t, "https://gitlab.com/gitlab-com/content-sites/handbook", cfg.RepoURL)
+	assert.Equal(t, "./handbook", cfg.RepoPath)
+	assert.Equal(t, "./output", cfg.OutputPath)
+	assert.Equal(t, 3, cfg.MaxRetries)
+	assert.Equal(t, 5*time.Second, cfg.RetryBackoff)
+	assert.Equal(t, "info", cfg.LogLevel)
+	assert.Equal(t, "fixed", cfg.ChunkStrategy)
+	assert.Equal(t, 512, cfg.ChunkSize)
+	assert.Equal(t, 64, cfg.ChunkOverlap)
+	assert.Equal(t, "text-embedding-3-small", cfg.EmbeddingModel)
+	assert.Equal(t, 20, cfg.BatchSize)
+	assert.Equal(t, "https://api.openai.com/v1", cfg.LLMBaseURL)
 }
 
 func TestValidate_InvalidChunkStrategy(t *testing.T) {
@@ -289,9 +213,7 @@ func TestValidate_InvalidChunkStrategy(t *testing.T) {
 		ChunkStrategy: "unknown",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for invalid chunk strategy")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_ValidChunkStrategies(t *testing.T) {
@@ -301,9 +223,7 @@ func TestValidate_ValidChunkStrategies(t *testing.T) {
 		EmbeddingModel: "text-embedding-3-small", BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
 		ChunkStrategy: "fixed",
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("unexpected error for strategy 'fixed': %v", err)
-	}
+	assert.NoError(t, cfg.Validate())
 }
 
 func TestValidate_ZeroChunkSize(t *testing.T) {
@@ -314,9 +234,7 @@ func TestValidate_ZeroChunkSize(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for zero chunk-size")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_NegativeChunkSize(t *testing.T) {
@@ -327,9 +245,7 @@ func TestValidate_NegativeChunkSize(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for negative chunk-size")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_NegativeChunkOverlap(t *testing.T) {
@@ -340,9 +256,7 @@ func TestValidate_NegativeChunkOverlap(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for negative chunk-overlap")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_OverlapGTEChunkSize(t *testing.T) {
@@ -352,9 +266,7 @@ func TestValidate_OverlapGTEChunkSize(t *testing.T) {
 		EmbeddingModel: "text-embedding-3-small", BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
 		ChunkStrategy: "fixed",
 	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for overlap >= size")
-	}
+	assert.Error(t, cfg.Validate())
 
 	cfg2 := &Config{
 		RepoURL: "https://example.com", RepoPath: "/path", OutputPath: "/out",
@@ -362,9 +274,7 @@ func TestValidate_OverlapGTEChunkSize(t *testing.T) {
 		EmbeddingModel: "text-embedding-3-small", BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
 		ChunkStrategy: "fixed",
 	}
-	if err := cfg2.Validate(); err != nil {
-		t.Errorf("unexpected error for overlap = size-1: %v", err)
-	}
+	assert.NoError(t, cfg2.Validate())
 }
 
 func TestValidate_EmptyEmbeddingModel(t *testing.T) {
@@ -375,9 +285,7 @@ func TestValidate_EmptyEmbeddingModel(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for empty embedding-model")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_ZeroBatchSize(t *testing.T) {
@@ -388,9 +296,7 @@ func TestValidate_ZeroBatchSize(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for zero batch-size")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_NegativeBatchSize(t *testing.T) {
@@ -401,9 +307,7 @@ func TestValidate_NegativeBatchSize(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for negative batch-size")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_EmptyBaseURL(t *testing.T) {
@@ -414,9 +318,7 @@ func TestValidate_EmptyBaseURL(t *testing.T) {
 		ChunkStrategy: "fixed",
 	}
 	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for empty llm-base-url")
-	}
+	assert.Error(t, err)
 }
 
 func TestValidate_DefaultsValid(t *testing.T) {
@@ -426,81 +328,55 @@ func TestValidate_DefaultsValid(t *testing.T) {
 		ChunkSize: 512, ChunkOverlap: 64, EmbeddingModel: "text-embedding-3-small",
 		BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	assert.NoError(t, cfg.Validate())
 }
 
 func TestChunkStrategyEnv(t *testing.T) {
 	os.Setenv("CHUNK_STRATEGY", "fixed")
 	defer os.Unsetenv("CHUNK_STRATEGY")
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.ChunkStrategy != "fixed" {
-		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "fixed")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "fixed", cfg.ChunkStrategy)
 }
 
 func TestChunkSizeEnv(t *testing.T) {
 	os.Setenv("CHUNK_SIZE", "1024")
 	defer os.Unsetenv("CHUNK_SIZE")
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.ChunkSize != 1024 {
-		t.Errorf("ChunkSize = %d, want %d", cfg.ChunkSize, 1024)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1024, cfg.ChunkSize)
 }
 
 func TestChunkOverlapEnv(t *testing.T) {
 	os.Setenv("CHUNK_OVERLAP", "128")
 	defer os.Unsetenv("CHUNK_OVERLAP")
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.ChunkOverlap != 128 {
-		t.Errorf("ChunkOverlap = %d, want %d", cfg.ChunkOverlap, 128)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 128, cfg.ChunkOverlap)
 }
 
 func TestBatchSizeEnv(t *testing.T) {
 	os.Setenv("BATCH_SIZE", "50")
 	defer os.Unsetenv("BATCH_SIZE")
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.BatchSize != 50 {
-		t.Errorf("BatchSize = %d, want %d", cfg.BatchSize, 50)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 50, cfg.BatchSize)
 }
 
 func TestLLMBaseURLEnv(t *testing.T) {
 	os.Setenv("LLM_BASE_URL", "http://localhost:1234/v1")
 	defer os.Unsetenv("LLM_BASE_URL")
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.LLMBaseURL != "http://localhost:1234/v1" {
-		t.Errorf("LLMBaseURL = %q, want %q", cfg.LLMBaseURL, "http://localhost:1234/v1")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "http://localhost:1234/v1", cfg.LLMBaseURL)
 }
 
 func TestQdrantURLEnv(t *testing.T) {
 	os.Setenv("QDRANT_URL", "http://qdrant:6333")
 	defer os.Unsetenv("QDRANT_URL")
 	cfg, err := parseTestFlags([]string{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.QdrantURL != "http://qdrant:6333" {
-		t.Errorf("QdrantURL = %q, want %q", cfg.QdrantURL, "http://qdrant:6333")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "http://qdrant:6333", cfg.QdrantURL)
 }
 
 func TestValidate_ValidWithMinimalFields(t *testing.T) {
@@ -510,9 +386,7 @@ func TestValidate_ValidWithMinimalFields(t *testing.T) {
 		ChunkSize: 512, ChunkOverlap: 0, EmbeddingModel: "text-embedding-3-small",
 		BatchSize: 20, LLMBaseURL: "https://api.openai.com/v1",
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	assert.NoError(t, cfg.Validate())
 }
 
 func TestLoad_WithFlags(t *testing.T) {
@@ -530,34 +404,15 @@ func TestLoad_WithFlags(t *testing.T) {
 		"--batch-size", "10",
 		"--llm-base-url", "http://localhost:8080/v1",
 	})
-	if err != nil {
-		t.Fatalf("Load() unexpected error: %v", err)
-	}
-	if cfg.MaxRetries != 5 {
-		t.Errorf("MaxRetries = %d, want %d", cfg.MaxRetries, 5)
-	}
-	if cfg.RetryBackoff != 10*time.Second {
-		t.Errorf("RetryBackoff = %v, want %v", cfg.RetryBackoff, 10*time.Second)
-	}
-	if cfg.LogLevel != "debug" {
-		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
-	}
-	if cfg.ChunkStrategy != "fixed" {
-		t.Errorf("ChunkStrategy = %q, want %q", cfg.ChunkStrategy, "fixed")
-	}
-	if cfg.ChunkSize != 256 {
-		t.Errorf("ChunkSize = %d, want %d", cfg.ChunkSize, 256)
-	}
-	if cfg.ChunkOverlap != 32 {
-		t.Errorf("ChunkOverlap = %d, want %d", cfg.ChunkOverlap, 32)
-	}
-	if cfg.EmbeddingModel != "custom-model" {
-		t.Errorf("EmbeddingModel = %q, want %q", cfg.EmbeddingModel, "custom-model")
-	}
-	if cfg.BatchSize != 10 {
-		t.Errorf("BatchSize = %d, want %d", cfg.BatchSize, 10)
-	}
-	if cfg.LLMBaseURL != "http://localhost:8080/v1" {
-		t.Errorf("LLMBaseURL = %q, want %q", cfg.LLMBaseURL, "http://localhost:8080/v1")
-	}
+	require.NoError(t, err)
+
+	assert.Equal(t, 5, cfg.MaxRetries)
+	assert.Equal(t, 10*time.Second, cfg.RetryBackoff)
+	assert.Equal(t, "debug", cfg.LogLevel)
+	assert.Equal(t, "fixed", cfg.ChunkStrategy)
+	assert.Equal(t, 256, cfg.ChunkSize)
+	assert.Equal(t, 32, cfg.ChunkOverlap)
+	assert.Equal(t, "custom-model", cfg.EmbeddingModel)
+	assert.Equal(t, 10, cfg.BatchSize)
+	assert.Equal(t, "http://localhost:8080/v1", cfg.LLMBaseURL)
 }

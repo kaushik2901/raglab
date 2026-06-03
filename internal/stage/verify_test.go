@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
@@ -26,17 +29,12 @@ func TestVerifyStage_Execute(t *testing.T) {
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
-	if err != nil {
-		t.Fatalf("VerifyStage.Run: %v", err)
-	}
-	if result.Err != nil {
-		t.Fatalf("result.Err = %v", result.Err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
 
 	reportPath := filepath.Join(dstDir, "_verification_report.json")
-	if _, err := os.Stat(reportPath); os.IsNotExist(err) {
-		t.Fatal("verification report not written")
-	}
+	_, err = os.Stat(reportPath)
+	assert.False(t, os.IsNotExist(err), "verification report should exist")
 }
 
 func TestVerifyStage_EmptyDir(t *testing.T) {
@@ -52,37 +50,24 @@ func TestVerifyStage_EmptyDir(t *testing.T) {
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
-	if err != nil {
-		t.Fatalf("VerifyStage.Run: %v", err)
-	}
-	if result.Err != nil {
-		t.Fatalf("result.Err = %v", result.Err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
 
 	reportPath := filepath.Join(dstDir, "_verification_report.json")
-	if _, err := os.Stat(reportPath); os.IsNotExist(err) {
-		t.Fatal("verification report not written")
-	}
+	_, err = os.Stat(reportPath)
+	assert.False(t, os.IsNotExist(err), "verification report should exist")
 }
 
 func TestVerifyStage_Name(t *testing.T) {
 	cfg := &config.Config{OutputPath: t.TempDir()}
 	stage := VerifyStage(cfg)
-	if stage.Name != "verify" {
-		t.Errorf("got %q, want %q", stage.Name, "verify")
-	}
+	assert.Equal(t, "verify", string(stage.Name))
 }
 
 func TestVerifyStage_Requires(t *testing.T) {
 	cfg := &config.Config{OutputPath: t.TempDir()}
 	stage := VerifyStage(cfg)
-	expected := []string{"clone", "preprocess"}
-	if len(stage.Requires) != 2 {
-		t.Fatalf("Requires = %v, want %v", stage.Requires, expected)
-	}
-	for i, r := range stage.Requires {
-		if string(r) != expected[i] {
-			t.Errorf("Requires[%d] = %q, want %q", i, r, expected[i])
-		}
-	}
+	assert.Equal(t, 2, len(stage.Requires))
+	assert.Equal(t, "clone", string(stage.Requires[0]))
+	assert.Equal(t, "preprocess", string(stage.Requires[1]))
 }

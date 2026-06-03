@@ -4,17 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveRefs_NoRefs(t *testing.T) {
 	content := "# Hello\n\nThis is plain text."
 	result, err := ResolveRefs(content, "/tmp", "/tmp/file.md")
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-	if result != content {
-		t.Errorf("got: %q, want: %q", result, content)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, content, result)
 }
 
 func TestResolveRefs_Ref(t *testing.T) {
@@ -28,14 +27,8 @@ func TestResolveRefs_Ref(t *testing.T) {
 	os.WriteFile(currentFile, []byte(""), 0644)
 
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-
-	expected := "See [docs/foo](docs/foo.md) for details"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "See [docs/foo](docs/foo.md) for details", result)
 }
 
 func TestResolveRefs_Relref(t *testing.T) {
@@ -50,14 +43,8 @@ func TestResolveRefs_Relref(t *testing.T) {
 
 	content := `See {{< relref "bar" >}}`
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-
-	expected := "See [bar](bar.md)"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "See [bar](bar.md)", result)
 }
 
 func TestResolveRefs_WithAnchor(t *testing.T) {
@@ -71,14 +58,8 @@ func TestResolveRefs_WithAnchor(t *testing.T) {
 
 	content := `See {{< ref "docs/page#section1" >}}`
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-
-	expected := "See [docs/page#section1](docs/page.md#section1)"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "See [docs/page#section1](docs/page.md#section1)", result)
 }
 
 func TestResolveRefs_MissingTarget(t *testing.T) {
@@ -88,14 +69,8 @@ func TestResolveRefs_MissingTarget(t *testing.T) {
 
 	content := `See {{< ref "nonexistent" >}}`
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err == nil {
-		t.Error("expected error for missing target, got nil")
-	}
-
-	expected := "See [nonexistent](nonexistent.md)"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	require.Error(t, err)
+	assert.Equal(t, "See [nonexistent](nonexistent.md)", result)
 }
 
 func TestResolveRefs_MultipleRefs(t *testing.T) {
@@ -108,14 +83,8 @@ func TestResolveRefs_MultipleRefs(t *testing.T) {
 
 	content := `See {{< ref "a" >}} and {{< ref "b" >}}`
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-
-	expected := "See [a](a.md) and [b](b.md)"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "See [a](a.md) and [b](b.md)", result)
 }
 
 func TestResolveRefs_MixedRefTypes(t *testing.T) {
@@ -130,13 +99,8 @@ func TestResolveRefs_MixedRefTypes(t *testing.T) {
 
 	content := `Global {{< ref "doc" >}} and local {{< relref "other" >}}`
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-
-	if result != "Global [doc](doc.md) and local [other](other.md)" {
-		t.Errorf("got: %q", result)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "Global [doc](doc.md) and local [other](other.md)", result)
 }
 
 func TestResolveRefs_RefWithMD(t *testing.T) {
@@ -148,22 +112,12 @@ func TestResolveRefs_RefWithMD(t *testing.T) {
 
 	content := `{{< ref "foo" >}}`
 	result, err := ResolveRefs(content, dir, currentFile)
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-
-	expected := "[foo](foo.md)"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "[foo](foo.md)", result)
 }
 
 func TestResolveRefs_EmptyContent(t *testing.T) {
 	result, err := ResolveRefs("", "/tmp", "/tmp/f.md")
-	if err != nil {
-		t.Fatalf("ResolveRefs: %v", err)
-	}
-	if result != "" {
-		t.Errorf("got: %q, want: %q", result, "")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "", result)
 }

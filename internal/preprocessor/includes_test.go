@@ -4,17 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveIncludes_NoIncludes(t *testing.T) {
 	content := "# Hello World\n\nThis is plain text."
 	result, err := ResolveIncludes(content, "/tmp", make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
-	if result != content {
-		t.Errorf("got %q, want %q", result, content)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, content, result)
 }
 
 func TestResolveIncludes_Simple(t *testing.T) {
@@ -27,14 +26,9 @@ func TestResolveIncludes_Simple(t *testing.T) {
 Before {{% include "snippet.md" %}} After`
 
 	result, err := ResolveIncludes(content, dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	expected := "# Main\n\nBefore Included content After"
-	if result != expected {
-		t.Errorf("got:\n%q\nwant:\n%q", result, expected)
-	}
+	assert.Equal(t, "# Main\n\nBefore Included content After", result)
 }
 
 func TestResolveIncludes_Nested(t *testing.T) {
@@ -45,14 +39,9 @@ func TestResolveIncludes_Nested(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "c.md"), []byte("C content"), 0644)
 
 	result, err := ResolveIncludes("# {{% include \"a.md\" %}}", dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	expected := "# A: B: C content"
-	if result != expected {
-		t.Errorf("got:\n%q\nwant:\n%q", result, expected)
-	}
+	assert.Equal(t, "# A: B: C content", result)
 }
 
 func TestResolveIncludes_Circular(t *testing.T) {
@@ -61,13 +50,9 @@ func TestResolveIncludes_Circular(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "b.md"), []byte("{{% include \"a.md\" %}}"), 0644)
 
 	result, err := ResolveIncludes("# {{% include \"a.md\" %}}", dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	if result != "# " {
-		t.Errorf("expected circular to be skipped, got: %q", result)
-	}
+	assert.Equal(t, "# ", result)
 }
 
 func TestResolveIncludes_MissingFile(t *testing.T) {
@@ -78,13 +63,9 @@ func TestResolveIncludes_MissingFile(t *testing.T) {
 {{% include "nonexistent.md" %}} End`
 
 	result, err := ResolveIncludes(content, dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	if result != content {
-		t.Errorf("expected original content when file missing, got: %q", result)
-	}
+	assert.Equal(t, content, result)
 }
 
 func TestResolveIncludes_NonMarkdown(t *testing.T) {
@@ -94,13 +75,9 @@ func TestResolveIncludes_NonMarkdown(t *testing.T) {
 	content := `{{% include "data.txt" %}}`
 
 	result, err := ResolveIncludes(content, dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	if result != content {
-		t.Errorf("expected non-markdown to be skipped, got: %q", result)
-	}
+	assert.Equal(t, content, result)
 }
 
 func TestResolveIncludes_MultipleIncludes(t *testing.T) {
@@ -111,14 +88,9 @@ func TestResolveIncludes_MultipleIncludes(t *testing.T) {
 	content := `{{% include "a.md" %}} X {{% include "b.md" %}}`
 
 	result, err := ResolveIncludes(content, dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	expected := "AAA X BBB"
-	if result != expected {
-		t.Errorf("got: %q, want: %q", result, expected)
-	}
+	assert.Equal(t, "AAA X BBB", result)
 }
 
 func TestResolveIncludes_AbsolutePath(t *testing.T) {
@@ -129,11 +101,7 @@ func TestResolveIncludes_AbsolutePath(t *testing.T) {
 	content := `{{% include "` + absPath + `" %}}`
 
 	result, err := ResolveIncludes(content, dir, make(map[string]bool))
-	if err != nil {
-		t.Fatalf("ResolveIncludes: %v", err)
-	}
+	require.NoError(t, err)
 
-	if result != "Absolute!" {
-		t.Errorf("got: %q, want: %q", result, "Absolute!")
-	}
+	assert.Equal(t, "Absolute!", result)
 }

@@ -4,8 +4,10 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
@@ -16,53 +18,38 @@ func resetFlags() {
 
 func TestExtractFromFlag_NotFound(t *testing.T) {
 	got := extractFromFlag([]string{"--repo-url", "http://example.com"})
-	if got != "" {
-		t.Errorf("got %q, want empty", got)
-	}
+	assert.Equal(t, "", got)
 }
 
 func TestExtractFromFlag_Found(t *testing.T) {
 	got := extractFromFlag([]string{"--from", "clone", "--repo-url", "http://example.com"})
-	if got != "clone" {
-		t.Errorf("got %q, want %q", got, "clone")
-	}
+	assert.Equal(t, "clone", got)
 }
 
 func TestExtractFromFlag_LastArg(t *testing.T) {
 	got := extractFromFlag([]string{"--repo-url", "http://example.com", "--from"})
-	if got != "" {
-		t.Errorf("got %q, want empty (no value after --from)", got)
-	}
+	assert.Equal(t, "", got)
 }
 
 func TestExtractFromFlag_EmptyArgs(t *testing.T) {
 	got := extractFromFlag([]string{})
-	if got != "" {
-		t.Errorf("got %q, want empty", got)
-	}
+	assert.Equal(t, "", got)
 }
 
 func TestStripFromFlag_NoFlag(t *testing.T) {
 	args := []string{"--repo-url", "http://example.com"}
 	got := stripFromFlag(args)
-	if len(got) != 2 || got[0] != "--repo-url" {
-		t.Errorf("got %v, want %v", got, args)
-	}
+	assert.Equal(t, args, got)
 }
 
 func TestStripFromFlag_WithFlag(t *testing.T) {
 	got := stripFromFlag([]string{"--from", "clone", "--repo-url", "http://example.com"})
-	want := []string{"--repo-url", "http://example.com"}
-	if len(got) != 2 || got[0] != "--repo-url" {
-		t.Errorf("got %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"--repo-url", "http://example.com"}, got)
 }
 
 func TestStripFromFlag_FlagOnly(t *testing.T) {
 	got := stripFromFlag([]string{"--from", "clone"})
-	if len(got) != 0 {
-		t.Errorf("got %v, want empty", got)
-	}
+	assert.Empty(t, got)
 }
 
 func TestBuildPipeline_StageNames(t *testing.T) {
@@ -76,24 +63,18 @@ func TestBuildPipeline_StageNames(t *testing.T) {
 	}
 	p := buildPipeline(cfg)
 
-	if len(p.Stages) != 4 {
-		t.Fatalf("got %d stages, want 4", len(p.Stages))
-	}
+	require.Len(t, p.Stages, 4)
 
 	expected := []string{"clone", "sync-data", "preprocess", "verify"}
 	for i, name := range expected {
-		if string(p.Stages[i].Name) != name {
-			t.Errorf("Stages[%d].Name = %q, want %q", i, p.Stages[i].Name, name)
-		}
+		assert.Equal(t, name, string(p.Stages[i].Name), "Stages[%d].Name", i)
 	}
 }
 
 func TestBuildPipeline_ConfigPtr(t *testing.T) {
 	cfg := &config.Config{RepoURL: "http://example.com", RepoPath: t.TempDir(), OutputPath: t.TempDir()}
 	p := buildPipeline(cfg)
-	if p.Config != cfg {
-		t.Error("Config pointer should match")
-	}
+	assert.Equal(t, cfg, p.Config)
 }
 
 func TestRun_ConfigError(t *testing.T) {
@@ -107,9 +88,7 @@ func TestRun_ConfigError(t *testing.T) {
 		"--max-retries", "1",
 		"--retry-backoff", "1s",
 	})
-	if err == nil {
-		t.Fatal("expected error for empty repo-url")
-	}
+	assert.Error(t, err)
 }
 
 func TestRun_FromNonExistentStage(t *testing.T) {
@@ -124,12 +103,8 @@ func TestRun_FromNonExistentStage(t *testing.T) {
 		"--max-retries", "0",
 		"--retry-backoff", "1s",
 	})
-	if err == nil {
-		t.Fatal("expected error for nonexistent stage")
-	}
-	if !strings.Contains(err.Error(), `"nonexistent"`) {
-		t.Errorf("error = %v, want stage name in error message", err)
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `"nonexistent"`)
 }
 
 func TestRun_FromFlagPreservesOtherFlags(t *testing.T) {
@@ -147,9 +122,7 @@ func TestRun_FromFlagPreservesOtherFlags(t *testing.T) {
 	// Config is valid, pipeline is built.
 	// RunFrom("preprocess") skips "clone" (no journal -> empty state),
 	// then runs "preprocess" which depends on "clone" -> dependency not met
-	if err == nil {
-		t.Fatal("expected error about unmet dependency")
-	}
+	assert.Error(t, err)
 }
 
 func TestRun_InvalidRetryBackoff(t *testing.T) {
@@ -162,9 +135,7 @@ func TestRun_InvalidRetryBackoff(t *testing.T) {
 		"--output", tmpDir,
 		"--retry-backoff", "0s",
 	})
-	if err == nil {
-		t.Fatal("expected error for zero retry-backoff")
-	}
+	assert.Error(t, err)
 }
 
 func TestRun_MissingRequiredFields(t *testing.T) {
@@ -175,9 +146,7 @@ func TestRun_MissingRequiredFields(t *testing.T) {
 		"--repo-path", "",
 		"--output", "",
 	})
-	if err == nil {
-		t.Fatal("expected error for missing required fields")
-	}
+	assert.Error(t, err)
 }
 
 func TestBuildPipeline_JournalDir(t *testing.T) {
@@ -185,7 +154,6 @@ func TestBuildPipeline_JournalDir(t *testing.T) {
 	wd, _ := os.Getwd()
 	journalDir := filepath.Join(wd, ".journal")
 
-	// Before running, verify .journal doesn't exist
 	os.RemoveAll(journalDir)
 
 	cfg := &config.Config{
@@ -197,8 +165,5 @@ func TestBuildPipeline_JournalDir(t *testing.T) {
 	}
 	p := buildPipeline(cfg)
 
-	// Journal should be a *journal.GobFileJournal (type-check by interface)
-	if p.Journal == nil {
-		t.Fatal("Journal should not be nil")
-	}
+	require.NotNil(t, p.Journal, "Journal should not be nil")
 }

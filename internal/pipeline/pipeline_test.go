@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -85,9 +88,7 @@ func TestRun_SingleStage(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	assert.NoError(t, p.Run(context.Background()))
 }
 
 func TestRun_MultipleStages(t *testing.T) {
@@ -105,9 +106,7 @@ func TestRun_MultipleStages(t *testing.T) {
 				Name: "b",
 				Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 					order = append(order, "b")
-					if state["val"] != 1 {
-						t.Errorf("state[val] = %v, want 1", state["val"])
-					}
+					assert.Equal(t, 1, state["val"])
 					return &types.StageResult{Name: "b", Output: map[string]any{"val2": 2}}, nil
 				},
 			},
@@ -115,12 +114,8 @@ func TestRun_MultipleStages(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if len(order) != 2 || order[0] != "a" || order[1] != "b" {
-		t.Errorf("order = %v, want [a b]", order)
-	}
+	require.NoError(t, p.Run(context.Background()))
+	assert.Equal(t, []types.StageID{"a", "b"}, order)
 }
 
 func TestRun_DependencyMet(t *testing.T) {
@@ -132,9 +127,7 @@ func TestRun_DependencyMet(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	assert.NoError(t, p.Run(context.Background()))
 }
 
 func TestRun_DependencyNotMet(t *testing.T) {
@@ -145,10 +138,7 @@ func TestRun_DependencyNotMet(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	err := p.Run(context.Background())
-	if err == nil {
-		t.Fatal("expected error for unmet dependency")
-	}
+	assert.Error(t, p.Run(context.Background()))
 }
 
 func TestRun_SkipCachedStage(t *testing.T) {
@@ -167,19 +157,11 @@ func TestRun_SkipCachedStage(t *testing.T) {
 		Config:  testConfig(),
 	}
 
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("first Run: %v", err)
-	}
-	if runCount != 1 {
-		t.Errorf("runCount after first run = %d, want 1", runCount)
-	}
+	require.NoError(t, p.Run(context.Background()))
+	assert.Equal(t, 1, runCount)
 
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("second Run: %v", err)
-	}
-	if runCount != 1 {
-		t.Errorf("runCount after second run = %d, want 1 (should be cached)", runCount)
-	}
+	require.NoError(t, p.Run(context.Background()))
+	assert.Equal(t, 1, runCount, "should be cached on second run")
 }
 
 func TestRun_RetryThenSuccess(t *testing.T) {
@@ -200,12 +182,8 @@ func TestRun_RetryThenSuccess(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  &config.Config{MaxRetries: 2, RetryBackoff: time.Nanosecond},
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if attempts != 2 {
-		t.Errorf("attempts = %d, want 2", attempts)
-	}
+	require.NoError(t, p.Run(context.Background()))
+	assert.Equal(t, 2, attempts)
 }
 
 func TestRun_RetryExhausted(t *testing.T) {
@@ -223,13 +201,8 @@ func TestRun_RetryExhausted(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  &config.Config{MaxRetries: 2, RetryBackoff: time.Nanosecond},
 	}
-	err := p.Run(context.Background())
-	if err == nil {
-		t.Fatal("expected error after exhausting retries")
-	}
-	if attempts != 3 {
-		t.Errorf("attempts = %d, want 3 (1 initial + 2 retries)", attempts)
-	}
+	assert.Error(t, p.Run(context.Background()))
+	assert.Equal(t, 3, attempts)
 }
 
 func TestRun_ContextCancellation(t *testing.T) {
@@ -252,18 +225,15 @@ func TestRun_ContextCancellation(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  &config.Config{MaxRetries: 0, RetryBackoff: time.Nanosecond},
 	}
-	err := p.Run(ctx)
-	if err == nil {
-		t.Fatal("expected context cancellation error")
-	}
+	assert.Error(t, p.Run(ctx))
 }
 
 func TestRunFrom_Resume(t *testing.T) {
 	j := newMockJournal()
-	j.Record("a", types.StageRecord{
+	require.NoError(t, j.Record("a", types.StageRecord{
 		Name: "a", Succeeded: true, InputHash: computeInputHash(identityStage("a")),
 		Output: map[string]any{"val": 1},
-	})
+	}))
 
 	runB := false
 	p := &Pipeline{
@@ -273,9 +243,7 @@ func TestRunFrom_Resume(t *testing.T) {
 				Name: "b",
 				Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 					runB = true
-					if state["val"] != 1 {
-						t.Errorf("state[val] = %v, want 1", state["val"])
-					}
+					assert.Equal(t, 1, state["val"])
 					return &types.StageResult{Name: "b"}, nil
 				},
 			},
@@ -283,12 +251,8 @@ func TestRunFrom_Resume(t *testing.T) {
 		Journal: j,
 		Config:  testConfig(),
 	}
-	if err := p.RunFrom(context.Background(), "b"); err != nil {
-		t.Fatalf("RunFrom: %v", err)
-	}
-	if !runB {
-		t.Error("stage b was not executed")
-	}
+	require.NoError(t, p.RunFrom(context.Background(), "b"))
+	assert.True(t, runB, "stage b was not executed")
 }
 
 func TestRunFrom_UnknownStage(t *testing.T) {
@@ -297,10 +261,7 @@ func TestRunFrom_UnknownStage(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	err := p.RunFrom(context.Background(), "nonexistent")
-	if err == nil {
-		t.Fatal("expected error for unknown stage")
-	}
+	assert.Error(t, p.RunFrom(context.Background(), "nonexistent"))
 }
 
 func TestRun_EmptyStages(t *testing.T) {
@@ -309,9 +270,7 @@ func TestRun_EmptyStages(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	assert.NoError(t, p.Run(context.Background()))
 }
 
 func TestProgressCallbacks(t *testing.T) {
@@ -331,21 +290,13 @@ func TestProgressCallbacks(t *testing.T) {
 			mu.Unlock()
 		},
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	require.NoError(t, p.Run(context.Background()))
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(events) < 4 {
-		t.Fatalf("too few progress events: %d", len(events))
-	}
-	if events[0] != ":initialized" {
-		t.Errorf("first event = %q, want %q", events[0], ":initialized")
-	}
-	if events[len(events)-1] != ":completed" {
-		t.Errorf("last event = %q, want %q", events[len(events)-1], ":completed")
-	}
+	assert.GreaterOrEqual(t, len(events), 4)
+	assert.Equal(t, ":initialized", events[0])
+	assert.Equal(t, ":completed", events[len(events)-1])
 }
 
 func TestRunFrom_FirstStage(t *testing.T) {
@@ -363,12 +314,8 @@ func TestRunFrom_FirstStage(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.RunFrom(context.Background(), "a"); err != nil {
-		t.Fatalf("RunFrom: %v", err)
-	}
-	if !runA {
-		t.Error("stage a was not executed")
-	}
+	require.NoError(t, p.RunFrom(context.Background(), "a"))
+	assert.True(t, runA, "stage a was not executed")
 }
 
 func TestComputeInputHash_Deterministic(t *testing.T) {
@@ -377,9 +324,7 @@ func TestComputeInputHash_Deterministic(t *testing.T) {
 
 	h1 := computeInputHash(s1)
 	h2 := computeInputHash(s2)
-	if h1 != h2 {
-		t.Errorf("hashes differ: %q vs %q", h1, h2)
-	}
+	assert.Equal(t, h1, h2)
 }
 
 func TestComputeInputHash_Different(t *testing.T) {
@@ -388,9 +333,7 @@ func TestComputeInputHash_Different(t *testing.T) {
 
 	h1 := computeInputHash(s1)
 	h2 := computeInputHash(s2)
-	if h1 == h2 {
-		t.Errorf("expected different hashes, got same: %q", h1)
-	}
+	assert.NotEqual(t, h1, h2)
 }
 
 func TestComputeInputHash_RequiresOrderIndependent(t *testing.T) {
@@ -399,9 +342,7 @@ func TestComputeInputHash_RequiresOrderIndependent(t *testing.T) {
 
 	h1 := computeInputHash(s1)
 	h2 := computeInputHash(s2)
-	if h1 != h2 {
-		t.Errorf("hashes should be order-independent: %q vs %q", h1, h2)
-	}
+	assert.Equal(t, h1, h2)
 }
 
 func TestComputeInputHash_DifferentRequires(t *testing.T) {
@@ -410,9 +351,7 @@ func TestComputeInputHash_DifferentRequires(t *testing.T) {
 
 	h1 := computeInputHash(s1)
 	h2 := computeInputHash(s2)
-	if h1 == h2 {
-		t.Errorf("expected different hashes for different deps")
-	}
+	assert.NotEqual(t, h1, h2)
 }
 
 func TestRun_SharedStateBetweenStages(t *testing.T) {
@@ -427,9 +366,7 @@ func TestRun_SharedStateBetweenStages(t *testing.T) {
 			{
 				Name: "b",
 				Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-					if state["x"] != 10 {
-						t.Errorf("state[x] = %v, want 10", state["x"])
-					}
+					assert.Equal(t, 10, state["x"])
 					return &types.StageResult{Name: "b", Output: map[string]any{"y": state["x"].(int) * 2}}, nil
 				},
 			},
@@ -437,21 +374,14 @@ func TestRun_SharedStateBetweenStages(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	require.NoError(t, p.Run(context.Background()))
 
 	j, ok := p.Journal.(*mockJournal)
-	if !ok {
-		t.Fatal("expected mockJournal")
-	}
-	rec, _ := j.Load("b")
-	if rec == nil {
-		t.Fatal("no record for stage b")
-	}
-	if rec.Output["y"] != 20 {
-		t.Errorf("state[y] = %v, want 20", rec.Output["y"])
-	}
+	require.True(t, ok)
+	rec, err := j.Load("b")
+	require.NoError(t, err)
+	require.NotNil(t, rec)
+	assert.Equal(t, 20, rec.Output["y"])
 }
 
 func TestRun_StageFailureSavesRecord(t *testing.T) {
@@ -468,18 +398,12 @@ func TestRun_StageFailureSavesRecord(t *testing.T) {
 		Journal: j,
 		Config:  &config.Config{MaxRetries: 0, RetryBackoff: time.Nanosecond},
 	}
-	err := p.Run(context.Background())
-	if err == nil {
-		t.Fatal("expected error")
-	}
+	assert.Error(t, p.Run(context.Background()))
 
-	rec, _ := j.Load("failing")
-	if rec == nil {
-		t.Fatal("expected record for failed stage")
-	}
-	if rec.Succeeded {
-		t.Fatal("record should be marked as failed")
-	}
+	rec, err := j.Load("failing")
+	require.NoError(t, err)
+	require.NotNil(t, rec, "expected record for failed stage")
+	assert.False(t, rec.Succeeded)
 }
 
 func TestRun_EmptyPipeline(t *testing.T) {
@@ -488,18 +412,16 @@ func TestRun_EmptyPipeline(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  testConfig(),
 	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	assert.NoError(t, p.Run(context.Background()))
 }
 
 func TestRunFrom_ResumePreservesState(t *testing.T) {
 	j := newMockJournal()
-	j.Record("a", types.StageRecord{
+	require.NoError(t, j.Record("a", types.StageRecord{
 		Name: "a", Succeeded: true,
 		InputHash: computeInputHash(identityStage("a")),
 		Output:    map[string]any{"repo_path": "/tmp/repo"},
-	})
+	}))
 
 	stageBRan := false
 	p := &Pipeline{
@@ -509,9 +431,7 @@ func TestRunFrom_ResumePreservesState(t *testing.T) {
 				Name: "b",
 				Run: func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 					stageBRan = true
-					if state["repo_path"] != "/tmp/repo" {
-						t.Errorf("state[repo_path] = %v, want /tmp/repo", state["repo_path"])
-					}
+					assert.Equal(t, "/tmp/repo", state["repo_path"])
 					return &types.StageResult{Name: "b"}, nil
 				},
 			},
@@ -519,12 +439,8 @@ func TestRunFrom_ResumePreservesState(t *testing.T) {
 		Journal: j,
 		Config:  testConfig(),
 	}
-	if err := p.RunFrom(context.Background(), "b"); err != nil {
-		t.Fatalf("RunFrom: %v", err)
-	}
-	if !stageBRan {
-		t.Error("stage b did not run")
-	}
+	require.NoError(t, p.RunFrom(context.Background(), "b"))
+	assert.True(t, stageBRan, "stage b did not run")
 }
 
 func TestRun_RetryContextCancellation(t *testing.T) {
@@ -546,8 +462,5 @@ func TestRun_RetryContextCancellation(t *testing.T) {
 		Journal: newMockJournal(),
 		Config:  &config.Config{MaxRetries: 3, RetryBackoff: time.Millisecond},
 	}
-	err := p.Run(ctx)
-	if err == nil {
-		t.Fatal("expected error")
-	}
+	assert.Error(t, p.Run(ctx))
 }

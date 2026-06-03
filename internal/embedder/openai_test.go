@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -32,18 +34,10 @@ func TestEmbed_Basic(t *testing.T) {
 	}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(embeddings) != 2 {
-		t.Fatalf("got %d embeddings, want 2", len(embeddings))
-	}
-	if len(embeddings[0].Vector) != 3 {
-		t.Errorf("vector length = %d, want 3", len(embeddings[0].Vector))
-	}
-	if embeddings[0].Vector[0] != 0.1 {
-		t.Errorf("vector[0] = %f, want 0.1", embeddings[0].Vector[0])
-	}
+	require.NoError(t, err)
+	assert.Len(t, embeddings, 2)
+	assert.Len(t, embeddings[0].Vector, 3)
+	assert.Equal(t, 0.1, embeddings[0].Vector[0])
 }
 
 func TestEmbed_Batching(t *testing.T) {
@@ -67,15 +61,9 @@ func TestEmbed_Batching(t *testing.T) {
 	}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(embeddings) != 25 {
-		t.Fatalf("got %d embeddings, want 25", len(embeddings))
-	}
-	if c := atomic.LoadInt32(&callCount); c != 3 {
-		t.Errorf("API called %d times, want 3", c)
-	}
+	require.NoError(t, err)
+	assert.Len(t, embeddings, 25)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&callCount))
 }
 
 func TestEmbed_EmptyInput(t *testing.T) {
@@ -87,15 +75,9 @@ func TestEmbed_EmptyInput(t *testing.T) {
 
 	e := New(srv.URL, "", "m", 10)
 	embeddings, err := e.Embed(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(embeddings) != 0 {
-		t.Errorf("got %d embeddings, want 0", len(embeddings))
-	}
-	if called {
-		t.Error("API should not be called for empty input")
-	}
+	require.NoError(t, err)
+	assert.Empty(t, embeddings)
+	assert.False(t, called, "API should not be called for empty input")
 }
 
 func TestEmbed_ModelName(t *testing.T) {
@@ -111,12 +93,8 @@ func TestEmbed_ModelName(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if embeddings[0].Model != "custom-model" {
-		t.Errorf("Model = %q, want %q", embeddings[0].Model, "custom-model")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "custom-model", embeddings[0].Model)
 }
 
 func TestEmbed_Dimensions(t *testing.T) {
@@ -132,12 +110,8 @@ func TestEmbed_Dimensions(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if embeddings[0].Dimensions != 4 {
-		t.Errorf("Dimensions = %d, want 4", embeddings[0].Dimensions)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 4, embeddings[0].Dimensions)
 }
 
 func TestEmbed_ChunkID(t *testing.T) {
@@ -153,12 +127,8 @@ func TestEmbed_ChunkID(t *testing.T) {
 	chunks := []types.Chunk{{ID: "my-chunk-id", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if embeddings[0].ChunkID != "my-chunk-id" {
-		t.Errorf("ChunkID = %q, want %q", embeddings[0].ChunkID, "my-chunk-id")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "my-chunk-id", embeddings[0].ChunkID)
 }
 
 func TestEmbed_APIClient(t *testing.T) {
@@ -179,21 +149,11 @@ func TestEmbed_APIClient(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if method != "POST" {
-		t.Errorf("Method = %q, want POST", method)
-	}
-	if path != "/embeddings" {
-		t.Errorf("Path = %q, want /embeddings", path)
-	}
-	if contentType != "application/json" {
-		t.Errorf("Content-Type = %q, want application/json", contentType)
-	}
-	if auth != "Bearer sk-test-key" {
-		t.Errorf("Authorization = %q, want Bearer sk-test-key", auth)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "POST", method)
+	assert.Equal(t, "/embeddings", path)
+	assert.Equal(t, "application/json", contentType)
+	assert.Equal(t, "Bearer sk-test-key", auth)
 }
 
 func TestEmbed_APIEmptyKey(t *testing.T) {
@@ -211,12 +171,8 @@ func TestEmbed_APIEmptyKey(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if auth != "" {
-		t.Errorf("Authorization = %q, want empty for no API key", auth)
-	}
+	require.NoError(t, err)
+	assert.Empty(t, auth, "Authorization should be empty for no API key")
 }
 
 func TestEmbed_APIBadStatus(t *testing.T) {
@@ -230,12 +186,8 @@ func TestEmbed_APIBadStatus(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
-	if err == nil {
-		t.Fatal("expected error for 500 status")
-	}
-	if !strings.Contains(err.Error(), "500") {
-		t.Errorf("error = %q, want status 500 mention", err.Error())
-	}
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "500")
 }
 
 func TestEmbed_RateLimit(t *testing.T) {
@@ -257,15 +209,9 @@ func TestEmbed_RateLimit(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(embeddings) != 1 {
-		t.Fatalf("got %d embeddings", len(embeddings))
-	}
-	if c := atomic.LoadInt32(&callCount); c != 2 {
-		t.Errorf("API called %d times, want 2 (1 retry)", c)
-	}
+	require.NoError(t, err)
+	assert.Len(t, embeddings, 1)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
 }
 
 func TestEmbed_RateLimitExhausted(t *testing.T) {
@@ -278,9 +224,7 @@ func TestEmbed_RateLimitExhausted(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
-	if err == nil {
-		t.Fatal("expected error after rate limit exhaustion")
-	}
+	require.Error(t, err)
 }
 
 func TestEmbed_ResponseMismatch(t *testing.T) {
@@ -299,9 +243,7 @@ func TestEmbed_ResponseMismatch(t *testing.T) {
 	}
 
 	_, err := e.Embed(context.Background(), chunks)
-	if err == nil {
-		t.Fatal("expected error for response mismatch")
-	}
+	require.Error(t, err)
 }
 
 func TestEmbed_ModelField(t *testing.T) {
@@ -318,12 +260,8 @@ func TestEmbed_ModelField(t *testing.T) {
 		chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 		embeddings, err := e.Embed(context.Background(), chunks)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if embeddings[0].Model != "response-model" {
-			t.Errorf("Model = %q, want %q", embeddings[0].Model, "response-model")
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "response-model", embeddings[0].Model)
 	})
 
 	t.Run("falls back to configured model when empty", func(t *testing.T) {
@@ -339,12 +277,8 @@ func TestEmbed_ModelField(t *testing.T) {
 		chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 		embeddings, err := e.Embed(context.Background(), chunks)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if embeddings[0].Model != "configured-model" {
-			t.Errorf("Model = %q, want %q", embeddings[0].Model, "configured-model")
-		}
+		require.NoError(t, err)
+		assert.Equal(t, "configured-model", embeddings[0].Model)
 	})
 }
 
@@ -361,20 +295,12 @@ func TestEmbed_EmptyChunkContent(t *testing.T) {
 	chunks := []types.Chunk{{ID: "c1", Content: ""}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(embeddings) != 1 {
-		t.Fatalf("got %d embeddings", len(embeddings))
-	}
+	require.NoError(t, err)
+	assert.Len(t, embeddings, 1)
 }
 
 func TestNewEmbedder_Defaults(t *testing.T) {
 	e := New("https://api.openai.com/v1", "", "text-embedding-3-small", 20)
-	if e.ModelName() != "text-embedding-3-small" {
-		t.Errorf("ModelName = %q", e.ModelName())
-	}
-	if e.Dimensions() != 0 {
-		t.Errorf("Dimensions = %d, want 0", e.Dimensions())
-	}
+	assert.Equal(t, "text-embedding-3-small", e.ModelName())
+	assert.Equal(t, 0, e.Dimensions())
 }

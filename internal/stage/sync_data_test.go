@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
@@ -37,22 +40,16 @@ echo "sync complete"
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": repoPath,
 	})
-	if err != nil {
-		t.Fatalf("SyncDataStage.Run: %v", err)
-	}
-	if result.Err != nil {
-		t.Fatalf("result.Err = %v", result.Err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, result.Err)
 
 	synced, ok := result.Output["synced"].(bool)
-	if !ok || !synced {
-		t.Errorf("Output[\"synced\"] = %v, want true", result.Output["synced"])
-	}
+	assert.True(t, ok)
+	assert.True(t, synced)
 
 	dataDir := filepath.Join(repoPath, "data", "public")
-	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		t.Errorf("data/public directory not created at %s", dataDir)
-	}
+	_, err = os.Stat(dataDir)
+	assert.False(t, os.IsNotExist(err), "data/public directory should exist")
 }
 
 func TestSyncDataStage_Execute_MissingRepoPath(t *testing.T) {
@@ -60,9 +57,7 @@ func TestSyncDataStage_Execute_MissingRepoPath(t *testing.T) {
 	stage := SyncDataStage(cfg)
 
 	_, err := stage.Run(context.Background(), map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for missing repo_path, got nil")
-	}
+	assert.Error(t, err)
 }
 
 func TestSyncDataStage_Execute_EmptyRepoPath(t *testing.T) {
@@ -72,23 +67,18 @@ func TestSyncDataStage_Execute_EmptyRepoPath(t *testing.T) {
 	_, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": "",
 	})
-	if err == nil {
-		t.Fatal("expected error for empty repo_path, got nil")
-	}
+	assert.Error(t, err)
 }
 
 func TestSyncDataStage_Name(t *testing.T) {
 	cfg := &config.Config{}
 	stage := SyncDataStage(cfg)
-	if stage.Name != "sync-data" {
-		t.Errorf("got %q, want %q", stage.Name, "sync-data")
-	}
+	assert.Equal(t, "sync-data", string(stage.Name))
 }
 
 func TestSyncDataStage_Requires(t *testing.T) {
 	cfg := &config.Config{}
 	stage := SyncDataStage(cfg)
-	if len(stage.Requires) != 1 || stage.Requires[0] != "clone" {
-		t.Errorf("Requires = %v, want [clone]", stage.Requires)
-	}
+	assert.Equal(t, 1, len(stage.Requires))
+	assert.Equal(t, "clone", string(stage.Requires[0]))
 }

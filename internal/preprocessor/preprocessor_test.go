@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessFile_SimpleMarkdown(t *testing.T) {
@@ -14,19 +17,10 @@ func TestProcessFile_SimpleMarkdown(t *testing.T) {
 	os.WriteFile(filePath, []byte(content), 0644)
 
 	doc, err := ProcessFile(filePath, dir)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	if doc.Path != "test.md" {
-		t.Errorf("Path = %q, want %q", doc.Path, "test.md")
-	}
-	if doc.Content == "" {
-		t.Error("Content is empty")
-	}
-	if doc.Size <= 0 {
-		t.Errorf("Size = %d, want > 0", doc.Size)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "test.md", doc.Path)
+	assert.NotEmpty(t, doc.Content)
+	assert.Greater(t, doc.Size, int64(0))
 }
 
 func TestProcessFile_WithIncludes(t *testing.T) {
@@ -42,13 +36,8 @@ Before {{% include "snippet.md" %}} After`
 	os.WriteFile(filePath, []byte(content), 0644)
 
 	doc, err := ProcessFile(filePath, dir)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	if doc.Path != "main.md" {
-		t.Errorf("Path = %q, want %q", doc.Path, "main.md")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "main.md", doc.Path)
 }
 
 func TestProcessFile_WithHTML(t *testing.T) {
@@ -63,13 +52,8 @@ func TestProcessFile_WithHTML(t *testing.T) {
 	os.WriteFile(filePath, []byte(content), 0644)
 
 	doc, err := ProcessFile(filePath, dir)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	if doc.Size <= 0 {
-		t.Errorf("Size = %d, want > 0", doc.Size)
-	}
+	require.NoError(t, err)
+	assert.Greater(t, doc.Size, int64(0))
 }
 
 func TestProcessFile_WithShortcodes(t *testing.T) {
@@ -83,13 +67,8 @@ func TestProcessFile_WithShortcodes(t *testing.T) {
 	os.WriteFile(filePath, []byte(content), 0644)
 
 	doc, err := ProcessFile(filePath, dir)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	if doc.Size <= 0 {
-		t.Errorf("Size = %d, want > 0", doc.Size)
-	}
+	require.NoError(t, err)
+	assert.Greater(t, doc.Size, int64(0))
 }
 
 func TestProcessFile_WithRefs(t *testing.T) {
@@ -102,21 +81,14 @@ func TestProcessFile_WithRefs(t *testing.T) {
 	os.WriteFile(filePath, []byte(content), 0644)
 
 	doc, err := ProcessFile(filePath, dir)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	if doc.Size <= 0 {
-		t.Errorf("Size = %d, want > 0", doc.Size)
-	}
+	require.NoError(t, err)
+	assert.Greater(t, doc.Size, int64(0))
 }
 
 func TestProcessFile_MissingFile(t *testing.T) {
 	dir := t.TempDir()
 	_, err := ProcessFile(filepath.Join(dir, "nonexistent.md"), dir)
-	if err == nil {
-		t.Fatal("expected error for missing file, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestProcessFile_RelativePath(t *testing.T) {
@@ -127,14 +99,8 @@ func TestProcessFile_RelativePath(t *testing.T) {
 	os.WriteFile(filePath, []byte("# Nested"), 0644)
 
 	doc, err := ProcessFile(filePath, dir)
-	if err != nil {
-		t.Fatalf("ProcessFile: %v", err)
-	}
-
-	expectedPath := "sub/nested.md"
-	if doc.Path != expectedPath {
-		t.Errorf("Path = %q, want %q", doc.Path, expectedPath)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "sub/nested.md", doc.Path)
 }
 
 func TestProcessAllFiles_SingleFile(t *testing.T) {
@@ -144,16 +110,9 @@ func TestProcessAllFiles_SingleFile(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "page.md"), []byte("# Hello"), 0644)
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 1)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("count = %d, want %d", count, 1)
-	}
-
-	if _, err := os.Stat(filepath.Join(dstDir, "page.md")); os.IsNotExist(err) {
-		t.Error("page.md not written to dstDir")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	assert.FileExists(t, filepath.Join(dstDir, "page.md"))
 }
 
 func TestProcessAllFiles_MultipleFiles(t *testing.T) {
@@ -165,17 +124,11 @@ func TestProcessAllFiles_MultipleFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "c.md"), []byte("C"), 0644)
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 2)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 3 {
-		t.Errorf("count = %d, want %d", count, 3)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 3, count)
 
 	for _, name := range []string{"a.md", "b.md", "c.md"} {
-		if _, err := os.Stat(filepath.Join(dstDir, name)); os.IsNotExist(err) {
-			t.Errorf("%s not written to dstDir", name)
-		}
+		assert.FileExists(t, filepath.Join(dstDir, name))
 	}
 }
 
@@ -188,19 +141,11 @@ func TestProcessAllFiles_PreservesDirectoryStructure(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "sub", "page.md"), []byte("# Sub Page"), 0644)
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 2)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("count = %d, want %d", count, 2)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
 
-	if _, err := os.Stat(filepath.Join(dstDir, "index.md")); os.IsNotExist(err) {
-		t.Error("index.md not written")
-	}
-	if _, err := os.Stat(filepath.Join(dstDir, "sub", "page.md")); os.IsNotExist(err) {
-		t.Error("sub/page.md not written")
-	}
+	assert.FileExists(t, filepath.Join(dstDir, "index.md"))
+	assert.FileExists(t, filepath.Join(dstDir, "sub", "page.md"))
 }
 
 func TestProcessAllFiles_SkipsNonMarkdown(t *testing.T) {
@@ -212,19 +157,11 @@ func TestProcessAllFiles_SkipsNonMarkdown(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "notes.txt"), []byte("text"), 0644)
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 1)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("count = %d, want %d", count, 1)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
 
-	if _, err := os.Stat(filepath.Join(dstDir, "a.md")); os.IsNotExist(err) {
-		t.Error("a.md not written")
-	}
-	if _, err := os.Stat(filepath.Join(dstDir, "data.json")); err == nil {
-		t.Error("data.json should not have been written")
-	}
+	assert.FileExists(t, filepath.Join(dstDir, "a.md"))
+	assert.NoFileExists(t, filepath.Join(dstDir, "data.json"))
 }
 
 func TestProcessAllFiles_EmptyDir(t *testing.T) {
@@ -232,12 +169,8 @@ func TestProcessAllFiles_EmptyDir(t *testing.T) {
 	dstDir := t.TempDir()
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 1)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("count = %d, want %d", count, 0)
-	}
+	require.NoError(t, err)
+	assert.Zero(t, count)
 }
 
 func TestProcessAllFiles_WithConcurrency(t *testing.T) {
@@ -250,18 +183,12 @@ func TestProcessAllFiles_WithConcurrency(t *testing.T) {
 	}
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 5)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 10 {
-		t.Errorf("count = %d, want %d", count, 10)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 10, count)
 
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("file%d.md", i)
-		if _, err := os.Stat(filepath.Join(dstDir, name)); os.IsNotExist(err) {
-			t.Errorf("%s not written to dstDir", name)
-		}
+		assert.FileExists(t, filepath.Join(dstDir, name))
 	}
 }
 
@@ -272,12 +199,8 @@ func TestProcessAllFiles_DefaultConcurrency(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "x.md"), []byte("x"), 0644)
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 0)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles with concurrency=0: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("count = %d, want %d", count, 1)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
 }
 
 func TestProcessAllFiles_ContentTransformed(t *testing.T) {
@@ -298,10 +221,6 @@ See {{< ref "snippet" >}}`
 	os.WriteFile(filePath, []byte(content), 0644)
 
 	count, err := ProcessAllFiles(srcDir, dstDir, 1)
-	if err != nil {
-		t.Fatalf("ProcessAllFiles: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("count = %d, want %d", count, 2)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
 }
