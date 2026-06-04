@@ -13,25 +13,29 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
 )
 
-func TestJudgeAnswer_ValidScore(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"id":      "judge-123",
-			"object":  "chat.completion",
-			"created": 1700000000,
-			"model":   "gpt-4o",
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"finish_reason": "stop",
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "0.85",
-					},
+func respondWithJSON(w http.ResponseWriter, content string) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"id":      "judge-123",
+		"object":  "chat.completion",
+		"created": 1700000000,
+		"model":   "gpt-4o",
+		"choices": []map[string]any{
+			{
+				"index":         0,
+				"finish_reason": "stop",
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": content,
 				},
 			},
-		})
+		},
+	})
+}
+
+func TestJudgeAnswer_ValidScore(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		respondWithJSON(w, `{"score": 0.85, "reasoning": "correct"}`)
 	}))
 	defer srv.Close()
 
@@ -44,23 +48,7 @@ func TestJudgeAnswer_ValidScore(t *testing.T) {
 
 func TestJudgeAnswer_PerfectScore(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"id":      "judge-123",
-			"object":  "chat.completion",
-			"created": 1700000000,
-			"model":   "gpt-4o",
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"finish_reason": "stop",
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "1.0",
-					},
-				},
-			},
-		})
+		respondWithJSON(w, `{"score": 1.0, "reasoning": "exact match"}`)
 	}))
 	defer srv.Close()
 
@@ -73,23 +61,7 @@ func TestJudgeAnswer_PerfectScore(t *testing.T) {
 
 func TestJudgeAnswer_ZeroScore(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"id":      "judge-123",
-			"object":  "chat.completion",
-			"created": 1700000000,
-			"model":   "gpt-4o",
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"finish_reason": "stop",
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "0.0",
-					},
-				},
-			},
-		})
+		respondWithJSON(w, `{"score": 0.0, "reasoning": "completely wrong"}`)
 	}))
 	defer srv.Close()
 
@@ -131,25 +103,9 @@ func TestJudgeAnswer_EmptyChoices(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestJudgeAnswer_NonNumericScore(t *testing.T) {
+func TestJudgeAnswer_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"id":      "judge-123",
-			"object":  "chat.completion",
-			"created": 1700000000,
-			"model":   "gpt-4o",
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"finish_reason": "stop",
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "The answer looks good",
-					},
-				},
-			},
-		})
+		respondWithJSON(w, `not json`)
 	}))
 	defer srv.Close()
 
@@ -159,31 +115,27 @@ func TestJudgeAnswer_NonNumericScore(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestJudgeAnswer_ParseInteger(t *testing.T) {
+func TestJudgeAnswer_ScoreOutOfRange(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"id":      "judge-123",
-			"object":  "chat.completion",
-			"created": 1700000000,
-			"model":   "gpt-4o",
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"finish_reason": "stop",
-					"message": map[string]any{
-						"role":    "assistant",
-						"content": "1",
-					},
-				},
-			},
-		})
+		respondWithJSON(w, `{"score": 1.5, "reasoning": "out of range"}`)
 	}))
 	defer srv.Close()
 
 	gen := generator.New(srv.URL, "", "gpt-4o")
 
-	score, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "a")
+	_, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
+	require.Error(t, err)
+}
+
+func TestJudgeAnswer_MissingScoreField(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		respondWithJSON(w, `{"reasoning": "no score"}`)
+	}))
+	defer srv.Close()
+
+	gen := generator.New(srv.URL, "", "gpt-4o")
+
+	score, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
 	require.NoError(t, err)
-	assert.InDelta(t, 1.0, score, 0.001)
+	assert.Equal(t, 0.0, score)
 }

@@ -310,7 +310,7 @@ func TestEvaluate_WithJudge_SetsAnswerScore(t *testing.T) {
 	j.On("Generate", mock.Anything, mock.Anything).
 		Return(&openai.ChatCompletion{
 			Choices: []openai.ChatCompletionChoice{
-				{Message: openai.ChatCompletionMessage{Content: "0.92"}},
+				{Message: openai.ChatCompletionMessage{Content: `{"score": 0.92, "reasoning": "correct"}`}},
 			},
 			Usage: openai.CompletionUsage{PromptTokens: 3, CompletionTokens: 1},
 		}, nil)
