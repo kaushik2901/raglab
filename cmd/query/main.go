@@ -13,8 +13,9 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/memory"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
 func main() {
@@ -35,6 +36,7 @@ func run() error {
 	llmBaseURL := flag.String("llm-base-url", config.EnvOrDefault("LLM_BASE_URL", "https://api.openai.com"), "OpenAI-compatible API base URL")
 	temperature := flag.Float64("temperature", 0.3, "LLM temperature")
 	maxTokens := flag.Int("max-tokens", 1024, "Max answer tokens")
+	convID := flag.String("conversation-id", "", "Conversation ID for multi-turn memory")
 	flag.Parse()
 
 	if *query == "" {
@@ -53,37 +55,21 @@ func run() error {
 
 	ctx := context.Background()
 
-	// Embed query
-	slog.Info("embedding query")
 	emb := embedder.New(*llmBaseURL, llmAPIKey, *embedModel, 1)
-	queryChunk := types.Chunk{
-		ID:      "query",
-		Content: *query,
-	}
-	embeddings, err := emb.Embed(ctx, []types.Chunk{queryChunk})
-	if err != nil {
-		return fmt.Errorf("embed query: %w", err)
-	}
-	if len(embeddings) == 0 {
-		return fmt.Errorf("no embeddings returned")
-	}
-
-	queryVector := make([]float32, len(embeddings[0].Vector))
-	for i, v := range embeddings[0].Vector {
-		queryVector[i] = float32(v)
-	}
-
-	// Search Qdrant
-	slog.Info("searching Qdrant", "collection", *tag, "top_k", *topK)
 	qStore := qstore.NewQdrantStore(qdrantAPIKey)
 	if err := qStore.Connect(ctx, qdrantURL); err != nil {
 		return fmt.Errorf("connect qdrant: %w", err)
 	}
 	defer qStore.Close()
 
-	results, err := qStore.Search(ctx, *tag, queryVector, *topK)
+	ret := retriever.New(emb, qStore)
+	gen := generator.New(*llmBaseURL, llmAPIKey, *llmModel)
+	mem := memory.NewRingBuffer(10)
+
+	slog.Info("retrieving context", "collection", *tag, "top_k", *topK)
+	results, err := ret.Retrieve(ctx, *tag, *query, *topK)
 	if err != nil {
-		return fmt.Errorf("search: %w", err)
+		return fmt.Errorf("retrieve: %w", err)
 	}
 
 	if len(results) == 0 {
@@ -91,30 +77,32 @@ func run() error {
 		return nil
 	}
 
-	// Print context
 	fmt.Println("\nContext:")
 	for _, r := range results {
 		fmt.Printf("  - %s (score: %.2f)\n", r.DocumentPath, r.Score)
 	}
 
-	// Build prompt
+	var messages []openai.ChatCompletionMessageParamUnion
+	messages = append(messages, openai.SystemMessage("You are a helpful assistant that answers questions based solely on the provided context. If the context does not contain enough information to answer, say so."))
+
+	if *convID != "" {
+		for _, turn := range mem.Get(*convID) {
+			messages = append(messages, openai.UserMessage(turn.User.Content))
+			messages = append(messages, openai.AssistantMessage(turn.Assistant.Content))
+		}
+	}
+
 	var contextParts []string
 	for _, r := range results {
 		contextParts = append(contextParts, fmt.Sprintf("Document: %s\nContent:\n%s", r.DocumentPath, r.Content))
 	}
 	contextText := strings.Join(contextParts, "\n\n---\n\n")
-
-	systemPrompt := `You are a helpful assistant that answers questions based solely on the provided context. If the context does not contain enough information to answer, say so.`
 	userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s\n\nAnswer the question based on the context above.", contextText, *query)
+	messages = append(messages, openai.UserMessage(userPrompt))
 
-	// Generate answer
 	slog.Info("generating answer", "model", *llmModel)
-	gen := generator.New(*llmBaseURL, llmAPIKey, *llmModel)
 	completion, err := gen.Generate(ctx, openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(systemPrompt),
-			openai.UserMessage(userPrompt),
-		},
+		Messages:    messages,
 		Temperature: openai.Float(*temperature),
 		MaxTokens:   openai.Int(int64(*maxTokens)),
 	})
@@ -126,8 +114,13 @@ func run() error {
 		return fmt.Errorf("no response from LLM")
 	}
 
+	answer := completion.Choices[0].Message.Content
 	fmt.Println("\nAnswer:")
-	fmt.Println(completion.Choices[0].Message.Content)
+	fmt.Println(answer)
+
+	if *convID != "" {
+		mem.Add(*convID, *query, answer)
+	}
 
 	usage := completion.Usage
 	if usage.PromptTokens > 0 || usage.CompletionTokens > 0 {

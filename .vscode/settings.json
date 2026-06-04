@@ -2,7 +2,9 @@
     "cSpell.words": [
         "chunker",
         "embedder",
+        "errorlevel",
         "kaushik",
-        "Qdrant"
+        "qdrant",
+        "workerd"
     ]
 }
