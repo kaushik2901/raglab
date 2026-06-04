@@ -115,4 +115,3 @@ func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) err
 
 	return w.Store.UpdateWorkflowStatus(ctx, job.Args.WorkflowID, "succeeded")
 }
-

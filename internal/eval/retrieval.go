@@ -69,10 +69,18 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 		return nil, fmt.Errorf("retrieve: %w", err)
 	}
 
+	expectedPaths := make([]string, 0, len(q.Relevance))
+	for _, j := range q.Relevance {
+		if j.Grade > 0 {
+			expectedPaths = append(expectedPaths, j.DocumentID)
+		}
+	}
+
 	result := &types.RetrievalResult{
 		QuestionID:    q.ID,
 		Question:      q.Question,
-		ExpectedPaths: q.SourcePaths,
+		Relevance:     q.Relevance,
+		ExpectedPaths: expectedPaths,
 	}
 
 	if len(searchResults) == 0 {
@@ -96,7 +104,7 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	for k := 1; k <= e.topK; k++ {
 		hit := false
 		for i := 0; i < min(k, len(searchResults)); i++ {
-			if containsPath(q.SourcePaths, searchResults[i].DocumentPath) {
+			if containsPath(expectedPaths, searchResults[i].DocumentPath) {
 				hit = true
 				if !foundFirst {
 					result.RankFirst = i + 1
@@ -110,6 +118,9 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	if !foundFirst {
 		result.RankFirst = 0
 	}
+
+	// Per-question graded NDCG
+	result.NDCGGraded = computeNDCGGradedForQuestion(q.Relevance, result.RetrievedPaths, e.topK)
 
 	if e.generator != nil {
 		var contextParts []string
@@ -139,4 +150,19 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 
 	result.LatencyMs = time.Since(start).Milliseconds()
 	return result, nil
+}
+
+func computeNDCGGradedForQuestion(relevance []types.RelevanceJudgment, retrieved []string, k int) float64 {
+	n := min(k, len(retrieved))
+	relevances := make([]float64, n)
+	for i, path := range retrieved[:n] {
+		relevances[i] = gradeForPath(relevance, path)
+	}
+	dcgVal := computeDCG(relevances, k)
+	ideal := idealGradedRelevances(relevance, k)
+	idcg := computeDCG(ideal, k)
+	if idcg > 0 {
+		return dcgVal / idcg
+	}
+	return 0
 }

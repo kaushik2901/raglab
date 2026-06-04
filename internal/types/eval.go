@@ -1,14 +1,16 @@
 package types
 
+type RelevanceJudgment struct {
+	DocumentID string `json:"document_id"`
+	Grade      int    `json:"grade"` // 0=irrelevant .. 3=highly relevant
+}
+
 type EvalQuestion struct {
-	ID                 string   `json:"id"`
-	Category           string   `json:"category"`
-	Difficulty         string   `json:"difficulty"`
-	Question           string   `json:"question"`
-	Answer             string   `json:"answer"`
-	SourcePaths        []string `json:"source_paths"`
-	Keywords           []string `json:"keywords,omitempty"`
-	ExpectedChunkTopics []string `json:"expected_chunk_topics,omitempty"`
+	ID         string              `json:"id"`
+	Category   string              `json:"category,omitempty"`
+	Difficulty string              `json:"difficulty,omitempty"`
+	Question   string              `json:"question"`
+	Relevance  []RelevanceJudgment `json:"relevance"`
 }
 
 type EvalDataset struct {
@@ -31,33 +33,36 @@ type EvalStrategyConfig struct {
 }
 
 type RetrievalResult struct {
-	QuestionID    string
-	Question      string
-	ExpectedPaths []string
-	RetrievedPaths []string
-	Scores        []float64
-	Hit           map[int]bool
-	RankFirst     int
-	Answer        string
-	PromptTokens  int
+	QuestionID       string
+	Question         string
+	Relevance        []RelevanceJudgment
+	ExpectedPaths    []string
+	RetrievedPaths   []string
+	Scores           []float64
+	Hit              map[int]bool
+	RankFirst        int
+	NDCGGraded       float64
+	Answer           string
+	PromptTokens     int
 	CompletionTokens int
-	LatencyMs     int64
+	LatencyMs        int64
 }
 
 type AggregateMetrics struct {
 	HitRate    map[int]float64
 	MRR        float64
 	NDCG       map[int]float64
+	NDCGGraded map[int]float64
 	Precision  map[int]float64
 	Recall     map[int]float64
 }
 
 type EvalReport struct {
-	RunID        string
-	Strategy     EvalStrategyConfig
-	Questions    int
-	Aggregate    AggregateMetrics
-	PerQuestion  []RetrievalResult
+	RunID       string
+	Strategy    EvalStrategyConfig
+	Questions   int
+	Aggregate   AggregateMetrics
+	PerQuestion []RetrievalResult
 }
 
 type EvalRun struct {

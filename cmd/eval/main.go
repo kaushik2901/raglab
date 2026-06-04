@@ -29,7 +29,7 @@ func run() error {
 
 	indexTag := flag.String("index-tag", "", "Existing Qdrant collection name to evaluate (required)")
 	queryStrategy := flag.String("query-strategy", "", fmt.Sprintf("Query strategy (supported: %s)", retriever.StrategyNaiveSearch))
-	dataset := flag.String("dataset", "testdata/eval/questions.json", "Path to ground truth questions JSON")
+	dataset := flag.String("dataset", "", "Path to ground truth questions JSON (required)")
 	topK := flag.Int("top-k", 5, "Top-K retrieval")
 	llmModel := flag.String("llm-model", config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini"), "LLM model for answer generation")
 	evalConcurrency := flag.Int("eval-concurrency", config.IntEnvOrDefault("EVAL_CONCURRENCY", 5), "Number of questions to evaluate concurrently")
@@ -45,6 +45,12 @@ func run() error {
 	}
 	if *queryStrategy == "" {
 		return fmt.Errorf("--query-strategy is required")
+	}
+	if *dataset == "" {
+		return fmt.Errorf("--dataset is required")
+	}
+	if _, err := os.Stat(*dataset); err != nil {
+		return fmt.Errorf("dataset file not found: %s", *dataset)
 	}
 
 	ctx := context.Background()
@@ -63,12 +69,12 @@ func run() error {
 
 	resolvedTag := config.ResolveTag(*tag, "eval")
 	wfID, err := store.CreateWorkflow(ctx, "eval", resolvedTag, map[string]any{
-		"index_tag":       *indexTag,
-		"query_strategy":  *queryStrategy,
-		"dataset_path":    *dataset,
-		"top_k":           *topK,
-		"llm_model":       *llmModel,
-		"concurrency":     *evalConcurrency,
+		"index_tag":      *indexTag,
+		"query_strategy": *queryStrategy,
+		"dataset_path":   *dataset,
+		"top_k":          *topK,
+		"llm_model":      *llmModel,
+		"concurrency":    *evalConcurrency,
 	})
 	if err != nil {
 		return fmt.Errorf("create workflow: %w", err)

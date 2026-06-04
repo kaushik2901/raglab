@@ -81,19 +81,20 @@ func TestSearchResultZeroValue(t *testing.T) {
 
 func TestEvalQuestionCreation(t *testing.T) {
 	q := EvalQuestion{
-		ID:          "q-001",
-		Category:    "onboarding",
-		Difficulty:  "easy",
-		Question:    "How do I set up SSH?",
-		Answer:      "Run ssh-keygen",
-		SourcePaths: []string{"docs/ssh.md"},
-		Keywords:    []string{"ssh", "keys"},
+		ID:         "q-001",
+		Category:   "onboarding",
+		Difficulty: "easy",
+		Question:   "How do I set up SSH?",
+		Relevance: []RelevanceJudgment{
+			{DocumentID: "docs/ssh.md", Grade: 3},
+		},
 	}
 	assert.Equal(t, "q-001", q.ID)
 	assert.Equal(t, "onboarding", q.Category)
 	assert.Equal(t, "easy", q.Difficulty)
-	assert.Equal(t, []string{"docs/ssh.md"}, q.SourcePaths)
-	assert.Equal(t, []string{"ssh", "keys"}, q.Keywords)
+	require.Len(t, q.Relevance, 1)
+	assert.Equal(t, "docs/ssh.md", q.Relevance[0].DocumentID)
+	assert.Equal(t, 3, q.Relevance[0].Grade)
 }
 
 func TestEvalDatasetCreation(t *testing.T) {
@@ -104,7 +105,7 @@ func TestEvalDatasetCreation(t *testing.T) {
 			Description: "Test dataset",
 		},
 		Questions: []EvalQuestion{
-			{ID: "q1", Question: "test", SourcePaths: []string{"doc.md"}},
+			{ID: "q1", Question: "test", Relevance: []RelevanceJudgment{{DocumentID: "doc.md", Grade: 1}}},
 		},
 	}
 	assert.Equal(t, "2024-01-01", ds.Meta.Created)
@@ -126,22 +127,25 @@ func TestEvalStrategyConfig(t *testing.T) {
 
 func TestRetrievalResultCreation(t *testing.T) {
 	r := RetrievalResult{
-		QuestionID:    "q1",
-		Question:      "test?",
-		ExpectedPaths: []string{"doc.md"},
-		RetrievedPaths: []string{"doc.md", "doc2.md"},
-		Scores:        []float64{0.95, 0.85},
-		Hit:           map[int]bool{1: true, 3: true},
-		RankFirst:     1,
-		Answer:        "answer text",
-		PromptTokens:  10,
+		QuestionID:       "q1",
+		Question:         "test?",
+		Relevance:        []RelevanceJudgment{{DocumentID: "doc.md", Grade: 3}},
+		ExpectedPaths:    []string{"doc.md"},
+		RetrievedPaths:   []string{"doc.md", "doc2.md"},
+		Scores:           []float64{0.95, 0.85},
+		Hit:              map[int]bool{1: true, 3: true},
+		RankFirst:        1,
+		NDCGGraded:       0.95,
+		Answer:           "answer text",
+		PromptTokens:     10,
 		CompletionTokens: 20,
-		LatencyMs:     150,
+		LatencyMs:        150,
 	}
 	assert.Equal(t, "q1", r.QuestionID)
 	assert.Equal(t, []string{"doc.md"}, r.ExpectedPaths)
 	assert.Equal(t, "answer text", r.Answer)
 	assert.Equal(t, int64(150), r.LatencyMs)
+	assert.InDelta(t, 0.95, r.NDCGGraded, 0.001)
 }
 
 func TestAggregateMetricsDefaults(t *testing.T) {
@@ -149,6 +153,7 @@ func TestAggregateMetricsDefaults(t *testing.T) {
 	assert.Nil(t, m.HitRate)
 	assert.Equal(t, 0.0, m.MRR)
 	assert.Nil(t, m.NDCG)
+	assert.Nil(t, m.NDCGGraded)
 	assert.Nil(t, m.Precision)
 	assert.Nil(t, m.Recall)
 }

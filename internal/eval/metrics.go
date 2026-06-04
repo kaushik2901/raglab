@@ -113,13 +113,56 @@ func computeRecall(results []types.RetrievalResult, ks []int) map[int]float64 {
 	return out
 }
 
+func computeNDCGGraded(results []types.RetrievalResult, ks []int) map[int]float64 {
+	out := make(map[int]float64, len(ks))
+	for _, k := range ks {
+		sum := 0.0
+		for _, r := range results {
+			relevances := make([]float64, min(k, len(r.RetrievedPaths)))
+			for i, path := range r.RetrievedPaths[:min(k, len(r.RetrievedPaths))] {
+				relevances[i] = gradeForPath(r.Relevance, path)
+			}
+			dcgVal := computeDCG(relevances, k)
+			ideal := idealGradedRelevances(r.Relevance, k)
+			idcg := computeDCG(ideal, k)
+			if idcg > 0 {
+				sum += dcgVal / idcg
+			}
+		}
+		out[k] = sum / float64(len(results))
+	}
+	return out
+}
+
+func gradeForPath(relevance []types.RelevanceJudgment, path string) float64 {
+	for _, j := range relevance {
+		if j.DocumentID == path {
+			return float64(j.Grade)
+		}
+	}
+	return 0
+}
+
+func idealGradedRelevances(relevance []types.RelevanceJudgment, k int) []float64 {
+	grades := make([]float64, len(relevance))
+	for i, j := range relevance {
+		grades[i] = float64(j.Grade)
+	}
+	sort.Sort(sort.Reverse(sort.Float64Slice(grades)))
+	if len(grades) > k {
+		grades = grades[:k]
+	}
+	return grades
+}
+
 func ComputeAggregateMetrics(results []types.RetrievalResult, ks []int) types.AggregateMetrics {
 	return types.AggregateMetrics{
-		HitRate:   computeHitRate(results, ks),
-		MRR:       computeMRR(results),
-		NDCG:      computeNDCG(results, ks),
-		Precision: computePrecision(results, ks),
-		Recall:    computeRecall(results, ks),
+		HitRate:    computeHitRate(results, ks),
+		MRR:        computeMRR(results),
+		NDCG:       computeNDCG(results, ks),
+		NDCGGraded: computeNDCGGraded(results, ks),
+		Precision:  computePrecision(results, ks),
+		Recall:     computeRecall(results, ks),
 	}
 }
 

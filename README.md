@@ -119,7 +119,8 @@ Measures retrieval and generation quality against a ground-truth dataset. Evalua
 
 - **HitRate@K** — proportion of questions with at least one relevant document in top-K
 - **MRR** — Mean Reciprocal Rank of the first relevant result
-- **NDCG@K** — Normalized Discounted Cumulative Gain
+- **NDCG@K** — Normalized Discounted Cumulative Gain (binary)
+- **NDCGGraded@K** — NDCG with graded relevance (0–3 scale, supports partial relevance)
 - **Precision@K** — proportion of retrieved documents that are relevant
 - **Recall@K** — proportion of relevant documents that are retrieved
 
@@ -129,20 +130,20 @@ Measures retrieval and generation quality against a ground-truth dataset. Evalua
 go build -o bin\eval.exe .\cmd\eval
 .\bin\workerd.exe
 
-.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset testdata/eval/questions.json
+.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset path/to/questions.json
 ```
 
 ### CLI Flags
 
-| Flag                 | Env Var            | Default                        | Description                                               |
-| -------------------- | ------------------ | ------------------------------ | --------------------------------------------------------- |
-| `--index-tag`        | —                  | —                              | **Required.** Existing Qdrant collection name to evaluate |
-| `--query-strategy`   | —                  | —                              | **Required.** Query strategy (`naive-search`)             |
-| `--dataset`          | —                  | `testdata/eval/questions.json` | Path to ground truth questions JSON                       |
-| `--top-k`            | —                  | `5`                            | Top-K retrieval                                           |
-| `--llm-model`        | `LLM_MODEL`        | `gpt-4o-mini`                  | LLM model for answer generation                           |
-| `--tag`              | —                  | `eval-<timestamp>`             | Eval run tag                                              |
-| `--eval-concurrency` | `EVAL_CONCURRENCY` | `5`                            | Number of questions to evaluate concurrently              |
+| Flag                 | Env Var            | Default            | Description                                               |
+| -------------------- | ------------------ | ------------------ | --------------------------------------------------------- |
+| `--index-tag`        | —                  | —                  | **Required.** Existing Qdrant collection name to evaluate |
+| `--query-strategy`   | —                  | —                  | **Required.** Query strategy (`naive-search`)             |
+| `--dataset`          | —                  | —                  | **Required.** Path to ground truth questions JSON         |
+| `--top-k`            | —                  | `5`                | Top-K retrieval                                           |
+| `--llm-model`        | `LLM_MODEL`        | `gpt-4o-mini`      | LLM model for answer generation                           |
+| `--tag`              | —                  | `eval-<timestamp>` | Eval run tag                                              |
+| `--eval-concurrency` | `EVAL_CONCURRENCY` | `5`                | Number of questions to evaluate concurrently              |
 
 Output: JSON report written to `eval-report-<tag>.json` and printed to stdout.
 
@@ -294,21 +295,21 @@ Tests requiring a Qdrant or Postgres server use `t.Skip(...)` and are excluded f
 
 Key unit test coverage areas:
 
-| Package         | What's Tested                                                                        |
-| --------------- | ------------------------------------------------------------------------------------ |
-| `preprocessor/` | Shortcodes, includes, HTML, refs, file processing, concurrency defaults              |
-| `chunker/`      | Word-window splitting, overlap clamping, empty/short docs, chunk IDs                 |
-| `embedder/`     | Batching, rate-limit retry, API errors, model fallback, headers                      |
-| `retriever/`    | Constructor, retrieve flow, embed/search error propagation                           |
-| `memory/`       | Ring buffer add/get/eviction/concurrent safety                                       |
-| `generator/`    | Generate with mock HTTP, API errors, URL normalization                               |
-| `eval/`         | All metric computations, Evaluate() with mocked retriever/generator, WriteJSONReport |
-| `store/`        | Point conversion, payload encoding, chunk ID hashing, distance parsing               |
-| `types/`        | All struct creation, zero values, round-trip serialization                           |
-| `config/`       | Validation, env overrides, ResolveTag                                                |
-| `stage/`        | Clone, preprocess, verify stage execution                                            |
-| `workflow/`     | Store CRUD, status transitions, state merging, Kind() methods                        |
-| `db/`           | Migration version parsing                                                            |
+| Package         | What's Tested                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `preprocessor/` | Shortcodes, includes, HTML, refs, file processing, concurrency defaults                                                                          |
+| `chunker/`      | Word-window splitting, overlap clamping, empty/short docs, chunk IDs                                                                             |
+| `embedder/`     | Batching, rate-limit retry, API errors, model fallback, headers                                                                                  |
+| `retriever/`    | Constructor, retrieve flow, embed/search error propagation                                                                                       |
+| `memory/`       | Ring buffer add/get/eviction/concurrent safety                                                                                                   |
+| `generator/`    | Generate with mock HTTP, API errors, URL normalization                                                                                           |
+| `eval/`         | All metric computations (binary + graded NDCG), Evaluate() with mocked retriever/generator, WriteJSONReport, gradeForPath, idealGradedRelevances |
+| `store/`        | Point conversion, payload encoding, chunk ID hashing, distance parsing                                                                           |
+| `types/`        | All struct creation, zero values, round-trip serialization                                                                                       |
+| `config/`       | Validation, env overrides, ResolveTag                                                                                                            |
+| `stage/`        | Clone, preprocess, verify stage execution                                                                                                        |
+| `workflow/`     | Store CRUD, status transitions, state merging, Kind() methods                                                                                    |
+| `db/`           | Migration version parsing                                                                                                                        |
 
 ## License
 

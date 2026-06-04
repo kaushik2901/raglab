@@ -51,9 +51,11 @@ func TestEvaluate_SingleQuestion_Hit(t *testing.T) {
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
 		{
-			ID:          "q1",
-			Question:    "test query",
-			SourcePaths: []string{"doc1.md"},
+			ID:       "q1",
+			Question: "test query",
+			Relevance: []types.RelevanceJudgment{
+				{DocumentID: "doc1.md", Grade: 3},
+			},
 		},
 	}
 
@@ -102,9 +104,11 @@ func TestEvaluate_SingleQuestion_Miss(t *testing.T) {
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
 		{
-			ID:          "q1",
-			Question:    "test query",
-			SourcePaths: []string{"docX.md"},
+			ID:       "q1",
+			Question: "test query",
+			Relevance: []types.RelevanceJudgment{
+				{DocumentID: "docX.md", Grade: 3},
+			},
 		},
 	}
 
@@ -138,9 +142,9 @@ func TestEvaluate_MultipleQuestions_Ordering(t *testing.T) {
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
-		{ID: "q1", Question: "first", SourcePaths: []string{"d1.md"}},
-		{ID: "q2", Question: "second", SourcePaths: []string{"d2.md"}},
-		{ID: "q3", Question: "third", SourcePaths: []string{"d3.md"}},
+		{ID: "q1", Question: "first", Relevance: []types.RelevanceJudgment{{DocumentID: "d1.md", Grade: 1}}},
+		{ID: "q2", Question: "second", Relevance: []types.RelevanceJudgment{{DocumentID: "d2.md", Grade: 1}}},
+		{ID: "q3", Question: "third", Relevance: []types.RelevanceJudgment{{DocumentID: "d3.md", Grade: 1}}},
 	}
 
 	r.On("Retrieve", mock.Anything, "col", "first", 3).
@@ -176,9 +180,11 @@ func TestEvaluate_Concurrent_AllProcessed(t *testing.T) {
 	questions := make([]types.EvalQuestion, 4)
 	for i := range questions {
 		questions[i] = types.EvalQuestion{
-			ID:          string(rune('a' + i)),
-			Question:    "query",
-			SourcePaths: []string{"doc.md"},
+			ID:       string(rune('a' + i)),
+			Question: "query",
+			Relevance: []types.RelevanceJudgment{
+				{DocumentID: "doc.md", Grade: 1},
+			},
 		}
 	}
 
@@ -208,7 +214,7 @@ func TestEvaluate_RetrieverError(t *testing.T) {
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
-		{ID: "q1", Question: "query", SourcePaths: []string{"doc.md"}},
+		{ID: "q1", Question: "query", Relevance: []types.RelevanceJudgment{{DocumentID: "doc.md", Grade: 1}}},
 	}
 
 	r.On("Retrieve", mock.Anything, "col", "query", 3).
@@ -226,7 +232,7 @@ func TestEvaluate_GeneratorError_NonFatal(t *testing.T) {
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
-		{ID: "q1", Question: "query", SourcePaths: []string{"doc.md"}},
+		{ID: "q1", Question: "query", Relevance: []types.RelevanceJudgment{{DocumentID: "doc.md", Grade: 1}}},
 	}
 
 	r.On("Retrieve", mock.Anything, "col", "query", 3).
@@ -249,7 +255,7 @@ func TestEvaluate_EmptyResults_MapsHitCorrectly(t *testing.T) {
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
-		{ID: "q1", Question: "query", SourcePaths: []string{"doc.md"}},
+		{ID: "q1", Question: "query", Relevance: []types.RelevanceJudgment{{DocumentID: "doc.md", Grade: 1}}},
 	}
 
 	r.On("Retrieve", mock.Anything, "col", "query", 5).
@@ -271,7 +277,7 @@ func TestEvaluate_ZeroConcurrency_Defaults(t *testing.T) {
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
-		{ID: "q1", Question: "q", SourcePaths: []string{"d.md"}},
+		{ID: "q1", Question: "q", Relevance: []types.RelevanceJudgment{{DocumentID: "d.md", Grade: 1}}},
 	}
 
 	r.On("Retrieve", mock.Anything, "col", "q", 3).

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -11,16 +12,16 @@ import (
 func TestHitRate(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			QuestionID: "q1",
-			ExpectedPaths: []string{"doc1.md"},
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc1.md", "doc2.md"},
-			Hit: map[int]bool{1: true, 3: true},
+			Hit:            map[int]bool{1: true, 3: true},
 		},
 		{
-			QuestionID: "q2",
-			ExpectedPaths: []string{"doc3.md"},
+			QuestionID:     "q2",
+			ExpectedPaths:  []string{"doc3.md"},
 			RetrievedPaths: []string{"doc1.md", "doc2.md"},
-			Hit: map[int]bool{1: false, 3: false},
+			Hit:            map[int]bool{1: false, 3: false},
 		},
 	}
 
@@ -57,13 +58,13 @@ func TestMRR_NoResults(t *testing.T) {
 func TestPrecision(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			QuestionID: "q1",
-			ExpectedPaths: []string{"doc1.md"},
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc1.md", "doc2.md", "doc3.md"},
 		},
 		{
-			QuestionID: "q2",
-			ExpectedPaths: []string{"doc4.md"},
+			QuestionID:     "q2",
+			ExpectedPaths:  []string{"doc4.md"},
 			RetrievedPaths: []string{"doc1.md", "doc2.md", "doc3.md"},
 		},
 	}
@@ -75,13 +76,13 @@ func TestPrecision(t *testing.T) {
 func TestRecall(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			QuestionID: "q1",
-			ExpectedPaths: []string{"doc1.md"},
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc1.md", "doc2.md"},
 		},
 		{
-			QuestionID: "q2",
-			ExpectedPaths: []string{"doc3.md", "doc4.md"},
+			QuestionID:     "q2",
+			ExpectedPaths:  []string{"doc3.md", "doc4.md"},
 			RetrievedPaths: []string{"doc1.md", "doc3.md"},
 		},
 	}
@@ -96,14 +97,120 @@ func TestRecall(t *testing.T) {
 func TestNDCG(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			QuestionID: "q1",
-			ExpectedPaths: []string{"doc1.md"},
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc1.md", "doc2.md", "doc3.md"},
 		},
 	}
 
 	ndcg := computeNDCG(results, []int{3})
 	assert.InDelta(t, 1.0, ndcg[3], 0.001)
+}
+
+func TestNDCGGraded_Basic(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID: "q1",
+			Relevance: []types.RelevanceJudgment{
+				{DocumentID: "doc1.md", Grade: 3},
+				{DocumentID: "doc2.md", Grade: 1},
+			},
+			ExpectedPaths:  []string{"doc1.md", "doc2.md"},
+			RetrievedPaths: []string{"doc1.md", "doc3.md", "doc2.md"},
+		},
+	}
+
+	ndcg := computeNDCGGraded(results, []int{3})
+	actual := ndcg[3]
+	assert.Greater(t, actual, 0.9, "doc1 (grade 3) ranked 1st should give high NDCG")
+	assert.Less(t, actual, 1.0, "doc2 (grade 1) ranked 3rd should not be perfect")
+}
+
+func TestNDCGGraded_AllPerfect(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md"},
+		},
+	}
+
+	ndcg := computeNDCGGraded(results, []int{1})
+	assert.InDelta(t, 1.0, ndcg[1], 0.001)
+}
+
+func TestNDCGGraded_AllMiss(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc2.md"},
+		},
+	}
+
+	ndcg := computeNDCGGraded(results, []int{1})
+	assert.Equal(t, 0.0, ndcg[1])
+}
+
+func TestNDCGGraded_MultipleQuestions(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md"},
+		},
+		{
+			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc2.md", Grade: 3}},
+			ExpectedPaths:  []string{"doc2.md"},
+			RetrievedPaths: []string{"doc3.md"},
+		},
+	}
+
+	ndcg := computeNDCGGraded(results, []int{1})
+	assert.InDelta(t, 0.5, ndcg[1], 0.001)
+}
+
+func TestGradeForPath(t *testing.T) {
+	relevance := []types.RelevanceJudgment{
+		{DocumentID: "doc1.md", Grade: 3},
+		{DocumentID: "doc2.md", Grade: 1},
+	}
+	assert.InDelta(t, 3.0, gradeForPath(relevance, "doc1.md"), 0.001)
+	assert.InDelta(t, 1.0, gradeForPath(relevance, "doc2.md"), 0.001)
+	assert.InDelta(t, 0.0, gradeForPath(relevance, "doc3.md"), 0.001)
+	assert.InDelta(t, 0.0, gradeForPath(nil, "doc1.md"), 0.001)
+}
+
+func TestIdealGradedRelevances(t *testing.T) {
+	relevance := []types.RelevanceJudgment{
+		{DocumentID: "a.md", Grade: 1},
+		{DocumentID: "b.md", Grade: 3},
+		{DocumentID: "c.md", Grade: 2},
+	}
+
+	ideal := idealGradedRelevances(relevance, 3)
+	require.Len(t, ideal, 3)
+	assert.InDelta(t, 3.0, ideal[0], 0.001)
+	assert.InDelta(t, 2.0, ideal[1], 0.001)
+	assert.InDelta(t, 1.0, ideal[2], 0.001)
+}
+
+func TestIdealGradedRelevances_Truncated(t *testing.T) {
+	relevance := []types.RelevanceJudgment{
+		{DocumentID: "a.md", Grade: 3},
+		{DocumentID: "b.md", Grade: 2},
+		{DocumentID: "c.md", Grade: 1},
+	}
+
+	ideal := idealGradedRelevances(relevance, 2)
+	require.Len(t, ideal, 2)
+	assert.InDelta(t, 3.0, ideal[0], 0.001)
+	assert.InDelta(t, 2.0, ideal[1], 0.001)
+}
+
+func TestIdealGradedRelevances_Empty(t *testing.T) {
+	ideal := idealGradedRelevances(nil, 3)
+	assert.Empty(t, ideal)
 }
 
 func TestContainsPath(t *testing.T) {

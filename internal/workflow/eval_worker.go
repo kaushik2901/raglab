@@ -9,8 +9,8 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
@@ -69,10 +69,10 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		}
 
 		evalRunID, err := w.EvalStore.CreateRun(ctx, args.WorkflowID, args.Tag, map[string]any{
-			"index_tag":       args.IndexTag,
-			"query_strategy":  args.QueryStrategy,
-			"top_k":           args.TopK,
-			"llm_model":       args.LLMModel,
+			"index_tag":      args.IndexTag,
+			"query_strategy": args.QueryStrategy,
+			"top_k":          args.TopK,
+			"llm_model":      args.LLMModel,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create eval run: %w", err)
@@ -122,11 +122,11 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		report := &types.EvalReport{
 			RunID: args.Tag,
 			Strategy: types.EvalStrategyConfig{
-				Tag:            args.Tag,
-				IndexTag:       args.IndexTag,
-				QueryStrategy:  args.QueryStrategy,
-				TopK:           args.TopK,
-				LLMModel:       args.LLMModel,
+				Tag:           args.Tag,
+				IndexTag:      args.IndexTag,
+				QueryStrategy: args.QueryStrategy,
+				TopK:          args.TopK,
+				LLMModel:      args.LLMModel,
 			},
 			Questions:   len(results),
 			Aggregate:   aggregate,
