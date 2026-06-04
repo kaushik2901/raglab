@@ -24,7 +24,7 @@ type embedder struct {
 
 func New(baseURL, apiKey, model string, batchSize int) *embedder {
 	return &embedder{
-		baseURL:          baseURL,
+		baseURL:          normalizeBaseURL(baseURL),
 		apiKey:           apiKey,
 		model:            model,
 		batchSize:        batchSize,
@@ -32,6 +32,17 @@ func New(baseURL, apiKey, model string, batchSize int) *embedder {
 		retryMaxAttempts: 5,
 		retryBackoff:     200 * time.Millisecond,
 	}
+}
+
+// normalizeBaseURL strips any trailing /v1 or /v1/ suffix so that all
+// endpoint paths can be constructed as baseURL + "/v1/" + endpoint.
+func normalizeBaseURL(baseURL string) string {
+	for _, suffix := range []string{"/v1/", "/v1"} {
+		if len(baseURL) >= len(suffix) && baseURL[len(baseURL)-len(suffix):] == suffix {
+			return baseURL[:len(baseURL)-len(suffix)]
+		}
+	}
+	return baseURL
 }
 
 func (e *embedder) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
@@ -88,7 +99,7 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/embeddings", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/v1/embeddings", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

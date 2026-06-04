@@ -158,7 +158,7 @@ func TestEmbed_APIClient(t *testing.T) {
 	_, err := e.Embed(context.Background(), chunks)
 	require.NoError(t, err)
 	assert.Equal(t, "POST", method)
-	assert.Equal(t, "/embeddings", path)
+	assert.Equal(t, "/v1/embeddings", path)
 	assert.Equal(t, "application/json", contentType)
 	assert.Equal(t, "Bearer sk-test-key", auth)
 }

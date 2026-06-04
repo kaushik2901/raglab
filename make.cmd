@@ -3,6 +3,7 @@ setlocal
 
 if /I "%1"=="preprocess"   goto :preprocess
 if /I "%1"=="index"        goto :index
+if /I "%1"=="query"        goto :query
 if /I "%1"=="workerd"      goto :workerd
 if /I "%1"=="test"         goto :test
 if /I "%1"=="clean"        goto :clean
@@ -17,21 +18,42 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\index.exe .\cmd\index
 if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\workerd.exe .\cmd\workerd
-if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe, bin\index.exe, bin\workerd.exe
+go build -o bin\query.exe .\cmd\query
+if %errorlevel% neq 0 exit /b %errorlevel%
+if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe, bin\index.exe, bin\workerd.exe, bin\query.exe
+goto :end
+
+:query
+echo Building and running query...
+go build -o bin\query.exe .\cmd\query
+if %errorlevel% neq 0 exit /b %errorlevel%
+setlocal enabledelayedexpansion
+set "ARGS=%*"
+set "ARGS=!ARGS:*%1 =!"
+bin\query.exe !ARGS!
+endlocal
 goto :end
 
 :preprocess
 echo Building and running preprocessing pipeline...
 go build -o bin\preprocess.exe .\cmd\preprocess
 if %errorlevel% neq 0 exit /b %errorlevel%
-bin\preprocess.exe %2 %3 %4 %5 %6 %7 %8 %9
+setlocal enabledelayedexpansion
+set "ARGS=%*"
+set "ARGS=!ARGS:*%1 =!"
+bin\preprocess.exe !ARGS!
+endlocal
 goto :end
 
 :index
 echo Building and running index pipeline...
 go build -o bin\index.exe .\cmd\index
 if %errorlevel% neq 0 exit /b %errorlevel%
-bin\index.exe %2 %3 %4 %5 %6 %7 %8 %9
+setlocal enabledelayedexpansion
+set "ARGS=%*"
+set "ARGS=!ARGS:*%1 =!"
+bin\index.exe !ARGS!
+endlocal
 goto :end
 
 :workerd

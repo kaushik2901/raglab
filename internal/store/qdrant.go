@@ -123,6 +123,46 @@ func (s *QdrantStore) Store(ctx context.Context, collectionName string, chunks [
 	return nil
 }
 
+func (s *QdrantStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	resp, err := s.client.Points().Search(ctx, &qdrant.SearchPoints{
+		CollectionName: collectionName,
+		Vector:         queryVector,
+		Limit:          uint64(topK),
+		WithPayload:    qdrant.NewWithPayload(true),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+
+	results := make([]types.SearchResult, 0, len(resp.GetResult()))
+	for _, p := range resp.GetResult() {
+		r := types.SearchResult{
+			Score: p.GetScore(),
+		}
+		if payload := p.GetPayload(); payload != nil {
+			if v, ok := payload["content"]; ok {
+				r.Content = v.GetStringValue()
+			}
+			if v, ok := payload["document_path"]; ok {
+				r.DocumentPath = v.GetStringValue()
+			}
+			if v, ok := payload["token_count"]; ok {
+				r.TokenCount = int(v.GetIntegerValue())
+			}
+			if v, ok := payload["chunk_index"]; ok {
+				r.ChunkIndex = int(v.GetIntegerValue())
+			}
+		}
+		results = append(results, r)
+	}
+
+	return results, nil
+}
+
 func (s *QdrantStore) Close() error {
 	if s.client == nil {
 		return nil
