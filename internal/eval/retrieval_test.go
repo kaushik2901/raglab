@@ -43,6 +43,16 @@ func TestNewRetrievalEvaluator(t *testing.T) {
 	assert.Equal(t, g, e.generator)
 }
 
+func TestNewRetrievalEvaluatorWithJudge(t *testing.T) {
+	r := new(mockRetriever)
+	g := new(mockGenerator)
+	j := new(mockGenerator)
+	e := NewRetrievalEvaluatorWithJudge(r, g, j, 5)
+	require.NotNil(t, e)
+	assert.Equal(t, 5, e.topK)
+	assert.Equal(t, j, e.judge)
+}
+
 func TestEvaluate_SingleQuestion_Hit(t *testing.T) {
 	r := new(mockRetriever)
 	g := new(mockGenerator)
@@ -268,6 +278,48 @@ func TestEvaluate_EmptyResults_MapsHitCorrectly(t *testing.T) {
 	assert.False(t, results[0].Hit[1])
 	assert.Equal(t, 0, results[0].RankFirst)
 	assert.Empty(t, results[0].Answer)
+}
+
+func TestEvaluate_WithJudge_SetsAnswerScore(t *testing.T) {
+	r := new(mockRetriever)
+	g := new(mockGenerator)
+	j := new(mockGenerator)
+	e := NewRetrievalEvaluatorWithJudge(r, g, j, 3)
+
+	ctx := context.Background()
+	questions := []types.EvalQuestion{
+		{
+			ID:             "q1",
+			Question:       "test query",
+			ExpectedAnswer: "correct answer",
+			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+		},
+	}
+
+	r.On("Retrieve", mock.Anything, "col", "test query", 3).
+		Return([]types.SearchResult{{DocumentPath: "doc1.md", Score: 0.9, Content: "content"}}, nil)
+
+	g.On("Generate", mock.Anything, mock.Anything).
+		Return(&openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Content: "generated answer"}},
+			},
+			Usage: openai.CompletionUsage{PromptTokens: 5, CompletionTokens: 10},
+		}, nil)
+
+	j.On("Generate", mock.Anything, mock.Anything).
+		Return(&openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Content: "0.92"}},
+			},
+			Usage: openai.CompletionUsage{PromptTokens: 3, CompletionTokens: 1},
+		}, nil)
+
+	results, err := e.Evaluate(ctx, "col", questions, 1)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "generated answer", results[0].Answer)
+	assert.InDelta(t, 0.92, results[0].AnswerScore, 0.001)
 }
 
 func TestEvaluate_ZeroConcurrency_Defaults(t *testing.T) {

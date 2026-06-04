@@ -25,6 +25,7 @@ type EvalArgs struct {
 	DatasetPath   string `json:"dataset_path"`
 	TopK          int    `json:"top_k"`
 	LLMModel      string `json:"llm_model"`
+	JudgeModel    string `json:"judge_model"`
 	Concurrency   int    `json:"concurrency"`
 }
 
@@ -73,6 +74,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 			"query_strategy": args.QueryStrategy,
 			"top_k":          args.TopK,
 			"llm_model":      args.LLMModel,
+			"judge_model":    args.JudgeModel,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create eval run: %w", err)
@@ -91,7 +93,8 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 			return nil, err
 		}
 		gen := generator.New(llmBaseURL, llmAPIKey, args.LLMModel)
-		evaluator := eval.NewRetrievalEvaluator(ret, gen, args.TopK)
+		judgeGen := generator.New(llmBaseURL, llmAPIKey, args.JudgeModel)
+		evaluator := eval.NewRetrievalEvaluatorWithJudge(ret, gen, judgeGen, args.TopK)
 
 		// 4. Run retrieval evaluation against the existing collection
 		slog.Info("running retrieval evaluation", "collection", args.IndexTag, "strategy", args.QueryStrategy, "concurrency", args.Concurrency)
@@ -106,6 +109,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 			"questions", len(results),
 			"hit_rate@5", fmt.Sprintf("%.3f", aggregate.HitRate[5]),
 			"mrr", fmt.Sprintf("%.3f", aggregate.MRR),
+			"avg_answer_score", fmt.Sprintf("%.3f", aggregate.AvgAnswerScore),
 		)
 
 		// 6. Persist results
@@ -143,11 +147,12 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		return &types.StageResult{
 			Name: "eval",
 			Output: map[string]any{
-				"eval_run_id":    evalRunID,
-				"report_path":    reportPath,
-				"question_count": len(results),
-				"hit_rate@5":     aggregate.HitRate[5],
-				"mrr":            aggregate.MRR,
+				"eval_run_id":      evalRunID,
+				"report_path":      reportPath,
+				"question_count":   len(results),
+				"hit_rate@5":       aggregate.HitRate[5],
+				"mrr":              aggregate.MRR,
+				"avg_answer_score": aggregate.AvgAnswerScore,
 			},
 		}, nil
 	}); err != nil {

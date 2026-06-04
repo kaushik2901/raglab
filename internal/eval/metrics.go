@@ -155,14 +155,26 @@ func idealGradedRelevances(relevance []types.RelevanceJudgment, k int) []float64
 	return grades
 }
 
+func computeAvgAnswerScore(results []types.RetrievalResult) float64 {
+	if len(results) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, r := range results {
+		sum += r.AnswerScore
+	}
+	return sum / float64(len(results))
+}
+
 func ComputeAggregateMetrics(results []types.RetrievalResult, ks []int) types.AggregateMetrics {
 	return types.AggregateMetrics{
-		HitRate:    computeHitRate(results, ks),
-		MRR:        computeMRR(results),
-		NDCG:       computeNDCG(results, ks),
-		NDCGGraded: computeNDCGGraded(results, ks),
-		Precision:  computePrecision(results, ks),
-		Recall:     computeRecall(results, ks),
+		HitRate:        computeHitRate(results, ks),
+		MRR:            computeMRR(results),
+		NDCG:           computeNDCG(results, ks),
+		NDCGGraded:     computeNDCGGraded(results, ks),
+		Precision:      computePrecision(results, ks),
+		Recall:         computeRecall(results, ks),
+		AvgAnswerScore: computeAvgAnswerScore(results),
 	}
 }
 

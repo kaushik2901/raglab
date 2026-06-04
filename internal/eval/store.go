@@ -48,9 +48,9 @@ func (s *EvalStore) AddQueryResult(ctx context.Context, runID string, r types.Re
 	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO eval_queries (run_id, question_id, question, generated_answer, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		runID, r.QuestionID, r.Question, r.Answer, expectedPathsJSON, retrievedJSON, relevanceJSON, hitJSON, r.RankFirst, r.PromptTokens, r.CompletionTokens, r.LatencyMs,
+		`INSERT INTO eval_queries (run_id, question_id, question, generated_answer, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms, answer_score)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		runID, r.QuestionID, r.Question, r.Answer, expectedPathsJSON, retrievedJSON, relevanceJSON, hitJSON, r.RankFirst, r.PromptTokens, r.CompletionTokens, r.LatencyMs, r.AnswerScore,
 	)
 	if err != nil {
 		return fmt.Errorf("insert query result: %w", err)
@@ -75,7 +75,7 @@ func (s *EvalStore) UpdateRunMetrics(ctx context.Context, runID string, metrics 
 
 func (s *EvalStore) GetRunResults(ctx context.Context, runID string) ([]types.RetrievalResult, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT question_id, question, generated_answer, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms
+		`SELECT question_id, question, generated_answer, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms, answer_score
 		 FROM eval_queries WHERE run_id = $1 ORDER BY created_at ASC`,
 		runID,
 	)
@@ -89,7 +89,7 @@ func (s *EvalStore) GetRunResults(ctx context.Context, runID string) ([]types.Re
 		var r types.RetrievalResult
 		var hitJSON, retrievedJSON, expectedPathsJSON, relevanceJSON []byte
 
-		if err := rows.Scan(&r.QuestionID, &r.Question, &r.Answer, &expectedPathsJSON, &retrievedJSON, &relevanceJSON, &hitJSON, &r.RankFirst, &r.PromptTokens, &r.CompletionTokens, &r.LatencyMs); err != nil {
+		if err := rows.Scan(&r.QuestionID, &r.Question, &r.Answer, &expectedPathsJSON, &retrievedJSON, &relevanceJSON, &hitJSON, &r.RankFirst, &r.PromptTokens, &r.CompletionTokens, &r.LatencyMs, &r.AnswerScore); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 

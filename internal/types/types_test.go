@@ -81,10 +81,11 @@ func TestSearchResultZeroValue(t *testing.T) {
 
 func TestEvalQuestionCreation(t *testing.T) {
 	q := EvalQuestion{
-		ID:         "q-001",
-		Category:   "onboarding",
-		Difficulty: "easy",
-		Question:   "How do I set up SSH?",
+		ID:             "q-001",
+		Category:       "onboarding",
+		Difficulty:     "easy",
+		Question:       "How do I set up SSH?",
+		ExpectedAnswer: "Run ssh-keygen",
 		Relevance: []RelevanceJudgment{
 			{DocumentID: "docs/ssh.md", Grade: 3},
 		},
@@ -92,6 +93,7 @@ func TestEvalQuestionCreation(t *testing.T) {
 	assert.Equal(t, "q-001", q.ID)
 	assert.Equal(t, "onboarding", q.Category)
 	assert.Equal(t, "easy", q.Difficulty)
+	assert.Equal(t, "Run ssh-keygen", q.ExpectedAnswer)
 	require.Len(t, q.Relevance, 1)
 	assert.Equal(t, "docs/ssh.md", q.Relevance[0].DocumentID)
 	assert.Equal(t, 3, q.Relevance[0].Grade)
@@ -129,6 +131,7 @@ func TestRetrievalResultCreation(t *testing.T) {
 	r := RetrievalResult{
 		QuestionID:       "q1",
 		Question:         "test?",
+		ExpectedAnswer:   "expected",
 		Relevance:        []RelevanceJudgment{{DocumentID: "doc.md", Grade: 3}},
 		ExpectedPaths:    []string{"doc.md"},
 		RetrievedPaths:   []string{"doc.md", "doc2.md"},
@@ -137,6 +140,7 @@ func TestRetrievalResultCreation(t *testing.T) {
 		RankFirst:        1,
 		NDCGGraded:       0.95,
 		Answer:           "answer text",
+		AnswerScore:      0.88,
 		PromptTokens:     10,
 		CompletionTokens: 20,
 		LatencyMs:        150,
@@ -144,8 +148,10 @@ func TestRetrievalResultCreation(t *testing.T) {
 	assert.Equal(t, "q1", r.QuestionID)
 	assert.Equal(t, []string{"doc.md"}, r.ExpectedPaths)
 	assert.Equal(t, "answer text", r.Answer)
+	assert.Equal(t, "expected", r.ExpectedAnswer)
 	assert.Equal(t, int64(150), r.LatencyMs)
 	assert.InDelta(t, 0.95, r.NDCGGraded, 0.001)
+	assert.InDelta(t, 0.88, r.AnswerScore, 0.001)
 }
 
 func TestAggregateMetricsDefaults(t *testing.T) {
@@ -156,6 +162,7 @@ func TestAggregateMetricsDefaults(t *testing.T) {
 	assert.Nil(t, m.NDCGGraded)
 	assert.Nil(t, m.Precision)
 	assert.Nil(t, m.Recall)
+	assert.Equal(t, 0.0, m.AvgAnswerScore)
 }
 
 func TestEvalReportCreation(t *testing.T) {

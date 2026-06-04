@@ -219,6 +219,34 @@ func TestContainsPath(t *testing.T) {
 	assert.False(t, containsPath([]string{}, "doc1.md"))
 }
 
+func TestAvgAnswerScore(t *testing.T) {
+	results := []types.RetrievalResult{
+		{AnswerScore: 0.9},
+		{AnswerScore: 0.7},
+		{AnswerScore: 0.5},
+	}
+	assert.InDelta(t, 0.7, computeAvgAnswerScore(results), 0.001)
+}
+
+func TestAvgAnswerScore_Empty(t *testing.T) {
+	assert.Equal(t, 0.0, computeAvgAnswerScore([]types.RetrievalResult{}))
+}
+
+func TestAvgAnswerScore_AllZero(t *testing.T) {
+	results := []types.RetrievalResult{
+		{AnswerScore: 0},
+		{AnswerScore: 0},
+	}
+	assert.Equal(t, 0.0, computeAvgAnswerScore(results))
+}
+
+func TestAvgAnswerScore_Single(t *testing.T) {
+	results := []types.RetrievalResult{
+		{AnswerScore: 0.85},
+	}
+	assert.InDelta(t, 0.85, computeAvgAnswerScore(results), 0.001)
+}
+
 func TestMin(t *testing.T) {
 	assert.Equal(t, 3, min(3, 5))
 	assert.Equal(t, 3, min(5, 3))

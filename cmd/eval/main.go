@@ -32,6 +32,7 @@ func run() error {
 	dataset := flag.String("dataset", "", "Path to ground truth questions JSON (required)")
 	topK := flag.Int("top-k", 5, "Top-K retrieval")
 	llmModel := flag.String("llm-model", config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini"), "LLM model for answer generation")
+	judgeModel := flag.String("judge-model", config.EnvOrDefault("JUDGE_MODEL", ""), "LLM model for answer scoring (defaults to --llm-model if empty)")
 	evalConcurrency := flag.Int("eval-concurrency", config.IntEnvOrDefault("EVAL_CONCURRENCY", 5), "Number of questions to evaluate concurrently")
 	tag := flag.String("tag", "", "Eval run tag (auto-generated if empty)")
 
@@ -67,6 +68,10 @@ func run() error {
 
 	store := workflow.NewStore(pool)
 
+	if *judgeModel == "" {
+		*judgeModel = *llmModel
+	}
+
 	resolvedTag := config.ResolveTag(*tag, "eval")
 	wfID, err := store.CreateWorkflow(ctx, "eval", resolvedTag, map[string]any{
 		"index_tag":      *indexTag,
@@ -74,6 +79,7 @@ func run() error {
 		"dataset_path":   *dataset,
 		"top_k":          *topK,
 		"llm_model":      *llmModel,
+		"judge_model":    *judgeModel,
 		"concurrency":    *evalConcurrency,
 	})
 	if err != nil {
@@ -97,6 +103,7 @@ func run() error {
 		DatasetPath:   *dataset,
 		TopK:          *topK,
 		LLMModel:      *llmModel,
+		JudgeModel:    *judgeModel,
 		Concurrency:   *evalConcurrency,
 	}, nil)
 	if err != nil {

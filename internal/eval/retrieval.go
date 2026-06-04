@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type Generator interface {
 type RetrievalEvaluator struct {
 	retriever Retriever
 	generator Generator
+	judge     Generator
 	topK      int
 }
 
@@ -30,6 +32,15 @@ func NewRetrievalEvaluator(ret Retriever, gen Generator, topK int) *RetrievalEva
 	return &RetrievalEvaluator{
 		retriever: ret,
 		generator: gen,
+		topK:      topK,
+	}
+}
+
+func NewRetrievalEvaluatorWithJudge(ret Retriever, gen Generator, judge Generator, topK int) *RetrievalEvaluator {
+	return &RetrievalEvaluator{
+		retriever: ret,
+		generator: gen,
+		judge:     judge,
 		topK:      topK,
 	}
 }
@@ -77,10 +88,11 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	}
 
 	result := &types.RetrievalResult{
-		QuestionID:    q.ID,
-		Question:      q.Question,
-		Relevance:     q.Relevance,
-		ExpectedPaths: expectedPaths,
+		QuestionID:     q.ID,
+		Question:       q.Question,
+		ExpectedAnswer: q.ExpectedAnswer,
+		Relevance:      q.Relevance,
+		ExpectedPaths:  expectedPaths,
 	}
 
 	if len(searchResults) == 0 {
@@ -145,6 +157,15 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 			usage := completion.Usage
 			result.PromptTokens = int(usage.PromptTokens)
 			result.CompletionTokens = int(usage.CompletionTokens)
+
+			if e.judge != nil {
+				score, judgeErr := JudgeAnswer(ctx, e.judge, q.Question, contextText, q.ExpectedAnswer, result.Answer)
+				if judgeErr != nil {
+					slog.Warn("judge error", "question_id", q.ID, "err", judgeErr)
+				} else {
+					result.AnswerScore = score
+				}
+			}
 		}
 	}
 

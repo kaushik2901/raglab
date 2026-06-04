@@ -121,6 +121,7 @@ Measures retrieval and generation quality against a ground-truth dataset. Evalua
 - **MRR** — Mean Reciprocal Rank of the first relevant result
 - **NDCG@K** — Normalized Discounted Cumulative Gain (binary)
 - **NDCGGraded@K** — NDCG with graded relevance (0–3 scale, supports partial relevance)
+- **AvgAnswerScore** — LLM-as-judge correctness score (0–1) comparing generated answer against `expected_answer`
 - **Precision@K** — proportion of retrieved documents that are relevant
 - **Recall@K** — proportion of relevant documents that are retrieved
 
@@ -142,6 +143,7 @@ go build -o bin\eval.exe .\cmd\eval
 | `--dataset`          | —                  | —                  | **Required.** Path to ground truth questions JSON         |
 | `--top-k`            | —                  | `5`                | Top-K retrieval                                           |
 | `--llm-model`        | `LLM_MODEL`        | `gpt-4o-mini`      | LLM model for answer generation                           |
+| `--judge-model`      | `JUDGE_MODEL`      | (same as `--llm-model`) | LLM model for answer correctness scoring              |
 | `--tag`              | —                  | `eval-<timestamp>` | Eval run tag                                              |
 | `--eval-concurrency` | `EVAL_CONCURRENCY` | `5`                | Number of questions to evaluate concurrently              |
 

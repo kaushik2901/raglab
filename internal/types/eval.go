@@ -6,11 +6,12 @@ type RelevanceJudgment struct {
 }
 
 type EvalQuestion struct {
-	ID         string              `json:"id"`
-	Category   string              `json:"category,omitempty"`
-	Difficulty string              `json:"difficulty,omitempty"`
-	Question   string              `json:"question"`
-	Relevance  []RelevanceJudgment `json:"relevance"`
+	ID             string              `json:"id"`
+	Category       string              `json:"category,omitempty"`
+	Difficulty     string              `json:"difficulty,omitempty"`
+	Question       string              `json:"question"`
+	Relevance      []RelevanceJudgment `json:"relevance"`
+	ExpectedAnswer string              `json:"expected_answer"`
 }
 
 type EvalDataset struct {
@@ -35,6 +36,7 @@ type EvalStrategyConfig struct {
 type RetrievalResult struct {
 	QuestionID       string
 	Question         string
+	ExpectedAnswer   string
 	Relevance        []RelevanceJudgment
 	ExpectedPaths    []string
 	RetrievedPaths   []string
@@ -43,18 +45,20 @@ type RetrievalResult struct {
 	RankFirst        int
 	NDCGGraded       float64
 	Answer           string
+	AnswerScore      float64
 	PromptTokens     int
 	CompletionTokens int
 	LatencyMs        int64
 }
 
 type AggregateMetrics struct {
-	HitRate    map[int]float64
-	MRR        float64
-	NDCG       map[int]float64
-	NDCGGraded map[int]float64
-	Precision  map[int]float64
-	Recall     map[int]float64
+	HitRate        map[int]float64
+	MRR            float64
+	NDCG           map[int]float64
+	NDCGGraded     map[int]float64
+	Precision      map[int]float64
+	Recall         map[int]float64
+	AvgAnswerScore float64
 }
 
 type EvalReport struct {
