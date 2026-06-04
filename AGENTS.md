@@ -49,17 +49,24 @@ Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to re
 - Flag-based tests must call `resetFlags()` (sets `flag.NewFlagSet`) before each test to avoid global state conflicts.
 - Preprocessor tests write files to temp dirs then run `ProcessFile` / `ProcessAllFiles`.
 
-## Indexing Pipeline (In Progress)
+## Indexing Pipeline
 
-The indexing pipeline (`cmd/index/`) builds on the preprocessing output. Currently implemented:
+The indexing pipeline (`cmd/index/`) builds on the preprocessing output. A single `IndexWorker` processes documents one at a time in a streaming fashion — no document content, chunks, or embeddings are stored in Postgres:
+
+```
+IndexWorker walks artifacts/preprocessing/<input_tag>/output/
+  for each .md file:
+    1. Read from disk (parser.ParseFile)
+    2. Chunk (chunker.FixedChunker)
+    3. Embed (embedder.New — any OpenAI-compatible API)
+    4. Store in Qdrant (store.QdrantStore)
+```
 
 - **Types:** `internal/types/indexing.go` — `Chunk`, `Embedding`, `DocumentChunk`
 - **Config:** system-level only (`MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`); indexing params are parsed inline in `cmd/index/main.go`
-- **Parser:** `internal/parser/parser.go` — walks output dir, reads `.md` files into `[]types.Document`
+- **Parser:** `internal/parser/parser.go` — reads a single `.md` file into `types.Document`
 - **Fixed chunker:** `internal/chunker/` — word-window splitting with configurable size/overlap
 - **Embedder:** `internal/embedder/` — interface + OpenAI-compatible HTTP embedder with batching and rate-limit retry
-
-Only the `fixed` chunking strategy is active. Semantic and recursive chunkers will be added after the end-to-end pipeline is complete.
 
 ## Project Vision
 

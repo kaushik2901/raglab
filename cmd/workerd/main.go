@@ -40,22 +40,16 @@ func run(ctx context.Context) error {
 	cloneWorker := &workflow.CloneWorker{Store: store}
 	preprocessWorker := &workflow.PreprocessWorker{Store: store}
 	verifyWorker := &workflow.VerifyWorker{Store: store}
-	parseWorker := &workflow.ParseWorker{Store: store}
-	chunkWorker := &workflow.ChunkWorker{Store: store}
-	embedWorker := &workflow.EmbedWorker{Store: store}
-	storeWorker := &workflow.StoreWorker{Store: store}
+	indexWorker := &workflow.IndexWorker{Store: store}
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, cloneWorker)
 	river.AddWorker(workers, preprocessWorker)
 	river.AddWorker(workers, verifyWorker)
-	river.AddWorker(workers, parseWorker)
-	river.AddWorker(workers, chunkWorker)
-	river.AddWorker(workers, embedWorker)
-	river.AddWorker(workers, storeWorker)
+	river.AddWorker(workers, indexWorker)
 
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		JobTimeout: 5 * time.Minute,
+		JobTimeout: 30 * time.Minute,
 		Queues: map[string]river.QueueConfig{
 			"default": {MaxWorkers: 5},
 		},
@@ -69,10 +63,7 @@ func run(ctx context.Context) error {
 	cloneWorker.Client = riverClient
 	preprocessWorker.Client = riverClient
 	verifyWorker.Client = riverClient
-	parseWorker.Client = riverClient
-	chunkWorker.Client = riverClient
-	embedWorker.Client = riverClient
-	storeWorker.Client = riverClient
+	indexWorker.Client = riverClient
 
 	if err := riverClient.Start(ctx); err != nil {
 		pool.Close()

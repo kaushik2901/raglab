@@ -80,16 +80,15 @@ func TestQdrant_Store_Basic(t *testing.T) {
 		},
 	}
 
-	err = s.Store(context.Background(), chunks)
+	err = s.Store(context.Background(), "test-collection", chunks)
 	assert.NoError(t, err)
 }
 
-func TestQdrant_Store_EmptyList(t *testing.T) {
+func TestQdrant_Store_Empty(t *testing.T) {
 	s := NewQdrantStore("")
-	err := s.Store(context.Background(), nil)
-	assert.NoError(t, err)
+	err := s.Store(context.Background(), "test-collection", nil)
 
-	err = s.Store(context.Background(), []types.DocumentChunk{})
+	err = s.Store(context.Background(), "test-collection", []types.DocumentChunk{})
 	assert.NoError(t, err)
 }
 
@@ -122,7 +121,7 @@ func TestQdrant_Store_Batching(t *testing.T) {
 		}
 	}
 
-	err = s.Store(context.Background(), chunks)
+	err = s.Store(context.Background(), "test-store-batching", chunks)
 	assert.NoError(t, err)
 }
 
@@ -148,7 +147,7 @@ func TestQdrant_Close_Idempotent(t *testing.T) {
 func TestQdrant_ToPoint_ID(t *testing.T) {
 	doc := types.DocumentChunk{
 		Chunk: types.Chunk{
-			ID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+			ID: "test.md-chunk-0000",
 		},
 		Embedding: types.Embedding{
 			Vector: []float64{0.1},
@@ -158,13 +157,13 @@ func TestQdrant_ToPoint_ID(t *testing.T) {
 	point := toPoint(doc)
 	require.NotNil(t, point)
 	require.NotNil(t, point.Id)
-	assert.Equal(t, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", point.Id.GetUuid())
+	assert.Equal(t, chunkIDToUint64("test.md-chunk-0000"), point.Id.GetNum())
 }
 
 func TestQdrant_ToPoint_Vector(t *testing.T) {
 	doc := types.DocumentChunk{
 		Chunk: types.Chunk{
-			ID: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+			ID: "page.md-chunk-0001",
 		},
 		Embedding: types.Embedding{
 			Vector: []float64{0.1, 0.2, 0.3},

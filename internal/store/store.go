@@ -11,7 +11,7 @@ type VectorStore interface {
 
 	EnsureCollection(ctx context.Context, name string, vectorSize int, distance string) error
 
-	Store(ctx context.Context, chunks []types.DocumentChunk) error
+	Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error
 
 	Close() error
 }

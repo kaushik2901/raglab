@@ -90,7 +90,7 @@ func (s *QdrantStore) EnsureCollection(ctx context.Context, name string, vectorS
 	return nil
 }
 
-func (s *QdrantStore) Store(ctx context.Context, chunks []types.DocumentChunk) error {
+func (s *QdrantStore) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}
@@ -98,8 +98,6 @@ func (s *QdrantStore) Store(ctx context.Context, chunks []types.DocumentChunk) e
 	if s.client == nil {
 		return fmt.Errorf("not connected")
 	}
-
-	collectionName := "document_chunks"
 
 	for i := 0; i < len(chunks); i += upsertBatchSize {
 		end := i + upsertBatchSize
@@ -139,7 +137,9 @@ func toPoint(doc types.DocumentChunk) *qdrant.PointStruct {
 	}
 
 	return &qdrant.PointStruct{
-		Id:      qdrant.NewID(doc.Chunk.ID),
+		Id: &qdrant.PointId{
+			PointIdOptions: &qdrant.PointId_Num{Num: chunkIDToUint64(doc.Chunk.ID)},
+		},
 		Vectors: qdrant.NewVectors(vectors...),
 		Payload: qdrant.NewValueMap(map[string]any{
 			"document_path": doc.Chunk.DocumentPath,
@@ -149,6 +149,15 @@ func toPoint(doc types.DocumentChunk) *qdrant.PointStruct {
 			"model":         doc.Embedding.Model,
 		}),
 	}
+}
+
+func chunkIDToUint64(id string) uint64 {
+	var h uint64 = 14695981039346656037
+	for i := 0; i < len(id); i++ {
+		h ^= uint64(id[i])
+		h *= 1099511628211
+	}
+	return h
 }
 
 func parseDistance(d string) qdrant.Distance {

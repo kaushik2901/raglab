@@ -79,7 +79,7 @@ func run() error {
 		return fmt.Errorf("river client: %w", err)
 	}
 
-	_, err = riverClient.Insert(ctx, &workflow.ParseArgs{
+	_, err = riverClient.Insert(ctx, &workflow.IndexArgs{
 		WorkflowID:     wfID,
 		Tag:            resolvedTag,
 		InputTag:       *inputTag,
