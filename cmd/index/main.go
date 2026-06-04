@@ -31,6 +31,7 @@ func run() error {
 	chunkOverlap := flag.Int("chunk-overlap", config.IntEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
 	embeddingModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
 	batchSize := flag.Int("batch-size", config.IntEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
+	indexConcurrency := flag.Int("index-concurrency", config.IntEnvOrDefault("INDEX_CONCURRENCY", 5), "Number of files to index concurrently")
 	tag := flag.String("tag", config.EnvOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
 
 	cfg, err := config.Load()
@@ -59,12 +60,13 @@ func run() error {
 	resolvedTag := config.ResolveTag(*tag, "idx")
 
 	wfID, err := store.CreateWorkflow(ctx, "index", resolvedTag, map[string]any{
-		"input_tag":       *inputTag,
-		"chunk_strategy":  *chunkStrategy,
-		"chunk_size":      *chunkSize,
-		"chunk_overlap":   *chunkOverlap,
-		"embedding_model": *embeddingModel,
-		"batch_size":      *batchSize,
+		"input_tag":         *inputTag,
+		"chunk_strategy":    *chunkStrategy,
+		"chunk_size":        *chunkSize,
+		"chunk_overlap":     *chunkOverlap,
+		"embedding_model":   *embeddingModel,
+		"batch_size":        *batchSize,
+		"index_concurrency": *indexConcurrency,
 	})
 	if err != nil {
 		return fmt.Errorf("create workflow: %w", err)
@@ -80,14 +82,15 @@ func run() error {
 	}
 
 	_, err = riverClient.Insert(ctx, &workflow.IndexArgs{
-		WorkflowID:     wfID,
-		Tag:            resolvedTag,
-		InputTag:       *inputTag,
-		ChunkStrategy:  *chunkStrategy,
-		ChunkSize:      *chunkSize,
-		ChunkOverlap:   *chunkOverlap,
-		EmbeddingModel: *embeddingModel,
-		BatchSize:      *batchSize,
+		WorkflowID:       wfID,
+		Tag:              resolvedTag,
+		InputTag:         *inputTag,
+		ChunkStrategy:    *chunkStrategy,
+		ChunkSize:        *chunkSize,
+		ChunkOverlap:     *chunkOverlap,
+		EmbeddingModel:   *embeddingModel,
+		BatchSize:        *batchSize,
+		IndexConcurrency: *indexConcurrency,
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("insert parse job: %w", err)

@@ -220,6 +220,34 @@ func TestQdrant_ToPoint_Payload(t *testing.T) {
 	assert.Equal(t, "text-embedding-3-small", point.Payload["model"].GetStringValue())
 }
 
+func TestChunkIDToUint64_Deterministic(t *testing.T) {
+	h1 := chunkIDToUint64("doc.md-chunk-0000")
+	h2 := chunkIDToUint64("doc.md-chunk-0000")
+	assert.Equal(t, h1, h2)
+}
+
+func TestChunkIDToUint64_Different(t *testing.T) {
+	h1 := chunkIDToUint64("doc1.md-chunk-0000")
+	h2 := chunkIDToUint64("doc2.md-chunk-0000")
+	assert.NotEqual(t, h1, h2)
+}
+
+func TestChunkIDToUint64_Empty(t *testing.T) {
+	assert.NotEqual(t, uint64(0), chunkIDToUint64(""))
+}
+
+func TestParseDistance(t *testing.T) {
+	assert.Equal(t, qdrant.Distance_Cosine, parseDistance("Cosine"))
+	assert.Equal(t, qdrant.Distance_Euclid, parseDistance("Euclid"))
+	assert.Equal(t, qdrant.Distance_Dot, parseDistance("Dot"))
+	assert.Equal(t, qdrant.Distance_Manhattan, parseDistance("Manhattan"))
+}
+
+func TestParseDistance_Default(t *testing.T) {
+	assert.Equal(t, qdrant.Distance_Cosine, parseDistance("Unknown"))
+	assert.Equal(t, qdrant.Distance_Cosine, parseDistance(""))
+}
+
 func TestQdrant_ToPoint_PayloadTypes(t *testing.T) {
 	doc := types.DocumentChunk{
 		Chunk: types.Chunk{

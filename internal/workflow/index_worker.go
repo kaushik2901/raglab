@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
@@ -16,17 +18,19 @@ import (
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 	"github.com/riverqueue/river"
+	"golang.org/x/sync/errgroup"
 )
 
 type IndexArgs struct {
-	WorkflowID     string `json:"workflow_id"`
-	Tag            string `json:"tag"`
-	InputTag       string `json:"input_tag"`
-	ChunkStrategy  string `json:"chunk_strategy"`
-	ChunkSize      int    `json:"chunk_size"`
-	ChunkOverlap   int    `json:"chunk_overlap"`
-	EmbeddingModel string `json:"embedding_model"`
-	BatchSize      int    `json:"batch_size"`
+	WorkflowID       string `json:"workflow_id"`
+	Tag              string `json:"tag"`
+	InputTag         string `json:"input_tag"`
+	ChunkStrategy    string `json:"chunk_strategy"`
+	ChunkSize        int    `json:"chunk_size"`
+	ChunkOverlap     int    `json:"chunk_overlap"`
+	EmbeddingModel   string `json:"embedding_model"`
+	BatchSize        int    `json:"batch_size"`
+	IndexConcurrency int    `json:"index_concurrency"`
 }
 
 func (IndexArgs) Kind() string { return "index" }
@@ -52,6 +56,11 @@ func (w *IndexWorker) Work(ctx context.Context, job *river.Job[IndexArgs]) error
 }
 
 func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error) {
+	concurrency := args.IndexConcurrency
+	if concurrency <= 0 {
+		concurrency = 5
+	}
+
 	inputDir := path.Join("artifacts", "preprocessing", args.InputTag, "output")
 
 	llmBaseURL := os.Getenv("LLM_BASE_URL")
@@ -65,8 +74,8 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	}
 	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
 
-	embedder := embedder.New(llmBaseURL, llmAPIKey, args.EmbeddingModel, args.BatchSize)
-	chunker := chunker.NewFixedChunker(args.ChunkSize, args.ChunkOverlap)
+	emb := embedder.New(llmBaseURL, llmAPIKey, args.EmbeddingModel, args.BatchSize)
+	chunkr := chunker.NewFixedChunker(args.ChunkSize, args.ChunkOverlap)
 
 	qStore := qstore.NewQdrantStore(qdrantAPIKey)
 	if err := qStore.Connect(ctx, qdrantURL); err != nil {
@@ -75,11 +84,9 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	defer qStore.Close()
 
 	collectionName := args.Tag
-	var vectorSize int
 
-	totalDocs := 0
-	totalChunks := 0
-
+	// Phase 1: collect all .md file paths
+	var mdFiles []string
 	if err := filepath.WalkDir(inputDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			slog.Warn("walk error", "path", path, "err", err)
@@ -91,65 +98,89 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 		if d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
 			return nil
 		}
-
-		relPath, err := filepath.Rel(inputDir, path)
-		if err != nil {
-			return fmt.Errorf("relative path: %w", err)
-		}
-		relPath = filepath.ToSlash(relPath)
-
-		doc, err := parser.ParseFile(path, relPath)
-		if err != nil {
-			slog.Warn("parse error", "path", path, "err", err)
-			return nil
-		}
-
-		chunks, err := chunker.Chunk(doc)
-		if err != nil {
-			slog.Warn("chunk error", "path", path, "err", err)
-			return nil
-		}
-		if len(chunks) == 0 {
-			return nil
-		}
-
-		embeddings, err := embedder.Embed(ctx, chunks)
-		if err != nil {
-			return fmt.Errorf("embed %s: %w", relPath, err)
-		}
-
-		if vectorSize == 0 {
-			vectorSize = embeddings[0].Dimensions
-			if err := qStore.EnsureCollection(ctx, collectionName, vectorSize, "Cosine"); err != nil {
-				return fmt.Errorf("ensure collection: %w", err)
-			}
-		}
-
-		docChunks := make([]types.DocumentChunk, len(chunks))
-		for i := range chunks {
-			docChunks[i] = types.DocumentChunk{
-				Chunk:     chunks[i],
-				Embedding: embeddings[i],
-			}
-		}
-
-		if err := qStore.Store(ctx, collectionName, docChunks); err != nil {
-			return fmt.Errorf("store %s: %w", relPath, err)
-		}
-
-		totalDocs++
-		totalChunks += len(chunks)
-		slog.Info("indexed document", "path", relPath, "chunks", len(chunks))
+		mdFiles = append(mdFiles, path)
 		return nil
 	}); err != nil {
+		return nil, fmt.Errorf("walk input dir: %w", err)
+	}
+
+	slog.Info("indexing files", "count", len(mdFiles), "concurrency", concurrency)
+
+	var (
+		ensureOnce  sync.Once
+		initErr     error
+		totalDocs   atomic.Int32
+		totalChunks atomic.Int32
+	)
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+
+	for _, filePath := range mdFiles {
+		fp := filePath
+		g.Go(func() error {
+			relPath, err := filepath.Rel(inputDir, fp)
+			if err != nil {
+				return fmt.Errorf("relative path: %w", err)
+			}
+			relPath = filepath.ToSlash(relPath)
+
+			doc, err := parser.ParseFile(fp, relPath)
+			if err != nil {
+				slog.Warn("parse error", "path", fp, "err", err)
+				return nil
+			}
+
+			chunks, err := chunkr.Chunk(doc)
+			if err != nil {
+				slog.Warn("chunk error", "path", fp, "err", err)
+				return nil
+			}
+			if len(chunks) == 0 {
+				return nil
+			}
+
+			embeddings, err := emb.Embed(ctx, chunks)
+			if err != nil {
+				return fmt.Errorf("embed %s: %w", relPath, err)
+			}
+
+			ensureOnce.Do(func() {
+				vectorSize := embeddings[0].Dimensions
+				initErr = qStore.EnsureCollection(ctx, collectionName, vectorSize, "Cosine")
+			})
+			if initErr != nil {
+				return fmt.Errorf("ensure collection: %w", initErr)
+			}
+
+			docChunks := make([]types.DocumentChunk, len(chunks))
+			for i := range chunks {
+				docChunks[i] = types.DocumentChunk{
+					Chunk:     chunks[i],
+					Embedding: embeddings[i],
+				}
+			}
+
+			if err := qStore.Store(ctx, collectionName, docChunks); err != nil {
+				return fmt.Errorf("store %s: %w", relPath, err)
+			}
+
+			totalDocs.Add(1)
+			totalChunks.Add(int32(len(chunks)))
+			slog.Info("indexed document", "path", relPath, "chunks", len(chunks))
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
 	return &types.StageResult{
 		Name: "index",
 		Output: map[string]any{
-			"document_count": totalDocs,
-			"chunk_count":    totalChunks,
+			"document_count": totalDocs.Load(),
+			"chunk_count":    totalChunks.Load(),
 			"collection":     collectionName,
 		},
 	}, nil

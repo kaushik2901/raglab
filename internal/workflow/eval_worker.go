@@ -25,6 +25,7 @@ type EvalArgs struct {
 	DatasetPath   string `json:"dataset_path"`
 	TopK          int    `json:"top_k"`
 	LLMModel      string `json:"llm_model"`
+	Concurrency   int    `json:"concurrency"`
 }
 
 func (EvalArgs) Kind() string { return "eval" }
@@ -93,8 +94,8 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		evaluator := eval.NewRetrievalEvaluator(ret, gen, args.TopK)
 
 		// 4. Run retrieval evaluation against the existing collection
-		slog.Info("running retrieval evaluation", "collection", args.IndexTag, "strategy", args.QueryStrategy)
-		results, err := evaluator.Evaluate(ctx, args.IndexTag, dataset.Questions)
+		slog.Info("running retrieval evaluation", "collection", args.IndexTag, "strategy", args.QueryStrategy, "concurrency", args.Concurrency)
+		results, err := evaluator.Evaluate(ctx, args.IndexTag, dataset.Questions, args.Concurrency)
 		if err != nil {
 			return nil, fmt.Errorf("evaluation: %w", err)
 		}

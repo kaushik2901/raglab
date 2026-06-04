@@ -169,6 +169,17 @@ func TestLoad_Defaults(t *testing.T) {
 	assert.Equal(t, "info", cfg.LogLevel)
 }
 
+func TestResolveTag_Provided(t *testing.T) {
+	tag := ResolveTag("my-custom-tag", "idx")
+	assert.Equal(t, "my-custom-tag", tag)
+}
+
+func TestResolveTag_Generated(t *testing.T) {
+	tag := ResolveTag("", "eval")
+	assert.Contains(t, tag, "eval-")
+	assert.Len(t, tag, len("eval-")+15)
+}
+
 func TestLoad_WithFlags(t *testing.T) {
 	cfg, err := parseTestFlags([]string{
 		"--max-retries", "5",

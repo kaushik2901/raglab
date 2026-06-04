@@ -7,19 +7,26 @@ import (
 	"time"
 
 	"github.com/openai/openai-go"
+	"golang.org/x/sync/errgroup"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
+type Retriever interface {
+	Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error)
+}
+
+type Generator interface {
+	Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
+}
+
 type RetrievalEvaluator struct {
-	retriever *retriever.Retriever
-	generator *generator.Generator
+	retriever Retriever
+	generator Generator
 	topK      int
 }
 
-func NewRetrievalEvaluator(ret *retriever.Retriever, gen *generator.Generator, topK int) *RetrievalEvaluator {
+func NewRetrievalEvaluator(ret Retriever, gen Generator, topK int) *RetrievalEvaluator {
 	return &RetrievalEvaluator{
 		retriever: ret,
 		generator: gen,
@@ -27,17 +34,30 @@ func NewRetrievalEvaluator(ret *retriever.Retriever, gen *generator.Generator, t
 	}
 }
 
-func (e *RetrievalEvaluator) Evaluate(ctx context.Context, collection string, questions []types.EvalQuestion) ([]types.RetrievalResult, error) {
-	results := make([]types.RetrievalResult, 0, len(questions))
-
-	for _, q := range questions {
-		result, err := e.evaluateOne(ctx, collection, q)
-		if err != nil {
-			return nil, fmt.Errorf("evaluate question %s: %w", q.ID, err)
-		}
-		results = append(results, *result)
+func (e *RetrievalEvaluator) Evaluate(ctx context.Context, collection string, questions []types.EvalQuestion, concurrency int) ([]types.RetrievalResult, error) {
+	if concurrency <= 0 {
+		concurrency = 5
 	}
 
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+
+	results := make([]types.RetrievalResult, len(questions))
+	for i, q := range questions {
+		i, q := i, q
+		g.Go(func() error {
+			result, err := e.evaluateOne(ctx, collection, q)
+			if err != nil {
+				return fmt.Errorf("evaluate question %s: %w", q.ID, err)
+			}
+			results[i] = *result
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
 	return results, nil
 }
 

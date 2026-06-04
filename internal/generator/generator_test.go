@@ -1,9 +1,15 @@
 package generator
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -16,4 +22,116 @@ func TestNewEmptyAPIKey(t *testing.T) {
 	g := New("http://localhost:1234/v1", "", "local-model")
 	assert.NotNil(t, g)
 	assert.Equal(t, "local-model", g.model)
+}
+
+func TestGenerate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{
+			"id":      "chatcmpl-123",
+			"object":  "chat.completion",
+			"created": 1700000000,
+			"model":   "gpt-4o-mini",
+			"choices": []map[string]any{
+				{
+					"index":         0,
+					"finish_reason": "stop",
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "Hello, world!",
+					},
+				},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     10,
+				"completion_tokens": 20,
+				"total_tokens":      30,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	g := New(srv.URL, "", "gpt-4o-mini")
+	params := openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("say hello"),
+		},
+	}
+
+	completion, err := g.Generate(context.Background(), params)
+	require.NoError(t, err)
+	require.Len(t, completion.Choices, 1)
+	assert.Equal(t, "Hello, world!", completion.Choices[0].Message.Content)
+	assert.Equal(t, int64(10), completion.Usage.PromptTokens)
+	assert.Equal(t, int64(20), completion.Usage.CompletionTokens)
+}
+
+func TestGenerate_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("internal error"))
+	}))
+	defer srv.Close()
+
+	g := New(srv.URL, "", "gpt-4o-mini")
+	params := openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("hello"),
+		},
+	}
+
+	_, err := g.Generate(context.Background(), params)
+	require.Error(t, err)
+}
+
+func TestGenerate_EmptyChoices(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{
+			"id":      "chatcmpl-123",
+			"object":  "chat.completion",
+			"created": 1700000000,
+			"model":   "gpt-4o-mini",
+			"choices": []map[string]any{},
+			"usage": map[string]any{
+				"prompt_tokens":     0,
+				"completion_tokens": 0,
+				"total_tokens":      0,
+			},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	g := New(srv.URL, "", "gpt-4o-mini")
+	params := openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("hello"),
+		},
+	}
+
+	completion, err := g.Generate(context.Background(), params)
+	require.NoError(t, err)
+	assert.Empty(t, completion.Choices)
+}
+
+func TestNormalizeBaseURL(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"https://api.openai.com/v1", "https://api.openai.com"},
+		{"https://api.openai.com/v1/", "https://api.openai.com"},
+		{"https://api.openai.com", "https://api.openai.com"},
+		{"http://localhost:1234/v1", "http://localhost:1234"},
+		{"http://localhost:1234/v1/", "http://localhost:1234"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := normalizeBaseURL(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
