@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -25,20 +25,16 @@ func main() {
 }
 
 func run() error {
-	origArgs := os.Args
-	os.Args = append([]string{"preprocess"}, os.Args[1:]...)
-	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	flag.CommandLine = flag.NewFlagSet("preprocess", flag.ExitOnError)
 
-	repoURL := flag.String("repo-url", envOrDefault("REPO_URL", "https://gitlab.com/gitlab-com/content-sites/handbook"), "Repository URL to clone")
-	tag := flag.String("tag", envOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
-	includeDirsRaw := flag.String("include-dirs", envOrDefault("INCLUDE_DIRS", ""), "Comma-separated subdirectories to process (empty = process all)")
+	repoURL := flag.String("repo-url", config.EnvOrDefault("REPO_URL", "https://gitlab.com/gitlab-com/content-sites/handbook.git"), "Repository URL to clone")
+	tag := flag.String("tag", config.EnvOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
+	includeDirsRaw := flag.String("include-dirs", config.EnvOrDefault("INCLUDE_DIRS", ""), "Comma-separated subdirectories to process (empty = process all)")
 
 	cfg, err := config.Load()
-	os.Args = origArgs
 	if err != nil {
 		return err
 	}
-	_ = cfg
 
 	ctx := context.Background()
 
@@ -54,7 +50,7 @@ func run() error {
 
 	store := workflow.NewStore(pool)
 
-	resolvedTag := resolveTag(*tag, "pre")
+	resolvedTag := config.ResolveTag(*tag, "pre")
 
 	var includeDirs []string
 	if *includeDirsRaw != "" {
@@ -66,7 +62,7 @@ func run() error {
 		}
 	}
 
-	repoPath := filepath.Join("artifacts", "preprocessing", resolvedTag, "repo")
+	repoPath := path.Join("artifacts", "preprocessing", resolvedTag, "repo")
 
 	wfID, err := store.CreateWorkflow(ctx, "preprocess", resolvedTag, map[string]any{
 		"repo_url":     *repoURL,
@@ -78,7 +74,9 @@ func run() error {
 
 	slog.Info("created workflow", "id", wfID, "tag", resolvedTag)
 
-	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		MaxAttempts: cfg.MaxRetries + 1,
+	})
 	if err != nil {
 		return fmt.Errorf("river client: %w", err)
 	}
@@ -95,19 +93,9 @@ func run() error {
 	}
 
 	slog.Info("inserted clone job, waiting for completion")
-	return workflow.PollUntilDone(ctx, store, wfID, 2*time.Second)
-}
-
-func resolveTag(tag, prefix string) string {
-	if tag != "" {
-		return tag
+	if err := workflow.PollUntilDone(ctx, store, wfID, 2*time.Second); err != nil {
+		return err
 	}
-	return prefix + "-" + time.Now().Format("20060102-150405")
-}
-
-func envOrDefault(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
+	slog.Info("preprocessing pipeline complete", "tag", resolvedTag)
+	return nil
 }

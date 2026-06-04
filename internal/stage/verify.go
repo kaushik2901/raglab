@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -82,7 +83,11 @@ func VerifyStage(outputPath string) types.Stage {
 func checkFileCountMatch(report *VerificationReport, srcDir, dstDir string) {
 	srcCount := 0
 	filepath.Walk(srcDir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
+			slog.Warn("walk error", "path", path, "err", err)
+			return nil
+		}
+		if fi.IsDir() {
 			return nil
 		}
 		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
@@ -92,7 +97,11 @@ func checkFileCountMatch(report *VerificationReport, srcDir, dstDir string) {
 	})
 	dstCount := 0
 	filepath.Walk(dstDir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
+			slog.Warn("walk error", "path", path, "err", err)
+			return nil
+		}
+		if fi.IsDir() {
 			return nil
 		}
 		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
@@ -111,7 +120,11 @@ func checkDirectoryStructure(report *VerificationReport, srcDir, dstDir string) 
 	collectRelPaths := func(root string) map[string]bool {
 		paths := make(map[string]bool)
 		filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
-			if err != nil || fi.IsDir() {
+			if err != nil {
+				slog.Warn("walk error", "path", path, "err", err)
+				return nil
+			}
+			if fi.IsDir() {
 				return nil
 			}
 			if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
@@ -151,7 +164,11 @@ func checkDirectoryStructure(report *VerificationReport, srcDir, dstDir string) 
 func checkNoShortcodes(report *VerificationReport, dir string) {
 	issues := []string{}
 	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
+			slog.Warn("walk error", "path", path, "err", err)
+			return nil
+		}
+		if fi.IsDir() {
 			return nil
 		}
 		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
@@ -159,6 +176,7 @@ func checkNoShortcodes(report *VerificationReport, dir string) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			slog.Warn("read error", "path", path, "err", err)
 			return nil
 		}
 		if shortcodePattern.Match(data) {
@@ -180,7 +198,11 @@ func checkNoShortcodes(report *VerificationReport, dir string) {
 func checkNoRawHTML(report *VerificationReport, dir string) {
 	issues := []string{}
 	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
+			slog.Warn("walk error", "path", path, "err", err)
+			return nil
+		}
+		if fi.IsDir() {
 			return nil
 		}
 		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
@@ -188,6 +210,7 @@ func checkNoRawHTML(report *VerificationReport, dir string) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
+			slog.Warn("read error", "path", path, "err", err)
 			return nil
 		}
 		if htmlTagPattern.Match(data) {
@@ -210,7 +233,11 @@ func checkMinimumContent(report *VerificationReport, dir string) {
 	minContent := 50
 	issues := []string{}
 	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
+			slog.Warn("walk error", "path", path, "err", err)
+			return nil
+		}
+		if fi.IsDir() {
 			return nil
 		}
 		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
@@ -249,10 +276,14 @@ func checkTotalSize(report *VerificationReport, srcDir, dstDir string) {
 func computeTotalSize(dir string) int64 {
 	var total int64
 	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil || fi.IsDir() {
+		if err != nil {
+			slog.Warn("walk error", "path", path, "err", err)
 			return nil
 		}
-		if strings.HasSuffix(fi.Name(), ".md") && strings.HasSuffix(fi.Name(), ".markdown") {
+		if fi.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
 			total += fi.Size()
 		}
 		return nil

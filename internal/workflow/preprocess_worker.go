@@ -2,8 +2,7 @@ package workflow
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
+	"path"
 
 	"github.com/jackc/pgx/v5"
 	stagepkg "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
@@ -51,37 +50,15 @@ func NewCloneWorker(store *Store, client *river.Client[pgx.Tx]) *CloneWorker {
 }
 
 func (w *CloneWorker) Work(ctx context.Context, job *river.Job[CloneArgs]) error {
-	stepID, err := w.Store.CreateStep(ctx, job.Args.WorkflowID, "clone")
-	if err != nil {
-		return fmt.Errorf("create step: %w", err)
-	}
-
-	if err := w.Store.UpdateStepStatus(ctx, stepID, "running", nil, nil); err != nil {
-		return fmt.Errorf("mark step running: %w", err)
-	}
-
-	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
-	if err != nil {
-		errStr := err.Error()
-		w.Store.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
-		return fmt.Errorf("load state: %w", err)
-	}
-
-	stage := stagepkg.CloneStage(job.Args.RepoURL, job.Args.RepoPath)
-	result, err := stage.Run(ctx, state)
-	if err != nil {
-		errStr := err.Error()
-		w.Store.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
+	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "clone", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
+		return stagepkg.CloneStage(job.Args.RepoURL, job.Args.RepoPath).Run(ctx, state)
+	}); err != nil {
 		return err
 	}
 
-	if err := w.Store.UpdateStepStatus(ctx, stepID, "succeeded", nil, result.Output); err != nil {
-		return fmt.Errorf("mark step succeeded: %w", err)
-	}
-
-	repoPath := filepath.Join("artifacts", "preprocessing", job.Args.Tag, "repo")
-	outPath := filepath.Join("artifacts", "preprocessing", job.Args.Tag, "output")
-	_, err = w.Client.Insert(ctx, &PreprocessArgs{
+	repoPath := path.Join("artifacts", "preprocessing", job.Args.Tag, "repo")
+	outPath := path.Join("artifacts", "preprocessing", job.Args.Tag, "output")
+	_, err := w.Client.Insert(ctx, &PreprocessArgs{
 		WorkflowID:  job.Args.WorkflowID,
 		Tag:         job.Args.Tag,
 		RepoPath:    repoPath,
@@ -102,37 +79,15 @@ func NewPreprocessWorker(store *Store, client *river.Client[pgx.Tx]) *Preprocess
 }
 
 func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessArgs]) error {
-	stepID, err := w.Store.CreateStep(ctx, job.Args.WorkflowID, "preprocess")
-	if err != nil {
-		return fmt.Errorf("create step: %w", err)
-	}
-
-	if err := w.Store.UpdateStepStatus(ctx, stepID, "running", nil, nil); err != nil {
-		return fmt.Errorf("mark step running: %w", err)
-	}
-
-	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
-	if err != nil {
-		errStr := err.Error()
-		w.Store.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
-		return fmt.Errorf("load state: %w", err)
-	}
-
-	stage := stagepkg.PreprocessStage(job.Args.OutputPath, job.Args.IncludeDirs)
-	result, err := stage.Run(ctx, state)
-	if err != nil {
-		errStr := err.Error()
-		w.Store.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
+	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "preprocess", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
+		return stagepkg.PreprocessStage(job.Args.OutputPath, job.Args.IncludeDirs).Run(ctx, state)
+	}); err != nil {
 		return err
 	}
 
-	if err := w.Store.UpdateStepStatus(ctx, stepID, "succeeded", nil, result.Output); err != nil {
-		return fmt.Errorf("mark step succeeded: %w", err)
-	}
-
-	repoPath := filepath.Join("artifacts", "preprocessing", job.Args.Tag, "repo")
-	outPath := filepath.Join("artifacts", "preprocessing", job.Args.Tag, "output")
-	_, err = w.Client.Insert(ctx, &VerifyArgs{
+	repoPath := path.Join("artifacts", "preprocessing", job.Args.Tag, "repo")
+	outPath := path.Join("artifacts", "preprocessing", job.Args.Tag, "output")
+	_, err := w.Client.Insert(ctx, &VerifyArgs{
 		WorkflowID: job.Args.WorkflowID,
 		Tag:        job.Args.Tag,
 		RepoPath:   repoPath,
@@ -152,52 +107,12 @@ func NewVerifyWorker(store *Store, client *river.Client[pgx.Tx]) *VerifyWorker {
 }
 
 func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
-	stepID, err := w.Store.CreateStep(ctx, job.Args.WorkflowID, "verify")
-	if err != nil {
-		return fmt.Errorf("create step: %w", err)
-	}
-
-	if err := w.Store.UpdateStepStatus(ctx, stepID, "running", nil, nil); err != nil {
-		return fmt.Errorf("mark step running: %w", err)
-	}
-
-	state, err := w.Store.LoadState(ctx, job.Args.WorkflowID)
-	if err != nil {
-		errStr := err.Error()
-		w.Store.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
-		return fmt.Errorf("load state: %w", err)
-	}
-
-	stage := stagepkg.VerifyStage(job.Args.OutputPath)
-	result, err := stage.Run(ctx, state)
-	if err != nil {
-		errStr := err.Error()
-		w.Store.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
+	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "verify", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
+		return stagepkg.VerifyStage(job.Args.OutputPath).Run(ctx, state)
+	}); err != nil {
 		return err
 	}
 
-	if err := w.Store.UpdateStepStatus(ctx, stepID, "succeeded", nil, result.Output); err != nil {
-		return fmt.Errorf("mark step succeeded: %w", err)
-	}
-
-	if err := w.Store.UpdateWorkflowStatus(ctx, job.Args.WorkflowID, "succeeded"); err != nil {
-		return fmt.Errorf("mark workflow succeeded: %w", err)
-	}
-
-	return nil
+	return w.Store.UpdateWorkflowStatus(ctx, job.Args.WorkflowID, "succeeded")
 }
 
-func RunCloneStep(ctx context.Context, args CloneArgs, state map[string]any) (*types.StageResult, error) {
-	stage := stagepkg.CloneStage(args.RepoURL, args.RepoPath)
-	return stage.Run(ctx, state)
-}
-
-func RunPreprocessStep(ctx context.Context, args PreprocessArgs, state map[string]any) (*types.StageResult, error) {
-	stage := stagepkg.PreprocessStage(args.OutputPath, args.IncludeDirs)
-	return stage.Run(ctx, state)
-}
-
-func RunVerifyStep(ctx context.Context, args VerifyArgs, state map[string]any) (*types.StageResult, error) {
-	stage := stagepkg.VerifyStage(args.OutputPath)
-	return stage.Run(ctx, state)
-}

@@ -3,10 +3,50 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
+
+// runStep is a helper that encapsulates the common worker pattern:
+// CreateStep → UpdateStepStatus(running) → LoadState → run function → UpdateStepStatus(succeeded/failed).
+// On success it returns nil; on failure it marks the step as failed and returns the error.
+func (s *Store) runStep(ctx context.Context, wfID, stepName string, fn func(context.Context, map[string]any) (*types.StageResult, error)) error {
+	stepID, err := s.CreateStep(ctx, wfID, stepName)
+	if err != nil {
+		return fmt.Errorf("create step: %w", err)
+	}
+
+	slog.Info("step started", "wf_id", wfID, "step", stepName)
+
+	if err := s.UpdateStepStatus(ctx, stepID, "running", nil, nil); err != nil {
+		return fmt.Errorf("mark step running: %w", err)
+	}
+
+	state, err := s.LoadState(ctx, wfID)
+	if err != nil {
+		errStr := err.Error()
+		s.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
+		slog.Warn("step failed", "wf_id", wfID, "step", stepName, "err", err)
+		return fmt.Errorf("load state: %w", err)
+	}
+
+	result, err := fn(ctx, state)
+	if err != nil {
+		errStr := err.Error()
+		s.UpdateStepStatus(ctx, stepID, "failed", &errStr, nil)
+		slog.Warn("step failed", "wf_id", wfID, "step", stepName, "err", err)
+		return err
+	}
+
+	if err := s.UpdateStepStatus(ctx, stepID, "succeeded", nil, result.Output); err != nil {
+		return fmt.Errorf("mark step succeeded: %w", err)
+	}
+
+	slog.Info("step completed", "wf_id", wfID, "step", stepName)
+	return nil
+}
 
 var validWorkflowStatuses = map[string]bool{
 	"pending": true, "running": true, "succeeded": true, "failed": true,
@@ -17,7 +57,7 @@ var validStepStatuses = map[string]bool{
 }
 
 var workflowTransitions = map[string]map[string]bool{
-	"pending":   {"running": true},
+	"pending":   {"running": true, "succeeded": true, "failed": true},
 	"running":   {"succeeded": true, "failed": true},
 	"failed":    {"running": true},
 	"succeeded": {},

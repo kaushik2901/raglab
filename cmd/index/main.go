@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
@@ -24,24 +23,20 @@ func main() {
 }
 
 func run() error {
-	origArgs := os.Args
-	os.Args = append([]string{"index"}, os.Args[1:]...)
-	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	flag.CommandLine = flag.NewFlagSet("index", flag.ExitOnError)
 
-	inputTag := flag.String("input-tag", envOrDefault("INPUT_TAG", ""), "Source preprocessed tag (for indexing)")
-	chunkStrategy := flag.String("chunk-strategy", envOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed only)")
-	chunkSize := flag.Int("chunk-size", intEnvOrDefault("CHUNK_SIZE", 512), "Target token count per chunk")
-	chunkOverlap := flag.Int("chunk-overlap", intEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
-	embeddingModel := flag.String("embedding-model", envOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
-	batchSize := flag.Int("batch-size", intEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
-	tag := flag.String("tag", envOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
+	inputTag := flag.String("input-tag", config.EnvOrDefault("INPUT_TAG", ""), "Source preprocessed tag (for indexing)")
+	chunkStrategy := flag.String("chunk-strategy", config.EnvOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed only)")
+	chunkSize := flag.Int("chunk-size", config.IntEnvOrDefault("CHUNK_SIZE", 512), "Target token count per chunk")
+	chunkOverlap := flag.Int("chunk-overlap", config.IntEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
+	embeddingModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
+	batchSize := flag.Int("batch-size", config.IntEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
+	tag := flag.String("tag", config.EnvOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
 
 	cfg, err := config.Load()
-	os.Args = origArgs
 	if err != nil {
 		return err
 	}
-	_ = cfg
 
 	if *inputTag == "" {
 		return fmt.Errorf("--input-tag is required (preprocessed output tag to index)")
@@ -61,7 +56,7 @@ func run() error {
 
 	store := workflow.NewStore(pool)
 
-	resolvedTag := resolveTag(*tag, "idx")
+	resolvedTag := config.ResolveTag(*tag, "idx")
 
 	wfID, err := store.CreateWorkflow(ctx, "index", resolvedTag, map[string]any{
 		"input_tag":       *inputTag,
@@ -77,43 +72,31 @@ func run() error {
 
 	slog.Info("created workflow", "id", wfID, "tag", resolvedTag, "input_tag", *inputTag)
 
-	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		MaxAttempts: cfg.MaxRetries + 1,
+	})
 	if err != nil {
 		return fmt.Errorf("river client: %w", err)
 	}
 
 	_, err = riverClient.Insert(ctx, &workflow.ParseArgs{
-		WorkflowID: wfID,
-		Tag:        resolvedTag,
-		InputTag:   *inputTag,
+		WorkflowID:     wfID,
+		Tag:            resolvedTag,
+		InputTag:       *inputTag,
+		ChunkStrategy:  *chunkStrategy,
+		ChunkSize:      *chunkSize,
+		ChunkOverlap:   *chunkOverlap,
+		EmbeddingModel: *embeddingModel,
+		BatchSize:      *batchSize,
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("insert parse job: %w", err)
 	}
 
 	slog.Info("inserted parse job, waiting for completion")
-	return workflow.PollUntilDone(ctx, store, wfID, 2*time.Second)
-}
-
-func resolveTag(tag, prefix string) string {
-	if tag != "" {
-		return tag
+	if err := workflow.PollUntilDone(ctx, store, wfID, 2*time.Second); err != nil {
+		return err
 	}
-	return prefix + "-" + time.Now().Format("20060102-150405")
-}
-
-func envOrDefault(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
-}
-
-func intEnvOrDefault(key string, defaultVal int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
-	}
-	return defaultVal
+	slog.Info("indexing pipeline complete", "tag", resolvedTag, "input_tag", *inputTag)
+	return nil
 }

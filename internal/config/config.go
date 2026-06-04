@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -50,6 +51,38 @@ func (c *Config) Validate() error {
 		return errors.New("llm-base-url is required")
 	}
 	return nil
+}
+
+func EnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
+func IntEnvOrDefault(key string, defaultVal int) int {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+func DurationEnvOrDefault(key string, defaultVal time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return defaultVal
+}
+
+func ResolveTag(tag, prefix string) string {
+	if tag != "" {
+		return tag
+	}
+	return fmt.Sprintf("%s-%s", prefix, time.Now().Format("20060102-150405"))
 }
 
 func envOrDefault(key, defaultVal string) string {
