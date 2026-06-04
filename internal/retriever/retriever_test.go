@@ -62,16 +62,24 @@ func (m *mockStore) Close() error {
 func TestNew(t *testing.T) {
 	e := new(mockEmbedder)
 	s := new(mockStore)
-	r := New(e, s)
+	r, err := New(e, s, StrategyNaiveSearch)
+	assert.NoError(t, err)
 	assert.NotNil(t, r)
-	assert.Equal(t, e, r.embedder)
-	assert.Equal(t, s, r.store)
+	assert.Equal(t, StrategyNaiveSearch, r.strategy)
+}
+
+func TestNew_UnknownStrategy(t *testing.T) {
+	e := new(mockEmbedder)
+	s := new(mockStore)
+	_, err := New(e, s, "hybrid-search")
+	assert.ErrorContains(t, err, "unknown query strategy")
 }
 
 func TestRetrieve(t *testing.T) {
 	e := new(mockEmbedder)
 	s := new(mockStore)
-	r := New(e, s)
+	r, err := New(e, s, StrategyNaiveSearch)
+	assert.NoError(t, err)
 
 	ctx := context.Background()
 	expectedResults := []types.SearchResult{
@@ -95,33 +103,36 @@ func TestRetrieve(t *testing.T) {
 func TestRetrieve_EmbedError(t *testing.T) {
 	e := new(mockEmbedder)
 	s := new(mockStore)
-	r := New(e, s)
+	r, err := New(e, s, StrategyNaiveSearch)
+	assert.NoError(t, err)
 
 	ctx := context.Background()
 	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "query"}}).
 		Return([]types.Embedding{}, errors.New("api error"))
 
-	_, err := r.Retrieve(ctx, "col", "query", 5)
+	_, err = r.Retrieve(ctx, "col", "query", 5)
 	assert.ErrorContains(t, err, "embed query")
 }
 
 func TestRetrieve_EmptyEmbeddings(t *testing.T) {
 	e := new(mockEmbedder)
 	s := new(mockStore)
-	r := New(e, s)
+	r, err := New(e, s, StrategyNaiveSearch)
+	assert.NoError(t, err)
 
 	ctx := context.Background()
 	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "query"}}).
 		Return([]types.Embedding{}, nil)
 
-	_, err := r.Retrieve(ctx, "col", "query", 5)
+	_, err = r.Retrieve(ctx, "col", "query", 5)
 	assert.ErrorContains(t, err, "no embeddings returned")
 }
 
 func TestRetrieve_SearchError(t *testing.T) {
 	e := new(mockEmbedder)
 	s := new(mockStore)
-	r := New(e, s)
+	r, err := New(e, s, StrategyNaiveSearch)
+	assert.NoError(t, err)
 
 	ctx := context.Background()
 	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "query"}}).
@@ -130,6 +141,6 @@ func TestRetrieve_SearchError(t *testing.T) {
 	s.On("Search", ctx, "col", []float32{0.1}, 5).
 		Return([]types.SearchResult{}, errors.New("search failed"))
 
-	_, err := r.Retrieve(ctx, "col", "query", 5)
+	_, err = r.Retrieve(ctx, "col", "query", 5)
 	assert.ErrorContains(t, err, "search")
 }

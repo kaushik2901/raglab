@@ -9,3 +9,7 @@ import (
 func TestIndexArgs_Kind(t *testing.T) {
 	assert.Equal(t, "index", IndexArgs{}.Kind())
 }
+
+func TestEvalArgs_Kind(t *testing.T) {
+	assert.Equal(t, "eval", EvalArgs{}.Kind())
+}

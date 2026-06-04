@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
 )
 
@@ -36,20 +37,23 @@ func run(ctx context.Context) error {
 	}
 
 	store := workflow.NewStore(pool)
+	evalStore := eval.NewEvalStore(pool)
 
 	cloneWorker := &workflow.CloneWorker{Store: store}
 	preprocessWorker := &workflow.PreprocessWorker{Store: store}
 	verifyWorker := &workflow.VerifyWorker{Store: store}
 	indexWorker := &workflow.IndexWorker{Store: store}
+	evalWorker := &workflow.EvalWorker{Store: store, EvalStore: evalStore}
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, cloneWorker)
 	river.AddWorker(workers, preprocessWorker)
 	river.AddWorker(workers, verifyWorker)
 	river.AddWorker(workers, indexWorker)
+	river.AddWorker(workers, evalWorker)
 
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		JobTimeout: 30 * time.Minute,
+		JobTimeout: 60 * time.Minute,
 		Queues: map[string]river.QueueConfig{
 			"default": {MaxWorkers: 5},
 		},

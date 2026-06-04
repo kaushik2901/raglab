@@ -3,10 +3,11 @@
 ## Commands
 
 ```powershell
-go build -o bin\preprocess.exe .\cmd\preprocess   # build
-.\bin\preprocess.exe                               # run (clones handbook, preprocesses, verifies)
-.\bin\preprocess.exe --from preprocess             # resume from a stage
-.\bin\preprocess.exe --max-retries 1 --retry-backoff 1s  # fast dev iteration
+go build -o bin\preprocess.exe .\cmd\preprocess   # build preprocess CLI
+go build -o bin\index.exe .\cmd\index             # build index CLI
+go build -o bin\query.exe .\cmd\query             # build query CLI
+go build -o bin\eval.exe .\cmd\eval               # build eval CLI
+go build -o bin\workerd.exe .\cmd\workerd         # build worker daemon
 go test ./...                                      # all tests
 Remove-Item -Recurse -Force bin,output,.journal    # clean
 ```
@@ -80,6 +81,18 @@ We use **River** (`github.com/riverqueue/river`) as the job engine — a lightwe
 
 `docs/river-implementation-plan.md` contains the detailed implementation plan for wrapping preprocessing and indexing as durable River workflows. The plan is organized into 6 sub-phases: Postgres/River infra → workflow DB layer → preprocessing workers → indexing workers → thin CLI wrappers → journal cleanup.
 
-## Future Evaluation
+## Retriever + Memory
 
-`docs/` also contains plans for an evaluation system — not yet implemented.
+- `internal/retriever/` — `Retriever` wraps `embedder.Embedder` + `store.VectorStore`; call `Retrieve(ctx, collection, query, topK)` for one-shot semantic search. Supports strategies (`naive-search` only currently).
+- `internal/memory/` — `Memory` interface + `RingBuffer`; thread-safe per-conversation-ID ring buffer with `Add`, `Get`, `Clear`
+
+## Evaluation Harness
+
+- `cmd/eval/main.go` — thin CLI that inserts a River `EvalArgs` job and polls until done
+- `internal/workflow/eval_worker.go` — `EvalWorker` River worker that runs retrieval evaluation against an existing Qdrant collection, persists to `eval_runs`/`eval_queries` tables, and writes a JSON report
+- `internal/eval/` — `ComputeAggregateMetrics` (HitRate, MRR, NDCG, Precision, Recall), `RetrievalEvaluator`, `EvalStore`, `PrintReport`/`WriteJSONReport`
+- `testdata/eval/questions.json` — ground-truth dataset (fill with your questions)
+- `internal/db/migrations/002_create_eval_tables.sql` — `eval_runs` + `eval_queries` tables
+- `RunIndexing(ctx, args)` in `internal/workflow/index_worker.go` is shared between `IndexWorker` and `EvalWorker`
+- Usage: `.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset testdata/eval/questions.json`
+- Run `.\bin\eval.exe --help` for all flags

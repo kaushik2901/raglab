@@ -30,6 +30,7 @@ func run() error {
 
 	query := flag.String("query", "", "Question to answer (required)")
 	tag := flag.String("tag", "", "Qdrant collection name (required)")
+	queryStrategy := flag.String("query-strategy", retriever.StrategyNaiveSearch, "Query strategy (naive-search)")
 	topK := flag.Int("top-k", 5, "Number of chunks to retrieve")
 	embedModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model")
 	llmModel := flag.String("llm-model", config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini"), "LLM model for answer generation")
@@ -62,11 +63,14 @@ func run() error {
 	}
 	defer qStore.Close()
 
-	ret := retriever.New(emb, qStore)
+	ret, err := retriever.New(emb, qStore, *queryStrategy)
+	if err != nil {
+		return err
+	}
 	gen := generator.New(*llmBaseURL, llmAPIKey, *llmModel)
 	mem := memory.NewRingBuffer(10)
 
-	slog.Info("retrieving context", "collection", *tag, "top_k", *topK)
+	slog.Info("retrieving context", "collection", *tag, "strategy", *queryStrategy, "top_k", *topK)
 	results, err := ret.Retrieve(ctx, *tag, *query, *topK)
 	if err != nil {
 		return fmt.Errorf("retrieve: %w", err)
