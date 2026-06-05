@@ -3,6 +3,7 @@ setlocal
 
 if /I "%1"=="preprocess"   goto :preprocess
 if /I "%1"=="index"        goto :index
+if /I "%1"=="eval"         goto :eval
 if /I "%1"=="query"        goto :query
 if /I "%1"=="workerd"      goto :workerd
 if /I "%1"=="test"         goto :test
@@ -17,10 +18,12 @@ go build -o bin\preprocess.exe .\cmd\preprocess
 if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\index.exe .\cmd\index
 if %errorlevel% neq 0 exit /b %errorlevel%
+go build -o bin\eval.exe .\cmd\eval
+if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\workerd.exe .\cmd\workerd
 go build -o bin\query.exe .\cmd\query
 if %errorlevel% neq 0 exit /b %errorlevel%
-if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe, bin\index.exe, bin\workerd.exe, bin\query.exe
+if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe, bin\index.exe, bin\eval.exe, bin\workerd.exe, bin\query.exe
 goto :end
 
 :query
@@ -42,6 +45,17 @@ setlocal enabledelayedexpansion
 set "ARGS=%*"
 set "ARGS=!ARGS:*%1 =!"
 bin\preprocess.exe !ARGS!
+endlocal
+goto :end
+
+:eval
+echo Building and running evaluation pipeline...
+go build -o bin\eval.exe .\cmd\eval
+if %errorlevel% neq 0 exit /b %errorlevel%
+setlocal enabledelayedexpansion
+set "ARGS=%*"
+set "ARGS=!ARGS:*%1 =!"
+bin\eval.exe !ARGS!
 endlocal
 goto :end
 
