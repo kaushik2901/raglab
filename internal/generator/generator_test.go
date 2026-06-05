@@ -12,16 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNew(t *testing.T) {
-	g := New("https://api.openai.com/v1", "sk-test", "gpt-4o-mini")
+func TestNewOpenAI(t *testing.T) {
+	g := NewOpenAI("https://api.openai.com/v1", "sk-test", "gpt-4o-mini")
 	assert.NotNil(t, g)
-	assert.Equal(t, "gpt-4o-mini", g.model)
+	assert.Equal(t, "gpt-4o-mini", g.ModelName())
 }
 
 func TestNewEmptyAPIKey(t *testing.T) {
-	g := New("http://localhost:1234/v1", "", "local-model")
+	g := NewOpenAI("http://localhost:1234/v1", "", "local-model")
 	assert.NotNil(t, g)
-	assert.Equal(t, "local-model", g.model)
+	assert.Equal(t, "local-model", g.ModelName())
 }
 
 func TestGenerate(t *testing.T) {
@@ -52,7 +52,7 @@ func TestGenerate(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := New(srv.URL, "", "gpt-4o-mini")
+	g := NewOpenAI(srv.URL, "", "gpt-4o-mini")
 	params := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("say hello"),
@@ -74,7 +74,7 @@ func TestGenerate_APIError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := New(srv.URL, "", "gpt-4o-mini")
+	g := NewOpenAI(srv.URL, "", "gpt-4o-mini")
 	params := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("hello"),
@@ -104,7 +104,7 @@ func TestGenerate_EmptyChoices(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := New(srv.URL, "", "gpt-4o-mini")
+	g := NewOpenAI(srv.URL, "", "gpt-4o-mini")
 	params := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("hello"),

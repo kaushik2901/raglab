@@ -32,9 +32,10 @@ func run() error {
 	tag := flag.String("tag", "", "Qdrant collection name (required)")
 	queryStrategy := flag.String("query-strategy", retriever.StrategyNaiveSearch, "Query strategy (naive-search)")
 	topK := flag.Int("top-k", 5, "Number of chunks to retrieve")
+	llmProvider := flag.String("llm-provider", config.EnvOrDefault("LLM_PROVIDER", "openai"), "LLM provider (openai, gemini, openrouter, lmstudio)")
+	embeddingProvider := flag.String("embedding-provider", config.EnvOrDefault("EMBEDDING_PROVIDER", ""), "Embedding provider (defaults to --llm-provider if empty)")
 	embedModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model")
 	llmModel := flag.String("llm-model", config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini"), "LLM model for answer generation")
-	llmBaseURL := flag.String("llm-base-url", config.EnvOrDefault("LLM_BASE_URL", "https://api.openai.com"), "OpenAI-compatible API base URL")
 	temperature := flag.Float64("temperature", 0.3, "LLM temperature")
 	maxTokens := flag.Int("max-tokens", 1024, "Max answer tokens")
 	convID := flag.String("conversation-id", "", "Conversation ID for multi-turn memory")
@@ -47,7 +48,10 @@ func run() error {
 		return fmt.Errorf("--tag is required")
 	}
 
-	llmAPIKey := os.Getenv("LLM_API_KEY")
+	if *embeddingProvider == "" {
+		*embeddingProvider = *llmProvider
+	}
+
 	qdrantURL := os.Getenv("QDRANT_URL")
 	if qdrantURL == "" {
 		qdrantURL = "http://localhost:6334"
@@ -56,7 +60,10 @@ func run() error {
 
 	ctx := context.Background()
 
-	emb := embedder.New(*llmBaseURL, llmAPIKey, *embedModel, 1)
+	emb, err := embedder.New(config.Provider(*embeddingProvider), *embedModel, 1)
+	if err != nil {
+		return fmt.Errorf("create embedder: %w", err)
+	}
 	qStore := qstore.NewQdrantStore(qdrantAPIKey)
 	if err := qStore.Connect(ctx, qdrantURL); err != nil {
 		return fmt.Errorf("connect qdrant: %w", err)
@@ -67,7 +74,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	gen := generator.New(*llmBaseURL, llmAPIKey, *llmModel)
+	gen, err := generator.New(config.Provider(*llmProvider), *llmModel)
+	if err != nil {
+		return fmt.Errorf("create generator: %w", err)
+	}
 	mem := memory.NewRingBuffer(10)
 
 	slog.Info("retrieving context", "collection", *tag, "strategy", *queryStrategy, "top_k", *topK)

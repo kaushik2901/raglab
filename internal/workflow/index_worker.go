@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/parser"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
@@ -22,15 +23,16 @@ import (
 )
 
 type IndexArgs struct {
-	WorkflowID       string `json:"workflow_id"`
-	Tag              string `json:"tag"`
-	InputTag         string `json:"input_tag"`
-	ChunkStrategy    string `json:"chunk_strategy"`
-	ChunkSize        int    `json:"chunk_size"`
-	ChunkOverlap     int    `json:"chunk_overlap"`
-	EmbeddingModel   string `json:"embedding_model"`
-	BatchSize        int    `json:"batch_size"`
-	IndexConcurrency int    `json:"index_concurrency"`
+	WorkflowID        string `json:"workflow_id"`
+	Tag               string `json:"tag"`
+	InputTag          string `json:"input_tag"`
+	ChunkStrategy     string `json:"chunk_strategy"`
+	ChunkSize         int    `json:"chunk_size"`
+	ChunkOverlap      int    `json:"chunk_overlap"`
+	EmbeddingProvider string `json:"embedding_provider"`
+	EmbeddingModel    string `json:"embedding_model"`
+	BatchSize         int    `json:"batch_size"`
+	IndexConcurrency  int    `json:"index_concurrency"`
 }
 
 func (IndexArgs) Kind() string { return "index" }
@@ -63,18 +65,21 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 
 	inputDir := path.Join("artifacts", "preprocessing", args.InputTag, "output")
 
-	llmBaseURL := os.Getenv("LLM_BASE_URL")
-	if llmBaseURL == "" {
-		llmBaseURL = "https://api.openai.com/v1"
+	embeddingProvider := config.Provider(args.EmbeddingProvider)
+	if embeddingProvider == "" {
+		embeddingProvider = config.ProviderOpenAI
 	}
-	llmAPIKey := os.Getenv("LLM_API_KEY")
+
+	emb, err := embedder.New(embeddingProvider, args.EmbeddingModel, args.BatchSize)
+	if err != nil {
+		return nil, fmt.Errorf("create embedder: %w", err)
+	}
+
 	qdrantURL := os.Getenv("QDRANT_URL")
 	if qdrantURL == "" {
 		qdrantURL = "http://localhost:6334"
 	}
 	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
-
-	emb := embedder.New(llmBaseURL, llmAPIKey, args.EmbeddingModel, args.BatchSize)
 	chunkr := chunker.NewFixedChunker(args.ChunkSize, args.ChunkOverlap)
 
 	qStore := qstore.NewQdrantStore(qdrantAPIKey)

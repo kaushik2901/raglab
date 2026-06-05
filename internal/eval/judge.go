@@ -7,6 +7,8 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared/constant"
+
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
 )
 
 type judgeResponse struct {
@@ -14,7 +16,7 @@ type judgeResponse struct {
 	Reasoning string  `json:"reasoning"`
 }
 
-func JudgeAnswer(ctx context.Context, gen Generator, question, context, expectedAnswer, generatedAnswer string) (float64, error) {
+func JudgeAnswer(ctx context.Context, gen generator.Generator, question, context, expectedAnswer, generatedAnswer string) (float64, error) {
 	prompt := fmt.Sprintf(`You are evaluating the correctness of a generated answer against a ground-truth answer and the retrieved context that was used to generate it.
 
 Question: %s

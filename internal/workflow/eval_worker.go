@@ -12,6 +12,7 @@ import (
 
 	"github.com/riverqueue/river"
 
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
@@ -21,16 +22,20 @@ import (
 )
 
 type EvalArgs struct {
-	WorkflowID    string `json:"workflow_id"`
-	Tag           string `json:"tag"`
-	MainTag       string `json:"main_tag"`
-	IndexTag      string `json:"index_tag"`
-	QueryStrategy string `json:"query_strategy"`
-	DatasetPath   string `json:"dataset_path"`
-	TopK          int    `json:"top_k"`
-	LLMModel      string `json:"llm_model"`
-	JudgeModel    string `json:"judge_model"`
-	Concurrency   int    `json:"concurrency"`
+	WorkflowID        string `json:"workflow_id"`
+	Tag               string `json:"tag"`
+	MainTag           string `json:"main_tag"`
+	IndexTag          string `json:"index_tag"`
+	QueryStrategy     string `json:"query_strategy"`
+	DatasetPath       string `json:"dataset_path"`
+	TopK              int    `json:"top_k"`
+	LLMProvider       string `json:"llm_provider"`
+	LLMModel          string `json:"llm_model"`
+	EmbeddingProvider string `json:"embedding_provider"`
+	EmbeddingModel    string `json:"embedding_model"`
+	JudgeProvider     string `json:"judge_provider"`
+	JudgeModel        string `json:"judge_model"`
+	Concurrency       int    `json:"concurrency"`
 }
 
 func (EvalArgs) Kind() string { return "eval" }
@@ -63,22 +68,19 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		slog.Info("loaded ground truth", "questions", len(dataset.Questions))
 
 		// 2. Create eval run in DB
-		llmAPIKey := os.Getenv("LLM_API_KEY")
 		qdrantURL := os.Getenv("QDRANT_URL")
 		if qdrantURL == "" {
 			qdrantURL = "http://localhost:6334"
 		}
 		qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
-		llmBaseURL := os.Getenv("LLM_BASE_URL")
-		if llmBaseURL == "" {
-			llmBaseURL = "https://api.openai.com/v1"
-		}
 
 		evalRunID, err := w.EvalStore.CreateRun(ctx, args.WorkflowID, args.Tag, map[string]any{
 			"index_tag":      args.IndexTag,
 			"query_strategy": args.QueryStrategy,
 			"top_k":          args.TopK,
+			"llm_provider":   args.LLMProvider,
 			"llm_model":      args.LLMModel,
+			"judge_provider": args.JudgeProvider,
 			"judge_model":    args.JudgeModel,
 		})
 		if err != nil {
@@ -86,7 +88,27 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		}
 
 		// 3. Connect to existing Qdrant collection
-		emb := embedder.New(llmBaseURL, llmAPIKey, "text-embedding-3-small", 1)
+		llmProvider := config.Provider(args.LLMProvider)
+		if llmProvider == "" {
+			llmProvider = config.ProviderOpenAI
+		}
+		embeddingProvider := config.Provider(args.EmbeddingProvider)
+		if embeddingProvider == "" {
+			embeddingProvider = config.ProviderOpenAI
+		}
+		judgeProvider := config.Provider(args.JudgeProvider)
+		if judgeProvider == "" {
+			judgeProvider = llmProvider
+		}
+
+		embeddingModel := args.EmbeddingModel
+		if embeddingModel == "" {
+			embeddingModel = "text-embedding-3-small"
+		}
+		emb, err := embedder.New(embeddingProvider, embeddingModel, 1)
+		if err != nil {
+			return nil, fmt.Errorf("create embedder: %w", err)
+		}
 		qStore := qstore.NewQdrantStore(qdrantAPIKey)
 		if err := qStore.Connect(ctx, qdrantURL); err != nil {
 			return nil, fmt.Errorf("connect qdrant: %w", err)
@@ -97,8 +119,14 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		if err != nil {
 			return nil, err
 		}
-		gen := generator.New(llmBaseURL, llmAPIKey, args.LLMModel)
-		judgeGen := generator.New(llmBaseURL, llmAPIKey, args.JudgeModel)
+		gen, err := generator.New(llmProvider, args.LLMModel)
+		if err != nil {
+			return nil, fmt.Errorf("create generator: %w", err)
+		}
+		judgeGen, err := generator.New(judgeProvider, args.JudgeModel)
+		if err != nil {
+			return nil, fmt.Errorf("create judge generator: %w", err)
+		}
 		evaluator := eval.NewRetrievalEvaluatorWithJudge(ret, gen, judgeGen, args.TopK)
 
 		// 4. Run retrieval evaluation against the existing collection

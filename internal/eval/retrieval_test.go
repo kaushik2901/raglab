@@ -33,6 +33,11 @@ func (m *mockGenerator) Generate(ctx context.Context, params openai.ChatCompleti
 	return args.Get(0).(*openai.ChatCompletion), args.Error(1)
 }
 
+func (m *mockGenerator) ModelName() string {
+	args := m.Called()
+	return args.String(0)
+}
+
 func TestNewRetrievalEvaluator(t *testing.T) {
 	r := new(mockRetriever)
 	g := new(mockGenerator)

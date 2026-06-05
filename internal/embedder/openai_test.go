@@ -16,7 +16,7 @@ import (
 )
 
 func newTestEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
-	e := New(baseURL, apiKey, model, batchSize)
+	e := newOpenAIEmbedder(baseURL, apiKey, model, batchSize)
 	e.retryBackoff = time.Millisecond
 	return e
 }
@@ -34,7 +34,7 @@ func TestEmbed_Basic(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "text-embedding-3-small", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "text-embedding-3-small", 10)
 	chunks := []types.Chunk{
 		{ID: "c1", Content: "hello"},
 		{ID: "c2", Content: "world"},
@@ -61,7 +61,7 @@ func TestEmbed_Batching(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := make([]types.Chunk, 25)
 	for i := range chunks {
 		chunks[i] = types.Chunk{ID: string(rune('a' + i)), Content: "x"}
@@ -80,7 +80,7 @@ func TestEmbed_EmptyInput(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	embeddings, err := e.Embed(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Empty(t, embeddings)
@@ -96,7 +96,7 @@ func TestEmbed_ModelName(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "custom-model", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "custom-model", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
@@ -113,7 +113,7 @@ func TestEmbed_Dimensions(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
@@ -130,7 +130,7 @@ func TestEmbed_ChunkID(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "my-chunk-id", Content: "x"}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
@@ -152,7 +152,7 @@ func TestEmbed_APIClient(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "sk-test-key", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "sk-test-key", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
@@ -174,7 +174,7 @@ func TestEmbed_APIEmptyKey(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
@@ -189,7 +189,7 @@ func TestEmbed_APIBadStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
@@ -243,7 +243,7 @@ func TestEmbed_ResponseMismatch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{
 		{ID: "c1", Content: "x"},
 		{ID: "c2", Content: "y"},
@@ -263,7 +263,7 @@ func TestEmbed_ModelField(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		e := New(srv.URL, "", "configured-model", 10)
+		e := newOpenAIEmbedder(srv.URL, "", "configured-model", 10)
 		chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 		embeddings, err := e.Embed(context.Background(), chunks)
@@ -280,7 +280,7 @@ func TestEmbed_ModelField(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		e := New(srv.URL, "", "configured-model", 10)
+		e := newOpenAIEmbedder(srv.URL, "", "configured-model", 10)
 		chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 		embeddings, err := e.Embed(context.Background(), chunks)
@@ -298,7 +298,7 @@ func TestEmbed_EmptyChunkContent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := New(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: ""}}
 
 	embeddings, err := e.Embed(context.Background(), chunks)
@@ -307,7 +307,7 @@ func TestEmbed_EmptyChunkContent(t *testing.T) {
 }
 
 func TestNewEmbedder_Defaults(t *testing.T) {
-	e := New("https://api.openai.com/v1", "", "text-embedding-3-small", 20)
+	e := newOpenAIEmbedder("https://api.openai.com/v1", "", "text-embedding-3-small", 20)
 	assert.Equal(t, "text-embedding-3-small", e.ModelName())
 	assert.Equal(t, 0, e.Dimensions())
 }

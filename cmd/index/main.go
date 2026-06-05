@@ -29,6 +29,8 @@ func run() error {
 	chunkStrategy := flag.String("chunk-strategy", config.EnvOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed only)")
 	chunkSize := flag.Int("chunk-size", config.IntEnvOrDefault("CHUNK_SIZE", 512), "Target token count per chunk")
 	chunkOverlap := flag.Int("chunk-overlap", config.IntEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
+	llmProvider := flag.String("llm-provider", config.EnvOrDefault("LLM_PROVIDER", "openai"), "LLM provider (openai, gemini, openrouter, lmstudio)")
+	embeddingProvider := flag.String("embedding-provider", config.EnvOrDefault("EMBEDDING_PROVIDER", ""), "Embedding provider (defaults to --llm-provider if empty)")
 	embeddingModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
 	batchSize := flag.Int("batch-size", config.IntEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
 	indexConcurrency := flag.Int("index-concurrency", config.IntEnvOrDefault("INDEX_CONCURRENCY", 5), "Number of files to index concurrently")
@@ -41,6 +43,10 @@ func run() error {
 
 	if *inputTag == "" {
 		return fmt.Errorf("--input-tag is required (preprocessed output tag to index)")
+	}
+
+	if *embeddingProvider == "" {
+		*embeddingProvider = *llmProvider
 	}
 
 	ctx := context.Background()
@@ -60,13 +66,14 @@ func run() error {
 	resolvedTag := config.ResolveTag(*tag, "idx")
 
 	wfID, err := store.CreateWorkflow(ctx, "index", resolvedTag, map[string]any{
-		"input_tag":         *inputTag,
-		"chunk_strategy":    *chunkStrategy,
-		"chunk_size":        *chunkSize,
-		"chunk_overlap":     *chunkOverlap,
-		"embedding_model":   *embeddingModel,
-		"batch_size":        *batchSize,
-		"index_concurrency": *indexConcurrency,
+		"input_tag":          *inputTag,
+		"chunk_strategy":     *chunkStrategy,
+		"chunk_size":         *chunkSize,
+		"chunk_overlap":      *chunkOverlap,
+		"embedding_provider": *embeddingProvider,
+		"embedding_model":    *embeddingModel,
+		"batch_size":         *batchSize,
+		"index_concurrency":  *indexConcurrency,
 	})
 	if err != nil {
 		return fmt.Errorf("create workflow: %w", err)
@@ -82,15 +89,16 @@ func run() error {
 	}
 
 	_, err = riverClient.Insert(ctx, &workflow.IndexArgs{
-		WorkflowID:       wfID,
-		Tag:              resolvedTag,
-		InputTag:         *inputTag,
-		ChunkStrategy:    *chunkStrategy,
-		ChunkSize:        *chunkSize,
-		ChunkOverlap:     *chunkOverlap,
-		EmbeddingModel:   *embeddingModel,
-		BatchSize:        *batchSize,
-		IndexConcurrency: *indexConcurrency,
+		WorkflowID:        wfID,
+		Tag:               resolvedTag,
+		InputTag:          *inputTag,
+		ChunkStrategy:     *chunkStrategy,
+		ChunkSize:         *chunkSize,
+		ChunkOverlap:      *chunkOverlap,
+		EmbeddingProvider: *embeddingProvider,
+		EmbeddingModel:    *embeddingModel,
+		BatchSize:         *batchSize,
+		IndexConcurrency:  *indexConcurrency,
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("insert parse job: %w", err)

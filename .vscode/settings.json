@@ -5,6 +5,8 @@
         "errgroup",
         "errorlevel",
         "kaushik",
+        "lmstudio",
+        "openrouter",
         "qdrant",
         "workerd"
     ]

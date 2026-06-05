@@ -39,7 +39,7 @@ func TestJudgeAnswer_ValidScore(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	score, err := JudgeAnswer(context.Background(), gen, "What is SSH?", "SSH is a network protocol", "SSH is a protocol", "SSH is a protocol")
 	require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestJudgeAnswer_PerfectScore(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	score, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "a")
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestJudgeAnswer_ZeroScore(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	score, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "wrong")
 	require.NoError(t, err)
@@ -78,7 +78,7 @@ func TestJudgeAnswer_APIError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	_, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
 	require.Error(t, err)
@@ -97,7 +97,7 @@ func TestJudgeAnswer_EmptyChoices(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	_, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
 	require.Error(t, err)
@@ -109,7 +109,7 @@ func TestJudgeAnswer_InvalidJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	_, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
 	require.Error(t, err)
@@ -121,7 +121,7 @@ func TestJudgeAnswer_ScoreOutOfRange(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	_, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
 	require.Error(t, err)
@@ -133,7 +133,7 @@ func TestJudgeAnswer_MissingScoreField(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	gen := generator.New(srv.URL, "", "gpt-4o")
+	gen := generator.NewOpenAI(srv.URL, "", "gpt-4o")
 
 	score, err := JudgeAnswer(context.Background(), gen, "q", "ctx", "a", "b")
 	require.NoError(t, err)

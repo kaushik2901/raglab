@@ -86,6 +86,50 @@ We use **River** (`github.com/riverqueue/river`) as the job engine — a lightwe
 - `internal/retriever/` — `Retriever` wraps `embedder.Embedder` + `store.VectorStore`; call `Retrieve(ctx, collection, query, topK)` for one-shot semantic search. Supports strategies (`naive-search` only currently).
 - `internal/memory/` — `Memory` interface + `RingBuffer`; thread-safe per-conversation-ID ring buffer with `Add`, `Get`, `Clear`
 
+## LLM Providers
+
+All four providers use **OpenAI-compatible API format** under the hood. The `--llm-provider` flag selects which set of env vars to read:
+
+| Provider     | Env API Key            | Env Base URL                      | Default Base URL                                              |
+|--------------|------------------------|-----------------------------------|---------------------------------------------------------------|
+| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` | `https://api.openai.com/v1`                 |
+| `gemini`     | `GEMINI_API_KEY`       | `GEMINI_BASE_URL`                 | `https://generativelanguage.googleapis.com/v1beta/openai`     |
+| `openrouter` | `OPENROUTER_API_KEY`   | `OPENROUTER_BASE_URL`             | `https://openrouter.ai/api/v1`                                |
+| `lmstudio`   | *(none)*               | `LMSTUDIO_BASE_URL`               | `http://localhost:1234/v1`                                    |
+
+### CLI flags
+
+| Flag                     | Env                     | Default      | Applies to                        |
+|--------------------------|-------------------------|--------------|-----------------------------------|
+| `--llm-provider`         | `LLM_PROVIDER`          | `openai`     | All CLIs (index, eval, query)     |
+| `--embedding-provider`   | `EMBEDDING_PROVIDER`    | → `--llm-provider` | index, eval, query          |
+| `--judge-provider`       | `JUDGE_PROVIDER`        | → `--llm-provider` | eval only                   |
+
+### Usage examples
+
+```powershell
+# OpenAI (default, backward-compatible)
+.\bin\query.exe --llm-provider openai --llm-model gpt-4o --tag my-collection --query "..."
+
+# OpenRouter
+$env:OPENROUTER_API_KEY = "sk-or-..."
+.\bin\index.exe --llm-provider openrouter --embedding-model "openai/text-embedding-3-small" --input-tag pre-20260603
+
+# LM Studio (local, no key)
+.\bin\query.exe --llm-provider lmstudio --llm-model "local-model" --tag my-collection --query "..."
+
+# Google Gemini via OpenAI-compatible endpoint
+$env:GEMINI_API_KEY = "AIza..."
+.\bin\eval.exe --llm-provider gemini --llm-model "gemini-2.0-flash" --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/...
+```
+
+### Embedder + Generator factories
+
+- `embedder.New(provider, model, batchSize)` — resolves env vars, returns `embedder.Embedder`
+- `generator.New(provider, model)` — resolves env vars, returns `generator.Generator`
+
+Both use `config.ResolveProviderConfig(provider)` which maps provider names to env vars. Backward compat: `openai` provider falls back to `LLM_API_KEY` / `LLM_BASE_URL`.
+
 ## Evaluation Harness
 
 - `cmd/eval/main.go` — thin CLI that reads a directory of `.json` dataset files, inserts one River `EvalArgs` job per file (all concurrently), and polls all workflows until done

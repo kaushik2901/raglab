@@ -100,16 +100,18 @@ go build -o bin\index.exe .\cmd\index
 
 ### CLI Flags
 
-| Flag                  | Env Var             | Default                  | Description                                    |
-| --------------------- | ------------------- | ------------------------ | ---------------------------------------------- |
-| `--input-tag`         | `INPUT_TAG`         | —                        | **Required.** Preprocessed output tag to index |
-| `--tag`               | `TAG`               | `idx-<timestamp>`        | Workflow tag                                   |
-| `--chunk-strategy`    | `CHUNK_STRATEGY`    | `fixed`                  | Chunking strategy (fixed only)                 |
-| `--chunk-size`        | `CHUNK_SIZE`        | `512`                    | Target token count per chunk                   |
-| `--chunk-overlap`     | `CHUNK_OVERLAP`     | `64`                     | Token overlap between chunks                   |
-| `--embedding-model`   | `EMBEDDING_MODEL`   | `text-embedding-3-small` | Embedding model name                           |
-| `--batch-size`        | `BATCH_SIZE`        | `20`                     | Embedding API batch size                       |
-| `--index-concurrency` | `INDEX_CONCURRENCY` | `5`                      | Number of files to index concurrently          |
+| Flag                   | Env Var              | Default                    | Description                                                 |
+| ---------------------- | -------------------- | -------------------------- | ----------------------------------------------------------- |
+| `--input-tag`          | `INPUT_TAG`          | —                          | **Required.** Preprocessed output tag to index              |
+| `--tag`                | `TAG`                | `idx-<timestamp>`          | Workflow tag                                                |
+| `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`) |
+| `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider                                          |
+| `--chunk-strategy`     | `CHUNK_STRATEGY`     | `fixed`                    | Chunking strategy (fixed only)                              |
+| `--chunk-size`         | `CHUNK_SIZE`         | `512`                      | Target token count per chunk                                |
+| `--chunk-overlap`      | `CHUNK_OVERLAP`      | `64`                       | Token overlap between chunks                                |
+| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model name                                        |
+| `--batch-size`         | `BATCH_SIZE`         | `20`                       | Embedding API batch size                                    |
+| `--index-concurrency`  | `INDEX_CONCURRENCY`  | `5`                        | Number of files to index concurrently                       |
 
 ## Evaluation Pipeline
 
@@ -138,16 +140,20 @@ go build -o bin\eval.exe .\cmd\eval
 
 ### CLI Flags
 
-| Flag                 | Env Var            | Default                 | Description                                                         |
-| -------------------- | ------------------ | ----------------------- | ------------------------------------------------------------------- |
-| `--index-tag`        | —                  | —                       | **Required.** Existing Qdrant collection name to evaluate           |
-| `--query-strategy`   | —                  | —                       | **Required.** Query strategy (`naive-search`)                       |
-| `--dataset-dir`      | —                  | —                       | **Required.** Directory containing `.json` evaluation dataset files |
-| `--top-k`            | —                  | `5`                     | Top-K retrieval                                                     |
-| `--llm-model`        | `LLM_MODEL`        | `gpt-4o-mini`           | LLM model for answer generation                                     |
-| `--judge-model`      | `JUDGE_MODEL`      | (same as `--llm-model`) | LLM model for answer correctness scoring                            |
-| `--tag`              | —                  | `eval-<timestamp>`      | Eval run tag prefix                                                 |
-| `--eval-concurrency` | `EVAL_CONCURRENCY` | `5`                     | Number of questions to evaluate concurrently                        |
+| Flag                   | Env Var              | Default                    | Description                                                         |
+| ---------------------- | -------------------- | -------------------------- | ------------------------------------------------------------------- |
+| `--index-tag`          | —                    | —                          | **Required.** Existing Qdrant collection name to evaluate           |
+| `--query-strategy`     | —                    | —                          | **Required.** Query strategy (`naive-search`)                       |
+| `--dataset-dir`        | —                    | —                          | **Required.** Directory containing `.json` evaluation dataset files |
+| `--top-k`              | —                    | `5`                        | Top-K retrieval                                                     |
+| `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`)         |
+| `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider for query embedding                              |
+| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model for query vectorization                             |
+| `--judge-provider`     | `JUDGE_PROVIDER`     | (same as `--llm-provider`) | Judge provider for answer scoring                                   |
+| `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                                     |
+| `--judge-model`        | `JUDGE_MODEL`        | (same as `--llm-model`)    | LLM model for answer correctness scoring                            |
+| `--tag`                | —                    | `eval-<timestamp>`         | Eval run tag prefix                                                 |
+| `--eval-concurrency`   | `EVAL_CONCURRENCY`   | `5`                        | Number of questions to evaluate concurrently                        |
 
 Each `.json` file in the dataset directory is evaluated in its own River workflow (all submitted concurrently). Each file gets a unique report: `eval-report-<tag>-<filename>.json`. Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
 
@@ -157,44 +163,54 @@ Interactive or one-shot semantic search against an indexed collection. Runs sync
 
 ```bash
 go build -o bin\query.exe .\cmd\query
-.\bin\query.exe --collection idx-fixed-512
-
-# Or one-shot
-.\bin\query.exe --collection idx-fixed-512 --query "How do I set up SSH?"
+.\bin\query.exe --tag idx-fixed-512 --query "How do I set up SSH?"
 ```
 
 ### CLI Flags
 
-| Flag           | Env Var          | Default        | Description                                |
-| -------------- | ---------------- | -------------- | ------------------------------------------ |
-| `--collection` | `COLLECTION`     | —              | **Required.** Qdrant collection name       |
-| `--query`      | —                | —              | One-shot query (omit for interactive mode) |
-| `--top-k`      | —                | `5`            | Number of results to retrieve              |
-| `--strategy`   | `QUERY_STRATEGY` | `naive-search` | Retrieval strategy                         |
+| Flag                   | Env Var              | Default                    | Description                                                 |
+| ---------------------- | -------------------- | -------------------------- | ----------------------------------------------------------- |
+| `--tag`                | —                    | —                          | **Required.** Qdrant collection name                        |
+| `--query`              | —                    | —                          | One-shot query (omit for interactive mode)                  |
+| `--top-k`              | —                    | `5`                        | Number of results to retrieve                               |
+| `--query-strategy`     | —                    | `naive-search`             | Retrieval strategy                                          |
+| `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`) |
+| `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider                                          |
+| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model for query                                   |
+| `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                             |
+| `--temperature`        | —                    | `0.3`                      | LLM temperature                                             |
+| `--max-tokens`         | —                    | `1024`                     | Max answer tokens                                           |
+| `--conversation-id`    | —                    | `""`                       | Conversation ID for multi-turn memory                       |
 
 ## Environment Variables
 
-Secrets and connection strings are read from environment variables only (not CLI flags):
+Secrets and connection strings are read from environment variables (not CLI flags). The `--llm-provider` flag selects which set of vars to use:
 
-| Env Var          | Default                                                 | Description                    |
-| ---------------- | ------------------------------------------------------- | ------------------------------ |
-| `LLM_BASE_URL`   | `https://api.openai.com/v1`                             | OpenAI-compatible API base URL |
-| `LLM_API_KEY`    | `""`                                                    | API key                        |
-| `QDRANT_URL`     | `http://localhost:6334`                                 | Qdrant gRPC endpoint           |
-| `QDRANT_API_KEY` | `""`                                                    | Qdrant API key (optional)      |
-| `DATABASE_URL`   | `postgres://rag:rag@localhost:5432/rag?sslmode=disable` | Postgres connection string     |
-| `MAX_RETRIES`    | `3`                                                     | Maximum retry count for stages |
-| `RETRY_BACKOFF`  | `5s`                                                    | Retry backoff duration         |
-| `LOG_LEVEL`      | `info`                                                  | Log level                      |
+| Env Var               | Default                                                      | Description                    |
+| --------------------- | ------------------------------------------------------------ | ------------------------------ |
+| `LLM_PROVIDER`        | `openai`                                                     | LLM provider name              |
+| `OPENAI_API_KEY`      | (falls back to `LLM_API_KEY`)                                | OpenAI API key                 |
+| `OPENAI_BASE_URL`     | (falls back to `LLM_BASE_URL`) → `https://api.openai.com/v1` | OpenAI API base URL            |
+| `GEMINI_API_KEY`      | `""`                                                         | Google Gemini API key          |
+| `GEMINI_BASE_URL`     | `https://generativelanguage.googleapis.com/v1beta/openai`    | Gemini OpenAI-compat endpoint  |
+| `OPENROUTER_API_KEY`  | `""`                                                         | OpenRouter API key             |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`                               | OpenRouter API base URL        |
+| `LMSTUDIO_BASE_URL`   | `http://localhost:1234/v1`                                   | LM Studio base URL (no key)    |
+| `QDRANT_URL`          | `http://localhost:6334`                                      | Qdrant gRPC endpoint           |
+| `QDRANT_API_KEY`      | `""`                                                         | Qdrant API key (optional)      |
+| `DATABASE_URL`        | `postgres://rag:rag@localhost:5432/rag?sslmode=disable`      | Postgres connection string     |
+| `MAX_RETRIES`         | `3`                                                          | Maximum retry count for stages |
+| `RETRY_BACKOFF`       | `5s`                                                         | Retry backoff duration         |
+| `LOG_LEVEL`           | `info`                                                       | Log level                      |
 
-### Provider Configuration
+### Provider Quick Reference
 
-| Provider   | `LLM_BASE_URL`                 | `LLM_API_KEY` |
-| ---------- | ------------------------------ | ------------- |
-| OpenAI API | `https://api.openai.com/v1`    | Required      |
-| OpenRouter | `https://openrouter.ai/api/v1` | Required      |
-| LM Studio  | `http://localhost:1234/v1`     | Empty         |
-| Ollama     | `http://localhost:11434/v1`    | Empty         |
+| Provider     | Env API Key                      | Env Base URL                       | Default Base URL                                          |
+| ------------ | -------------------------------- | ---------------------------------- | --------------------------------------------------------- |
+| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` | `https://api.openai.com/v1`                               |
+| `gemini`     | `GEMINI_API_KEY`                 | `GEMINI_BASE_URL`                  | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `openrouter` | `OPENROUTER_API_KEY`             | `OPENROUTER_BASE_URL`              | `https://openrouter.ai/api/v1`                            |
+| `lmstudio`   | _(none)_                         | `LMSTUDIO_BASE_URL`                | `http://localhost:1234/v1`                                |
 
 ## Retry & Recovery
 
@@ -260,7 +276,7 @@ internal/
     chunker.go           — Chunker interface
     fixed.go             — Fixed-size word-window chunking
   embedder/
-    embedder.go          — Embedder interface
+    embedder.go          — Embedder interface + factory (multi-provider)
     openai.go            — OpenAI-compatible HTTP embedder (with retry)
   store/
     store.go             — VectorStore interface
@@ -270,7 +286,7 @@ internal/
   memory/
     memory.go            — Per-conversation ring buffer for chat history
   generator/
-    generator.go         — OpenAI-compatible LLM chat completion client
+    generator.go         — Generator interface + factory + OpenAI-compatible implementation
   eval/
     retrieval.go         — RetrievalEvaluator (parallel question evaluation)
     metrics.go           — HitRate, MRR, NDCG, Precision, Recall computation

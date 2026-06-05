@@ -20,9 +20,10 @@ type embedder struct {
 	client           *http.Client
 	retryMaxAttempts int
 	retryBackoff     time.Duration
+	dimensions       int
 }
 
-func New(baseURL, apiKey, model string, batchSize int) *embedder {
+func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
 	return &embedder{
 		baseURL:          normalizeBaseURL(baseURL),
 		apiKey:           apiKey,
@@ -124,6 +125,9 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 
 	embeddings := make([]types.Embedding, len(chunks))
 	for i, d := range resp.Data {
+		if e.dimensions == 0 {
+			e.dimensions = len(d.Embedding)
+		}
 		embeddings[i] = types.Embedding{
 			ChunkID:    chunks[i].ID,
 			Vector:     d.Embedding,
@@ -167,7 +171,7 @@ func (e *embedder) doWithRetry(req *http.Request, respVal interface{}) error {
 }
 
 func (e *embedder) Dimensions() int {
-	return 0
+	return e.dimensions
 }
 
 func (e *embedder) ModelName() string {

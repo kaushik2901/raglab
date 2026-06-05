@@ -10,6 +10,7 @@ import (
 	"github.com/openai/openai-go"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -17,18 +18,14 @@ type Retriever interface {
 	Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error)
 }
 
-type Generator interface {
-	Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
-}
-
 type RetrievalEvaluator struct {
 	retriever Retriever
-	generator Generator
-	judge     Generator
+	generator generator.Generator
+	judge     generator.Generator
 	topK      int
 }
 
-func NewRetrievalEvaluator(ret Retriever, gen Generator, topK int) *RetrievalEvaluator {
+func NewRetrievalEvaluator(ret Retriever, gen generator.Generator, topK int) *RetrievalEvaluator {
 	return &RetrievalEvaluator{
 		retriever: ret,
 		generator: gen,
@@ -36,7 +33,7 @@ func NewRetrievalEvaluator(ret Retriever, gen Generator, topK int) *RetrievalEva
 	}
 }
 
-func NewRetrievalEvaluatorWithJudge(ret Retriever, gen Generator, judge Generator, topK int) *RetrievalEvaluator {
+func NewRetrievalEvaluatorWithJudge(ret Retriever, gen generator.Generator, judge generator.Generator, topK int) *RetrievalEvaluator {
 	return &RetrievalEvaluator{
 		retriever: ret,
 		generator: gen,

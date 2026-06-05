@@ -9,6 +9,15 @@ import (
 	"time"
 )
 
+type Provider string
+
+const (
+	ProviderOpenAI     Provider = "openai"
+	ProviderGemini     Provider = "gemini"
+	ProviderOpenRouter Provider = "openrouter"
+	ProviderLMStudio   Provider = "lmstudio"
+)
+
 type Config struct {
 	MaxRetries   int
 	RetryBackoff time.Duration
@@ -51,6 +60,35 @@ func (c *Config) Validate() error {
 		return errors.New("llm-base-url is required")
 	}
 	return nil
+}
+
+// ResolveProviderConfig returns the base URL and API key for a given provider.
+// Each provider has its own env var convention. The "openai" provider falls back
+// to the legacy LLM_BASE_URL / LLM_API_KEY env vars for backward compatibility.
+func ResolveProviderConfig(p Provider) (baseURL, apiKey string) {
+	switch p {
+	case ProviderOpenAI:
+		return resolveWithFallback("OPENAI_BASE_URL", "LLM_BASE_URL", "https://api.openai.com/v1"),
+			resolveWithFallback("OPENAI_API_KEY", "LLM_API_KEY", "")
+	case ProviderOpenRouter:
+		return envOrDefault("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+			os.Getenv("OPENROUTER_API_KEY")
+	case ProviderLMStudio:
+		return envOrDefault("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"), ""
+	case ProviderGemini:
+		return envOrDefault("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"),
+			os.Getenv("GEMINI_API_KEY")
+	default:
+		return envOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+			os.Getenv("OPENAI_API_KEY")
+	}
+}
+
+func resolveWithFallback(primary, fallback, defaultVal string) string {
+	if v := os.Getenv(primary); v != "" {
+		return v
+	}
+	return envOrDefault(fallback, defaultVal)
 }
 
 func EnvOrDefault(key, defaultVal string) string {

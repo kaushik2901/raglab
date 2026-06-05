@@ -6,14 +6,21 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
-type Generator struct {
+type Generator interface {
+	Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
+	ModelName() string
+}
+
+type openAIGenerator struct {
 	client openai.Client
 	model  string
 }
 
-func New(baseURL, apiKey, model string) *Generator {
+func NewOpenAI(baseURL, apiKey, model string) Generator {
 	baseURL = normalizeBaseURL(baseURL)
 	opts := []option.RequestOption{
 		option.WithBaseURL(baseURL + "/v1/"),
@@ -21,10 +28,20 @@ func New(baseURL, apiKey, model string) *Generator {
 	if apiKey != "" {
 		opts = append(opts, option.WithAPIKey(apiKey))
 	}
-	return &Generator{
+	return &openAIGenerator{
 		client: openai.NewClient(opts...),
 		model:  model,
 	}
+}
+
+// New creates a Generator for the given provider and model.
+// It resolves the provider-specific base URL and API key from environment variables.
+func New(provider config.Provider, model string) (Generator, error) {
+	baseURL, apiKey := config.ResolveProviderConfig(provider)
+	if baseURL == "" {
+		return nil, fmt.Errorf("empty base URL for provider %q", provider)
+	}
+	return NewOpenAI(baseURL, apiKey, model), nil
 }
 
 // normalizeBaseURL strips any trailing /v1 or /v1/ suffix so that all
@@ -38,7 +55,7 @@ func normalizeBaseURL(baseURL string) string {
 	return baseURL
 }
 
-func (g *Generator) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
+func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 	params.Model = openai.ChatModel(g.model)
 
 	completion, err := g.client.Chat.Completions.New(ctx, params)
@@ -46,4 +63,8 @@ func (g *Generator) Generate(ctx context.Context, params openai.ChatCompletionNe
 		return nil, fmt.Errorf("chat completion: %w", err)
 	}
 	return completion, nil
+}
+
+func (g *openAIGenerator) ModelName() string {
+	return g.model
 }

@@ -34,7 +34,11 @@ func run() error {
 	queryStrategy := flag.String("query-strategy", "", fmt.Sprintf("Query strategy (supported: %s)", retriever.StrategyNaiveSearch))
 	datasetDir := flag.String("dataset-dir", "", "Path to evaluation dataset directory containing .json files (required)")
 	topK := flag.Int("top-k", 5, "Top-K retrieval")
+	llmProvider := flag.String("llm-provider", config.EnvOrDefault("LLM_PROVIDER", "openai"), "LLM provider (openai, gemini, openrouter, lmstudio)")
 	llmModel := flag.String("llm-model", config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini"), "LLM model for answer generation")
+	embeddingProvider := flag.String("embedding-provider", config.EnvOrDefault("EMBEDDING_PROVIDER", ""), "Embedding provider (defaults to --llm-provider if empty)")
+	embeddingModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model for query vectorization")
+	judgeProvider := flag.String("judge-provider", config.EnvOrDefault("JUDGE_PROVIDER", ""), "Judge provider (defaults to --llm-provider if empty)")
 	judgeModel := flag.String("judge-model", config.EnvOrDefault("JUDGE_MODEL", ""), "LLM model for answer scoring (defaults to --llm-model if empty)")
 	evalConcurrency := flag.Int("eval-concurrency", config.IntEnvOrDefault("EVAL_CONCURRENCY", 5), "Number of questions to evaluate concurrently")
 	tag := flag.String("tag", "", "Eval run tag prefix (auto-generated if empty)")
@@ -106,6 +110,12 @@ func run() error {
 
 	store := workflow.NewStore(pool)
 
+	if *embeddingProvider == "" {
+		*embeddingProvider = *llmProvider
+	}
+	if *judgeProvider == "" {
+		*judgeProvider = *llmProvider
+	}
 	if *judgeModel == "" {
 		*judgeModel = *llmModel
 	}
@@ -132,30 +142,38 @@ func run() error {
 		datasetPath := filepath.ToSlash(filepath.Join(*datasetDir, f))
 
 		wfID, err := store.CreateWorkflow(ctx, "eval", fileTag, map[string]any{
-			"index_tag":      *indexTag,
-			"main_tag":       resolvedTagPrefix,
-			"query_strategy": *queryStrategy,
-			"dataset_path":   datasetPath,
-			"top_k":          *topK,
-			"llm_model":      *llmModel,
-			"judge_model":    *judgeModel,
-			"concurrency":    *evalConcurrency,
+			"index_tag":          *indexTag,
+			"main_tag":           resolvedTagPrefix,
+			"query_strategy":     *queryStrategy,
+			"dataset_path":       datasetPath,
+			"top_k":              *topK,
+			"llm_provider":        *llmProvider,
+			"llm_model":           *llmModel,
+			"embedding_provider":  *embeddingProvider,
+			"embedding_model":     *embeddingModel,
+			"judge_provider":      *judgeProvider,
+			"judge_model":         *judgeModel,
+			"concurrency":         *evalConcurrency,
 		})
 		if err != nil {
 			return fmt.Errorf("create workflow for %s: %w", f, err)
 		}
 
 		_, err = riverClient.Insert(ctx, &workflow.EvalArgs{
-			WorkflowID:    wfID,
-			Tag:           fileTag,
-			MainTag:       resolvedTagPrefix,
-			IndexTag:      *indexTag,
-			QueryStrategy: *queryStrategy,
-			DatasetPath:   datasetPath,
-			TopK:          *topK,
-			LLMModel:      *llmModel,
-			JudgeModel:    *judgeModel,
-			Concurrency:   *evalConcurrency,
+			WorkflowID:        wfID,
+			Tag:               fileTag,
+			MainTag:           resolvedTagPrefix,
+			IndexTag:          *indexTag,
+			QueryStrategy:     *queryStrategy,
+			DatasetPath:       datasetPath,
+			TopK:              *topK,
+			LLMProvider:       *llmProvider,
+			LLMModel:          *llmModel,
+			EmbeddingProvider: *embeddingProvider,
+			EmbeddingModel:    *embeddingModel,
+			JudgeProvider:     *judgeProvider,
+			JudgeModel:        *judgeModel,
+			Concurrency:       *evalConcurrency,
 		}, nil)
 		if err != nil {
 			return fmt.Errorf("insert eval job for %s: %w", f, err)
