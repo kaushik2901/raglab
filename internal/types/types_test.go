@@ -87,7 +87,7 @@ func TestEvalQuestionCreation(t *testing.T) {
 		Question:       "How do I set up SSH?",
 		ExpectedAnswer: "Run ssh-keygen",
 		Relevance: []RelevanceJudgment{
-			{DocumentID: "docs/ssh.md", Grade: 3},
+			{DocumentPath: "docs/ssh.md", Grade: 3},
 		},
 	}
 	assert.Equal(t, "q-001", q.ID)
@@ -95,7 +95,7 @@ func TestEvalQuestionCreation(t *testing.T) {
 	assert.Equal(t, "easy", q.Difficulty)
 	assert.Equal(t, "Run ssh-keygen", q.ExpectedAnswer)
 	require.Len(t, q.Relevance, 1)
-	assert.Equal(t, "docs/ssh.md", q.Relevance[0].DocumentID)
+	assert.Equal(t, "docs/ssh.md", q.Relevance[0].DocumentPath)
 	assert.Equal(t, 3, q.Relevance[0].Grade)
 }
 
@@ -107,7 +107,7 @@ func TestEvalDatasetCreation(t *testing.T) {
 			Description: "Test dataset",
 		},
 		Questions: []EvalQuestion{
-			{ID: "q1", Question: "test", Relevance: []RelevanceJudgment{{DocumentID: "doc.md", Grade: 1}}},
+			{ID: "q1", Question: "test", Relevance: []RelevanceJudgment{{DocumentPath: "doc.md", Grade: 1}}},
 		},
 	}
 	assert.Equal(t, "2024-01-01", ds.Meta.Created)
@@ -132,7 +132,7 @@ func TestRetrievalResultCreation(t *testing.T) {
 		QuestionID:       "q1",
 		Question:         "test?",
 		ExpectedAnswer:   "expected",
-		Relevance:        []RelevanceJudgment{{DocumentID: "doc.md", Grade: 3}},
+		Relevance:        []RelevanceJudgment{{DocumentPath: "doc.md", Grade: 3}},
 		ExpectedPaths:    []string{"doc.md"},
 		RetrievedPaths:   []string{"doc.md", "doc2.md"},
 		Scores:           []float64{0.95, 0.85},

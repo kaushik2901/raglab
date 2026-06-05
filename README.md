@@ -113,7 +113,9 @@ go build -o bin\index.exe .\cmd\index
 
 ## Evaluation Pipeline
 
-Measures retrieval and generation quality against a ground-truth dataset. Evaluates each question by retrieving from an existing Qdrant collection and generating an answer. **Questions are evaluated concurrently** (configurable via `--eval-concurrency`).
+Measures retrieval and generation quality against ground-truth datasets. Evaluates each question by retrieving from an existing Qdrant collection and generating an answer. **Questions are evaluated concurrently** (configurable via `--eval-concurrency`).
+
+Relevance judgments use `document_path` (the relative path within the preprocessed output, e.g. `handbook/travel-policy.md`) instead of a document ID.
 
 ### Metrics
 
@@ -131,23 +133,23 @@ Measures retrieval and generation quality against a ground-truth dataset. Evalua
 go build -o bin\eval.exe .\cmd\eval
 .\bin\workerd.exe
 
-.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset path/to/questions.json
+.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/preprocessing/pre-20260603-141651/eval-dataset
 ```
 
 ### CLI Flags
 
-| Flag                 | Env Var            | Default            | Description                                               |
-| -------------------- | ------------------ | ------------------ | --------------------------------------------------------- |
-| `--index-tag`        | —                  | —                  | **Required.** Existing Qdrant collection name to evaluate |
-| `--query-strategy`   | —                  | —                  | **Required.** Query strategy (`naive-search`)             |
-| `--dataset`          | —                  | —                  | **Required.** Path to ground truth questions JSON         |
-| `--top-k`            | —                  | `5`                | Top-K retrieval                                           |
-| `--llm-model`        | `LLM_MODEL`        | `gpt-4o-mini`      | LLM model for answer generation                           |
-| `--judge-model`      | `JUDGE_MODEL`      | (same as `--llm-model`) | LLM model for answer correctness scoring              |
-| `--tag`              | —                  | `eval-<timestamp>` | Eval run tag                                              |
-| `--eval-concurrency` | `EVAL_CONCURRENCY` | `5`                | Number of questions to evaluate concurrently              |
+| Flag                 | Env Var            | Default                 | Description                                                         |
+| -------------------- | ------------------ | ----------------------- | ------------------------------------------------------------------- |
+| `--index-tag`        | —                  | —                       | **Required.** Existing Qdrant collection name to evaluate           |
+| `--query-strategy`   | —                  | —                       | **Required.** Query strategy (`naive-search`)                       |
+| `--dataset-dir`      | —                  | —                       | **Required.** Directory containing `.json` evaluation dataset files |
+| `--top-k`            | —                  | `5`                     | Top-K retrieval                                                     |
+| `--llm-model`        | `LLM_MODEL`        | `gpt-4o-mini`           | LLM model for answer generation                                     |
+| `--judge-model`      | `JUDGE_MODEL`      | (same as `--llm-model`) | LLM model for answer correctness scoring                            |
+| `--tag`              | —                  | `eval-<timestamp>`      | Eval run tag prefix                                                 |
+| `--eval-concurrency` | `EVAL_CONCURRENCY` | `5`                     | Number of questions to evaluate concurrently                        |
 
-Output: JSON report written to `eval-report-<tag>.json` and printed to stdout.
+Each `.json` file in the dataset directory is evaluated in its own River workflow (all submitted concurrently). Each file gets a unique report: `eval-report-<tag>-<filename>.json`. Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
 
 ## Query CLI
 
@@ -283,7 +285,7 @@ docs/
   river-implementation-plan.md
   project-vision-and-roadmap.md
 
-testdata/eval/questions.json   — Ground-truth dataset for evaluation
+artifacts/preprocessing/<tag>/eval-dataset/ — Ground-truth dataset files (.json, one workflow per file)
 docker-compose.yml             — Postgres 16 + Qdrant
 ```
 

@@ -136,7 +136,7 @@ func computeNDCGGraded(results []types.RetrievalResult, ks []int) map[int]float6
 
 func gradeForPath(relevance []types.RelevanceJudgment, path string) float64 {
 	for _, j := range relevance {
-		if j.DocumentID == path {
+		if j.DocumentPath == path {
 			return float64(j.Grade)
 		}
 	}

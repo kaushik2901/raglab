@@ -88,11 +88,11 @@ We use **River** (`github.com/riverqueue/river`) as the job engine — a lightwe
 
 ## Evaluation Harness
 
-- `cmd/eval/main.go` — thin CLI that inserts a River `EvalArgs` job and polls until done
+- `cmd/eval/main.go` — thin CLI that reads a directory of `.json` dataset files, inserts one River `EvalArgs` job per file (all concurrently), and polls all workflows until done
 - `internal/workflow/eval_worker.go` — `EvalWorker` River worker that runs retrieval evaluation against an existing Qdrant collection, persists to `eval_runs`/`eval_queries` tables, and writes a JSON report
 - `internal/eval/` — `ComputeAggregateMetrics` (HitRate, MRR, NDCG, Precision, Recall), `RetrievalEvaluator`, `EvalStore`, `PrintReport`/`WriteJSONReport`
-- `testdata/eval/questions.json` — ground-truth dataset (fill with your questions)
 - `internal/db/migrations/002_create_eval_tables.sql` — `eval_runs` + `eval_queries` tables
 - `RunIndexing(ctx, args)` in `internal/workflow/index_worker.go` is shared between `IndexWorker` and `EvalWorker`
-- Usage: `.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset testdata/eval/questions.json`
+- Usage: `.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/preprocessing/pre-20260603-141651/eval-dataset`
 - Run `.\bin\eval.exe --help` for all flags
+- Relevance judgments use `document_path` (e.g. `handbook/travel-policy.md`) — the `document_id` field was renamed to `document_path`

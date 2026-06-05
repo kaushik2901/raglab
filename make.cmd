@@ -85,7 +85,6 @@ goto :end
 :clean
 echo Cleaning all artifacts...
 if exist bin\          rmdir /s /q bin
-if exist artifacts\    rmdir /s /q artifacts
 goto :end
 
 :end

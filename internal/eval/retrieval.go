@@ -83,7 +83,7 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	expectedPaths := make([]string, 0, len(q.Relevance))
 	for _, j := range q.Relevance {
 		if j.Grade > 0 {
-			expectedPaths = append(expectedPaths, j.DocumentID)
+			expectedPaths = append(expectedPaths, j.DocumentPath)
 		}
 	}
 

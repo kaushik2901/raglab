@@ -1,8 +1,8 @@
 package types
 
 type RelevanceJudgment struct {
-	DocumentID string `json:"document_id"`
-	Grade      int    `json:"grade"` // 0=irrelevant .. 3=highly relevant
+	DocumentPath string `json:"document_path"`
+	Grade        int    `json:"grade"` // 0=irrelevant .. 3=highly relevant
 }
 
 type EvalQuestion struct {

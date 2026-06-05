@@ -112,8 +112,8 @@ func TestNDCGGraded_Basic(t *testing.T) {
 		{
 			QuestionID: "q1",
 			Relevance: []types.RelevanceJudgment{
-				{DocumentID: "doc1.md", Grade: 3},
-				{DocumentID: "doc2.md", Grade: 1},
+				{DocumentPath: "doc1.md", Grade: 3},
+				{DocumentPath: "doc2.md", Grade: 1},
 			},
 			ExpectedPaths:  []string{"doc1.md", "doc2.md"},
 			RetrievedPaths: []string{"doc1.md", "doc3.md", "doc2.md"},
@@ -129,7 +129,7 @@ func TestNDCGGraded_Basic(t *testing.T) {
 func TestNDCGGraded_AllPerfect(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+			Relevance:      []types.RelevanceJudgment{{DocumentPath: "doc1.md", Grade: 3}},
 			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc1.md"},
 		},
@@ -142,7 +142,7 @@ func TestNDCGGraded_AllPerfect(t *testing.T) {
 func TestNDCGGraded_AllMiss(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+			Relevance:      []types.RelevanceJudgment{{DocumentPath: "doc1.md", Grade: 3}},
 			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc2.md"},
 		},
@@ -155,12 +155,12 @@ func TestNDCGGraded_AllMiss(t *testing.T) {
 func TestNDCGGraded_MultipleQuestions(t *testing.T) {
 	results := []types.RetrievalResult{
 		{
-			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc1.md", Grade: 3}},
+			Relevance:      []types.RelevanceJudgment{{DocumentPath: "doc1.md", Grade: 3}},
 			ExpectedPaths:  []string{"doc1.md"},
 			RetrievedPaths: []string{"doc1.md"},
 		},
 		{
-			Relevance:      []types.RelevanceJudgment{{DocumentID: "doc2.md", Grade: 3}},
+			Relevance:      []types.RelevanceJudgment{{DocumentPath: "doc2.md", Grade: 3}},
 			ExpectedPaths:  []string{"doc2.md"},
 			RetrievedPaths: []string{"doc3.md"},
 		},
@@ -172,8 +172,8 @@ func TestNDCGGraded_MultipleQuestions(t *testing.T) {
 
 func TestGradeForPath(t *testing.T) {
 	relevance := []types.RelevanceJudgment{
-		{DocumentID: "doc1.md", Grade: 3},
-		{DocumentID: "doc2.md", Grade: 1},
+		{DocumentPath: "doc1.md", Grade: 3},
+		{DocumentPath: "doc2.md", Grade: 1},
 	}
 	assert.InDelta(t, 3.0, gradeForPath(relevance, "doc1.md"), 0.001)
 	assert.InDelta(t, 1.0, gradeForPath(relevance, "doc2.md"), 0.001)
@@ -183,9 +183,9 @@ func TestGradeForPath(t *testing.T) {
 
 func TestIdealGradedRelevances(t *testing.T) {
 	relevance := []types.RelevanceJudgment{
-		{DocumentID: "a.md", Grade: 1},
-		{DocumentID: "b.md", Grade: 3},
-		{DocumentID: "c.md", Grade: 2},
+		{DocumentPath: "a.md", Grade: 1},
+		{DocumentPath: "b.md", Grade: 3},
+		{DocumentPath: "c.md", Grade: 2},
 	}
 
 	ideal := idealGradedRelevances(relevance, 3)
@@ -197,9 +197,9 @@ func TestIdealGradedRelevances(t *testing.T) {
 
 func TestIdealGradedRelevances_Truncated(t *testing.T) {
 	relevance := []types.RelevanceJudgment{
-		{DocumentID: "a.md", Grade: 3},
-		{DocumentID: "b.md", Grade: 2},
-		{DocumentID: "c.md", Grade: 1},
+		{DocumentPath: "a.md", Grade: 3},
+		{DocumentPath: "b.md", Grade: 2},
+		{DocumentPath: "c.md", Grade: 1},
 	}
 
 	ideal := idealGradedRelevances(relevance, 2)
