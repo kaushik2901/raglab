@@ -19,15 +19,15 @@ Uses **River** (`github.com/riverqueue/river`) as the job engine — a lightweig
 └─────────────────────────────────────────────────────────────────────────────┘
           │                            │                            │
           ▼                            ▼                            ▼
-┌──────────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
-│  cmd/workerd         │     │  cmd/workerd         │     │  cmd/workerd         │
-│  Clone → Preprocess  │     │  Parse → Chunk →     │     │  Retrieve → Generate │
-│  → Verify            │     │  Embed → Store       │     │  → Eval Metrics      │
-│  (3 workers)         │     │  (1 worker, parallel)│     │  (1 worker, parallel)│
-└──────────────────────┘     └──────────────────────┘     └──────────────────────┘
-                                                                         │
-              ┌──────────────────────────────────────────────────────────┘
-              ▼
+┌──────────────────────┐    ┌──────────────────────┐     ┌──────────────────────┐
+│  cmd/workerd         │    │  cmd/workerd         │     │  cmd/workerd         │
+│  Clone → Preprocess  │    │  Parse → Chunk →     │     │  Retrieve → Generate │
+│  → Verify            │    │  Embed → Store       │     │  → Eval Metrics      │
+│  (3 workers)         │    │  (1 worker, parallel)│     │  (1 worker, parallel)│
+└──────────────────────┘    └──────────────────────┘     └──────────────────────┘
+                                                                    │
+          ┌─────────────────────────────────────────────────────────┘
+          ▼
 ┌──────────────────────┐
 │  cmd/query           │
 │  (synchronous CLI)   │
