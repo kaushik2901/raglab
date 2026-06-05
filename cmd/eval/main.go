@@ -54,15 +54,30 @@ func run() error {
 		return fmt.Errorf("--dataset-dir is required")
 	}
 
-	info, err := os.Stat(*datasetDir)
+	absDir, err := filepath.Abs(*datasetDir)
 	if err != nil {
-		return fmt.Errorf("dataset directory not found: %s", *datasetDir)
+		return fmt.Errorf("resolve dataset dir: %w", err)
+	}
+	info, err := os.Stat(absDir)
+	if err != nil {
+		return fmt.Errorf("dataset directory not found: %s", absDir)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("--dataset-dir must be a directory: %s", *datasetDir)
+		return fmt.Errorf("--dataset-dir must be a directory: %s", absDir)
 	}
 
-	entries, err := os.ReadDir(*datasetDir)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
+	}
+	relDir, err := filepath.Rel(cwd, absDir)
+	if err != nil {
+		return fmt.Errorf("relative dataset dir: %w", err)
+	}
+	// Forward-slash path for cross-platform compatibility (works locally + in Docker)
+	*datasetDir = filepath.ToSlash(relDir)
+
+	entries, err := os.ReadDir(absDir)
 	if err != nil {
 		return fmt.Errorf("read dataset directory: %w", err)
 	}
@@ -114,10 +129,13 @@ func run() error {
 	for _, f := range files {
 		fileTag := resolvedTagPrefix + "-" + strings.TrimSuffix(f, ".json")
 
+		datasetPath := filepath.ToSlash(filepath.Join(*datasetDir, f))
+
 		wfID, err := store.CreateWorkflow(ctx, "eval", fileTag, map[string]any{
 			"index_tag":      *indexTag,
+			"main_tag":       resolvedTagPrefix,
 			"query_strategy": *queryStrategy,
-			"dataset_path":   filepath.Join(*datasetDir, f),
+			"dataset_path":   datasetPath,
 			"top_k":          *topK,
 			"llm_model":      *llmModel,
 			"judge_model":    *judgeModel,
@@ -130,9 +148,10 @@ func run() error {
 		_, err = riverClient.Insert(ctx, &workflow.EvalArgs{
 			WorkflowID:    wfID,
 			Tag:           fileTag,
+			MainTag:       resolvedTagPrefix,
 			IndexTag:      *indexTag,
 			QueryStrategy: *queryStrategy,
-			DatasetPath:   filepath.Join(*datasetDir, f),
+			DatasetPath:   datasetPath,
 			TopK:          *topK,
 			LLMModel:      *llmModel,
 			JudgeModel:    *judgeModel,

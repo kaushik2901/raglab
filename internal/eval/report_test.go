@@ -52,10 +52,16 @@ func TestWriteJSONReport(t *testing.T) {
 	assert.InDelta(t, 0.75, decoded.Aggregate.MRR, 0.001)
 }
 
-func TestWriteJSONReport_InvalidPath(t *testing.T) {
+func TestWriteJSONReport_CreatesDirs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deep", "nested", "report.json")
+
 	report := &types.EvalReport{RunID: "test"}
-	err := WriteJSONReport(report, "/nonexistent/dir/report.json")
-	require.Error(t, err)
+	err := WriteJSONReport(report, path)
+	require.NoError(t, err)
+
+	_, err = os.Stat(path)
+	require.NoError(t, err)
 }
 
 func TestWriteJSONReport_EmptyReport(t *testing.T) {

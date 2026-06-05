@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -64,6 +65,9 @@ func WriteJSONReport(report *types.EvalReport, path string) error {
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal report: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("create report dir: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("write report: %w", err)

@@ -1,11 +1,14 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/riverqueue/river"
 
@@ -20,6 +23,7 @@ import (
 type EvalArgs struct {
 	WorkflowID    string `json:"workflow_id"`
 	Tag           string `json:"tag"`
+	MainTag       string `json:"main_tag"`
 	IndexTag      string `json:"index_tag"`
 	QueryStrategy string `json:"query_strategy"`
 	DatasetPath   string `json:"dataset_path"`
@@ -51,6 +55,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		if err != nil {
 			return nil, fmt.Errorf("read dataset: %w", err)
 		}
+		data = bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
 		var dataset types.EvalDataset
 		if err := json.Unmarshal(data, &dataset); err != nil {
 			return nil, fmt.Errorf("parse dataset: %w", err)
@@ -137,7 +142,8 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 			PerQuestion: results,
 		}
 
-		reportPath := fmt.Sprintf("eval-report-%s.json", args.Tag)
+		datasetFile := strings.TrimSuffix(filepath.Base(args.DatasetPath), ".json")
+		reportPath := filepath.Join("artifacts", "evaluation", args.MainTag, datasetFile+".json")
 		if err := eval.WriteJSONReport(report, reportPath); err != nil {
 			slog.Warn("failed to write report", "path", reportPath, "err", err)
 		}
