@@ -3,7 +3,11 @@ module github.com/kaushik2901/gitlab-handbook-rag-pipeline
 go 1.25.0
 
 require (
+	github.com/jackc/pgx/v5 v5.10.0
+	github.com/openai/openai-go v1.12.0
 	github.com/qdrant/go-client v1.18.2
+	github.com/riverqueue/river v0.38.0
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.38.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
@@ -13,13 +17,9 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.10.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/openai/openai-go v1.12.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/riverqueue/river v0.38.0 // indirect
 	github.com/riverqueue/river/riverdriver v0.38.0 // indirect
-	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.38.0 // indirect
 	github.com/riverqueue/river/rivershared v0.38.0 // indirect
 	github.com/riverqueue/river/rivertype v0.38.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect

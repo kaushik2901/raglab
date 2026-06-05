@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
@@ -148,8 +150,13 @@ func (e *embedder) doWithRetry(req *http.Request, respVal interface{}) error {
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests && attempt < e.retryMaxAttempts {
+			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+			if retryAfter > backoff {
+				backoff = retryAfter
+			}
+			jitter := time.Duration(rand.Int63n(int64(backoff / 2)))
 			resp.Body.Close()
-			time.Sleep(backoff)
+			time.Sleep(backoff + jitter)
 			continue
 		}
 
@@ -168,6 +175,24 @@ func (e *embedder) doWithRetry(req *http.Request, respVal interface{}) error {
 	}
 
 	return fmt.Errorf("rate limit exceeded after %d retries", e.retryMaxAttempts)
+}
+
+// parseRetryAfter parses the Retry-After header value and returns the duration to wait.
+// The header can be an integer number of seconds or an HTTP-date.
+func parseRetryAfter(val string) time.Duration {
+	if val == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(val); err == nil {
+		return time.Duration(seconds) * time.Second
+	}
+	if t, err := time.Parse(time.RFC1123, val); err == nil {
+		d := time.Until(t)
+		if d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 func (e *embedder) Dimensions() int {

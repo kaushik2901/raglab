@@ -130,13 +130,43 @@ $env:GEMINI_API_KEY = "AIza..."
 
 Both use `config.ResolveProviderConfig(provider)` which maps provider names to env vars. Backward compat: `openai` provider falls back to `LLM_API_KEY` / `LLM_BASE_URL`.
 
-## Evaluation Harness
+### Rate Limiting
 
-- `cmd/eval/main.go` — thin CLI that reads a directory of `.json` dataset files, inserts one River `EvalArgs` job per file (all concurrently), and polls all workflows until done
-- `internal/workflow/eval_worker.go` — `EvalWorker` River worker that runs retrieval evaluation against an existing Qdrant collection, persists to `eval_runs`/`eval_queries` tables, and writes a JSON report
-- `internal/eval/` — `ComputeAggregateMetrics` (HitRate, MRR, NDCG, Precision, Recall), `RetrievalEvaluator`, `EvalStore`, `PrintReport`/`WriteJSONReport`
-- `internal/db/migrations/002_create_eval_tables.sql` — `eval_runs` + `eval_queries` tables
-- `RunIndexing(ctx, args)` in `internal/workflow/index_worker.go` is shared between `IndexWorker` and `EvalWorker`
+Rate limiting is purely **reactive** — both the embedder and generator retry on 429 with: exponential backoff + jitter + `Retry-After` header respect. Generator retries up to 5 attempts with the same backoff strategy.
+
+## Important: Rebuild workerd after provider changes
+
+CLI changes (flags, env vars) take effect immediately via `make.cmd <cmd>`, but **River workers** (`workerd.exe`) must be rebuilt and restarted separately to pick up changes to worker logic.
+
+```powershell
+go build -o bin\workerd.exe .\cmd\workerd  # rebuild worker daemon
+```
+
+## Evaluation Pipeline
+
+Evaluation uses a **4-phase pipeline** to maximize throughput under rate limits:
+
+| Phase | What | API calls | Batching | Rate limit impact |
+|-------|------|-----------|----------|-------------------|
+| 1 | **Batch embed** all queries | `total / batchSize` (e.g. 15 for 300 Qs) | ✅ 20 queries per call | Embed provider sees 15 calls instead of 300 |
+| 2 | **Search** all (Qdrant, parallel) | 1 per question | ❌ | No rate limit |
+| 3 | **Generate** answers (sequential) | 1 per question | ❌ | Full chat bucket, no competition |
+| 4 | **Judge** answers (sequential) | 1 per question | ❌ | Full chat bucket, no competition |
+
+Phases 2-4 run **sequentially per question** — no parallelism within each phase. The rate limiter (token bucket) is the bottleneck, not CPU, so concurrent goroutines can't improve throughput.
+
+### Key files
+
+| File | Role |
+|------|------|
+| `cmd/eval/main.go` | Thin CLI — reads `.json` dataset files, inserts River jobs, polls workflows |
+| `internal/workflow/eval_worker.go` | River worker — creates embedder/generator/judge, calls pipeline |
+| `internal/eval/pipeline.go` | **NEW** — phase-based `Evaluate()` (batch embed → sequential loop) |
+| `internal/eval/retrieval.go` | Legacy per-question evaluator (kept for tests) |
+| `internal/eval/metrics.go` | `ComputeAggregateMetrics` — HitRate, MRR, NDCG, Precision, Recall, AvgAnswerScore |
+| `internal/eval/judge.go` | `JudgeAnswer` — calls LLM to score answer correctness |
+| `internal/eval/store.go` | `EvalStore` — `eval_runs` / `eval_queries` CRUD |
+
 - Usage: `.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/preprocessing/pre-20260603-141651/eval-dataset`
 - Run `.\bin\eval.exe --help` for all flags
-- Relevance judgments use `document_path` (e.g. `handbook/travel-policy.md`) — the `document_id` field was renamed to `document_path`
+- Relevance judgments use `document_path` (e.g. `handbook/travel-policy.md`)

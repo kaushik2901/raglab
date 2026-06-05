@@ -31,8 +31,19 @@ services:
     environment:
       DATABASE_URL: postgres://${PG_USER:-rag}:${PG_PASSWORD:-rag}@postgres:5432/${PG_DB:-rag}?sslmode=disable
       QDRANT_URL: http://qdrant:6334
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-${LLM_API_KEY:-}}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-${LLM_BASE_URL:-https://api.openai.com/v1}}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      RPM: ${RPM:-}
+      OPENAI_RPM: ${OPENAI_RPM:-}
+      GEMINI_RPM: ${GEMINI_RPM:-}
+      OPENROUTER_RPM: ${OPENROUTER_RPM:-}
+      LMSTUDIO_RPM: ${LMSTUDIO_RPM:-}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
     volumes:
       - .:/workspace

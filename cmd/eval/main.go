@@ -147,13 +147,13 @@ func run() error {
 			"query_strategy":     *queryStrategy,
 			"dataset_path":       datasetPath,
 			"top_k":              *topK,
-			"llm_provider":        *llmProvider,
-			"llm_model":           *llmModel,
-			"embedding_provider":  *embeddingProvider,
-			"embedding_model":     *embeddingModel,
-			"judge_provider":      *judgeProvider,
-			"judge_model":         *judgeModel,
-			"concurrency":         *evalConcurrency,
+			"llm_provider":       *llmProvider,
+			"llm_model":          *llmModel,
+			"embedding_provider": *embeddingProvider,
+			"embedding_model":    *embeddingModel,
+			"judge_provider":     *judgeProvider,
+			"judge_model":        *judgeModel,
+			"concurrency":        *evalConcurrency,
 		})
 		if err != nil {
 			return fmt.Errorf("create workflow for %s: %w", f, err)

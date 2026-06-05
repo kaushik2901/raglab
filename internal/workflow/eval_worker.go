@@ -16,7 +16,6 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -105,7 +104,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		if embeddingModel == "" {
 			embeddingModel = "text-embedding-3-small"
 		}
-		emb, err := embedder.New(embeddingProvider, embeddingModel, 1)
+		emb, err := embedder.New(embeddingProvider, embeddingModel, 20)
 		if err != nil {
 			return nil, fmt.Errorf("create embedder: %w", err)
 		}
@@ -115,10 +114,6 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		}
 		defer qStore.Close()
 
-		ret, err := retriever.New(emb, qStore, args.QueryStrategy)
-		if err != nil {
-			return nil, err
-		}
 		gen, err := generator.New(llmProvider, args.LLMModel)
 		if err != nil {
 			return nil, fmt.Errorf("create generator: %w", err)
@@ -127,11 +122,19 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		if err != nil {
 			return nil, fmt.Errorf("create judge generator: %w", err)
 		}
-		evaluator := eval.NewRetrievalEvaluatorWithJudge(ret, gen, judgeGen, args.TopK)
 
-		// 4. Run retrieval evaluation against the existing collection
-		slog.Info("running retrieval evaluation", "collection", args.IndexTag, "strategy", args.QueryStrategy, "concurrency", args.Concurrency)
-		results, err := evaluator.Evaluate(ctx, args.IndexTag, dataset.Questions, args.Concurrency)
+		// 4. Run evaluation pipeline
+		slog.Info("running evaluation pipeline", "collection", args.IndexTag, "questions", len(dataset.Questions))
+		results, err := eval.Evaluate(ctx, eval.PipelineArgs{
+			Embedder:   emb,
+			Searcher:   qStore,
+			Generator:  gen,
+			JudgeGen:   judgeGen,
+			Collection: args.IndexTag,
+			Questions:  dataset.Questions,
+			TopK:       args.TopK,
+			EmbedBatch: 20,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("evaluation: %w", err)
 		}

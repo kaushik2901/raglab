@@ -115,7 +115,7 @@ go build -o bin\index.exe .\cmd\index
 
 ## Evaluation Pipeline
 
-Measures retrieval and generation quality against ground-truth datasets. Evaluates each question by retrieving from an existing Qdrant collection and generating an answer. **Questions are evaluated concurrently** (configurable via `--eval-concurrency`).
+Measures retrieval and generation quality against ground-truth datasets. Uses a **4-phase pipeline**: batch embed all queries first, then sequential search → generate → judge for each question.
 
 Relevance judgments use `document_path` (the relative path within the preprocessed output, e.g. `handbook/travel-policy.md`) instead of a document ID.
 
@@ -153,9 +153,8 @@ go build -o bin\eval.exe .\cmd\eval
 | `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                                     |
 | `--judge-model`        | `JUDGE_MODEL`        | (same as `--llm-model`)    | LLM model for answer correctness scoring                            |
 | `--tag`                | —                    | `eval-<timestamp>`         | Eval run tag prefix                                                 |
-| `--eval-concurrency`   | `EVAL_CONCURRENCY`   | `5`                        | Number of questions to evaluate concurrently                        |
 
-Each `.json` file in the dataset directory is evaluated in its own River workflow (all submitted concurrently). Each file gets a unique report: `eval-report-<tag>-<filename>.json`. Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
+Each `.json` file in the dataset directory is evaluated in its own River workflow (all submitted concurrently). Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
 
 ## Query CLI
 
@@ -227,14 +226,14 @@ The `workerd` process must be running to execute jobs. If it crashes, pending jo
 
 Key concurrent processing in the pipeline:
 
-| Component                    |       Concurrency        | Mechanism                        |
-| ---------------------------- | :----------------------: | -------------------------------- |
-| Preprocessor file processing |      10 goroutines       | `errgroup.SetLimit(10)`          |
-| Indexer file processing      | Configurable (default 5) | `errgroup.SetLimit(concurrency)` |
-| Eval question evaluation     | Configurable (default 5) | `errgroup.SetLimit(concurrency)` |
-| River worker pool            |            5             | `MaxWorkers: 5` in queue config  |
+| Component                    |       Concurrency        | Mechanism                          |
+| ---------------------------- | :----------------------: | ---------------------------------- |
+| Preprocessor file processing |      10 goroutines       | `errgroup.SetLimit(10)`            |
+| Indexer file processing      | Configurable (default 5) | `errgroup.SetLimit(concurrency)`   |
+| Eval question phases         |        Sequential        | Batch embed → sequential gen/judge |
+| River worker pool            |            5             | `MaxWorkers: 5` in queue config    |
 
-The indexer and evaluator use `golang.org/x/sync/errgroup` with a bounded semaphore to process items in parallel while respecting connection limits and API rate limits.
+The indexer uses `golang.org/x/sync/errgroup` with a bounded semaphore to process files in parallel. The eval pipeline is sequential by design — the rate limit (API's 429 + `Retry-After`) is the bottleneck, not CPU, so concurrency can't improve throughput.
 
 ## Project Structure
 
@@ -288,7 +287,8 @@ internal/
   generator/
     generator.go         — Generator interface + factory + OpenAI-compatible implementation
   eval/
-    retrieval.go         — RetrievalEvaluator (parallel question evaluation)
+    pipeline.go          — Phase-based evaluation (batch embed → sequential gen/judge)
+    retrieval.go         — Legacy RetrievalEvaluator (kept for tests)
     metrics.go           — HitRate, MRR, NDCG, Precision, Recall computation
     report.go            — PrintReport + WriteJSONReport
     store.go             — EvalStore CRUD (eval_runs, eval_queries tables)
@@ -315,21 +315,21 @@ Tests requiring a Qdrant or Postgres server use `t.Skip(...)` and are excluded f
 
 Key unit test coverage areas:
 
-| Package         | What's Tested                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `preprocessor/` | Shortcodes, includes, HTML, refs, file processing, concurrency defaults                                                                          |
-| `chunker/`      | Word-window splitting, overlap clamping, empty/short docs, chunk IDs                                                                             |
-| `embedder/`     | Batching, rate-limit retry, API errors, model fallback, headers                                                                                  |
-| `retriever/`    | Constructor, retrieve flow, embed/search error propagation                                                                                       |
-| `memory/`       | Ring buffer add/get/eviction/concurrent safety                                                                                                   |
-| `generator/`    | Generate with mock HTTP, API errors, URL normalization                                                                                           |
-| `eval/`         | All metric computations (binary + graded NDCG), Evaluate() with mocked retriever/generator, WriteJSONReport, gradeForPath, idealGradedRelevances |
-| `store/`        | Point conversion, payload encoding, chunk ID hashing, distance parsing                                                                           |
-| `types/`        | All struct creation, zero values, round-trip serialization                                                                                       |
-| `config/`       | Validation, env overrides, ResolveTag                                                                                                            |
-| `stage/`        | Clone, preprocess, verify stage execution                                                                                                        |
-| `workflow/`     | Store CRUD, status transitions, state merging, Kind() methods                                                                                    |
-| `db/`           | Migration version parsing                                                                                                                        |
+| Package         | What's Tested                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `preprocessor/` | Shortcodes, includes, HTML, refs, file processing, concurrency defaults                                                                   |
+| `chunker/`      | Word-window splitting, overlap clamping, empty/short docs, chunk IDs                                                                      |
+| `embedder/`     | Batching, rate-limit retry, API errors, model fallback, headers                                                                           |
+| `retriever/`    | Constructor, retrieve flow, embed/search error propagation                                                                                |
+| `memory/`       | Ring buffer add/get/eviction/concurrent safety                                                                                            |
+| `generator/`    | Generate with mock HTTP, API errors, URL normalization, 429 retry with Retry-After                                                        |
+| `eval/`         | All metric computations, pipeline (embed→search→generate→judge), RetrievalEvaluator, WriteJSONReport, gradeForPath, idealGradedRelevances |
+| `store/`        | Point conversion, payload encoding, chunk ID hashing, distance parsing                                                                    |
+| `types/`        | All struct creation, zero values, round-trip serialization                                                                                |
+| `config/`       | Validation, env overrides, ResolveTag                                                                                                     |
+| `stage/`        | Clone, preprocess, verify stage execution                                                                                                 |
+| `workflow/`     | Store CRUD, status transitions, state merging, Kind() methods                                                                             |
+| `db/`           | Migration version parsing                                                                                                                 |
 
 ## License
 
