@@ -27,7 +27,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: sh -c "go build -o /tmp/workerd ./cmd/workerd && exec /tmp/workerd"
+      args:
+        GO_VERSION: ${GO_VERSION:-1.25}
+    image: gitlab-handbook-rag-pipeline
+    command: ["workerd"]
     environment:
       DATABASE_URL: postgres://${PG_USER:-rag}:${PG_PASSWORD:-rag}@postgres:5432/${PG_DB:-rag}?sslmode=disable
       QDRANT_URL: http://qdrant:6334
@@ -40,8 +43,6 @@ services:
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
-    volumes:
-      - .:/workspace
     depends_on:
       postgres:
         condition: service_healthy
