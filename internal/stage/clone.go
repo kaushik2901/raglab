@@ -38,21 +38,26 @@ func gitClone(ctx context.Context, url, path string) error {
 }
 
 func gitUpdate(ctx context.Context, path string) error {
-	cmds := []struct {
-		args []string
-		desc string
-	}{
-		{[]string{"fetch", "--all"}, "git fetch"},
-		{[]string{"pull", "--ff-only"}, "git pull --ff-only"},
+	if err := runGit(ctx, path, "git fetch --all", "fetch", "--all"); err != nil {
+		return err
 	}
-	for _, c := range cmds {
-		cmd := exec.CommandContext(ctx, "git", c.args...)
-		cmd.Dir = path
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stdout
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%s: %w", c.desc, err)
+
+	if err := runGit(ctx, path, "git checkout main", "checkout", "main"); err != nil {
+		if err2 := runGit(ctx, path, "git checkout -b main origin/main", "checkout", "-b", "main", "origin/main"); err2 != nil {
+			return fmt.Errorf("checkout main: %w (fetch fallback: %v)", err, err2)
 		}
+	}
+
+	return runGit(ctx, path, "git pull --ff-only", "pull", "--ff-only")
+}
+
+func runGit(ctx context.Context, path, desc string, args ...string) error {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = path
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s: %w", desc, err)
 	}
 	return nil
 }

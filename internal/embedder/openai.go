@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
@@ -22,7 +23,7 @@ type embedder struct {
 	client           *http.Client
 	retryMaxAttempts int
 	retryBackoff     time.Duration
-	dimensions       int
+	dimensions       atomic.Int32
 }
 
 func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
@@ -118,9 +119,7 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 
 	embeddings := make([]types.Embedding, len(chunks))
 	for i, d := range resp.Data {
-		if e.dimensions == 0 {
-			e.dimensions = len(d.Embedding)
-		}
+		e.dimensions.CompareAndSwap(0, int32(len(d.Embedding)))
 		embeddings[i] = types.Embedding{
 			ChunkID:    chunks[i].ID,
 			Vector:     d.Embedding,
@@ -196,7 +195,7 @@ func parseRetryAfter(val string) time.Duration {
 }
 
 func (e *embedder) Dimensions() int {
-	return e.dimensions
+	return int(e.dimensions.Load())
 }
 
 func (e *embedder) ModelName() string {
