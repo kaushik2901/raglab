@@ -49,6 +49,9 @@ func NewIndexWorker(store *Store, client *river.Client[pgx.Tx]) *IndexWorker {
 }
 
 func (w *IndexWorker) Work(ctx context.Context, job *river.Job[IndexArgs]) error {
+	logger := slog.With("workflow_id", job.Args.WorkflowID, "worker", "index")
+	logger.Debug("starting index worker")
+
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "index", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 		return RunIndexing(ctx, job.Args)
 	}); err != nil {

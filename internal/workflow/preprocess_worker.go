@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"log/slog"
 	"path"
 
 	"github.com/jackc/pgx/v5"
@@ -50,6 +51,9 @@ func NewCloneWorker(store *Store, client *river.Client[pgx.Tx]) *CloneWorker {
 }
 
 func (w *CloneWorker) Work(ctx context.Context, job *river.Job[CloneArgs]) error {
+	logger := slog.With("workflow_id", job.Args.WorkflowID, "worker", "clone")
+	logger.Debug("starting clone worker")
+
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "clone", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 		return stage.CloneStage(job.Args.RepoURL, job.Args.RepoPath).Run(ctx, state)
 	}); err != nil {
@@ -79,6 +83,9 @@ func NewPreprocessWorker(store *Store, client *river.Client[pgx.Tx]) *Preprocess
 }
 
 func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessArgs]) error {
+	logger := slog.With("workflow_id", job.Args.WorkflowID, "worker", "preprocess")
+	logger.Debug("starting preprocess worker")
+
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "preprocess", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 		return stage.PreprocessStage(job.Args.OutputPath, job.Args.IncludeDirs).Run(ctx, state)
 	}); err != nil {
@@ -107,6 +114,9 @@ func NewVerifyWorker(store *Store, client *river.Client[pgx.Tx]) *VerifyWorker {
 }
 
 func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
+	logger := slog.With("workflow_id", job.Args.WorkflowID, "worker", "verify")
+	logger.Debug("starting verify worker")
+
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "verify", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
 		return stage.VerifyStage(job.Args.OutputPath).Run(ctx, state)
 	}); err != nil {

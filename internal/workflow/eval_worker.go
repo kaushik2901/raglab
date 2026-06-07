@@ -51,6 +51,9 @@ func NewEvalWorker(store *Store, evalStore *eval.EvalStore) *EvalWorker {
 }
 
 func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
+	logger := slog.With("workflow_id", job.Args.WorkflowID, "worker", "eval")
+	logger.Debug("starting eval worker")
+
 	args := job.Args
 	ks := []int{1, 3, 5, 10}
 

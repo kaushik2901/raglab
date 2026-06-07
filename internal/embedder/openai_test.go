@@ -18,6 +18,26 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
+type embedRequest struct {
+	Model string   `json:"model"`
+	Input []string `json:"input"`
+}
+
+type embedResponse struct {
+	Data  []embedData `json:"data"`
+	Model string      `json:"model"`
+}
+
+type embedData struct {
+	Index     int       `json:"index"`
+	Embedding []float64 `json:"embedding"`
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}
+
 func newTestEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
 	e := newOpenAIEmbedder(baseURL, apiKey, model, batchSize)
 	e.retryBackoff = time.Millisecond
@@ -33,7 +53,7 @@ func TestEmbed_Basic(t *testing.T) {
 			},
 			Model: "text-embedding-3-small",
 		}
-		json.NewEncoder(w).Encode(resp)
+		writeJSON(w, resp)
 	}))
 	defer srv.Close()
 
@@ -60,7 +80,7 @@ func TestEmbed_Batching(t *testing.T) {
 		for i := range req.Input {
 			data[i] = embedData{Index: i, Embedding: []float64{float64(i)}}
 		}
-		json.NewEncoder(w).Encode(embedResponse{Data: data, Model: "m"})
+		writeJSON(w, embedResponse{Data: data, Model: "m"})
 	}))
 	defer srv.Close()
 
@@ -92,7 +112,7 @@ func TestEmbed_EmptyInput(t *testing.T) {
 
 func TestEmbed_ModelName(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "custom-model",
 		})
@@ -109,7 +129,7 @@ func TestEmbed_ModelName(t *testing.T) {
 
 func TestEmbed_Dimensions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1, 0.2, 0.3, 0.4}}},
 			Model: "m",
 		})
@@ -126,7 +146,7 @@ func TestEmbed_Dimensions(t *testing.T) {
 
 func TestEmbed_ChunkID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
@@ -148,7 +168,7 @@ func TestEmbed_APIClient(t *testing.T) {
 		path = r.URL.Path
 		contentType = r.Header.Get("Content-Type")
 		auth = r.Header.Get("Authorization")
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
@@ -170,7 +190,7 @@ func TestEmbed_APIEmptyKey(t *testing.T) {
 	var auth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth = r.Header.Get("Authorization")
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
@@ -208,7 +228,7 @@ func TestEmbed_RateLimit(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
@@ -239,7 +259,7 @@ func TestEmbed_RateLimitExhausted(t *testing.T) {
 
 func TestEmbed_ResponseMismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
@@ -259,7 +279,7 @@ func TestEmbed_ResponseMismatch(t *testing.T) {
 func TestEmbed_ModelField(t *testing.T) {
 	t.Run("response model used when present", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(embedResponse{
+			writeJSON(w, embedResponse{
 				Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 				Model: "response-model",
 			})
@@ -276,7 +296,7 @@ func TestEmbed_ModelField(t *testing.T) {
 
 	t.Run("falls back to configured model when empty", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(embedResponse{
+			writeJSON(w, embedResponse{
 				Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 				Model: "",
 			})
@@ -294,7 +314,7 @@ func TestEmbed_ModelField(t *testing.T) {
 
 func TestEmbed_EmptyChunkContent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
@@ -333,7 +353,7 @@ func TestEmbed_RetryBodyPreserved(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
-		json.NewEncoder(w).Encode(embedResponse{
+		writeJSON(w, embedResponse{
 			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
 			Model: "m",
 		})
