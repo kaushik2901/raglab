@@ -13,9 +13,9 @@ Remove-Item -Recurse -Force bin,output,.journal    # clean
 ```
 
 On Windows, use `make.cmd` for Docker-based builds (build/run/clean/test).  
-`build.cmd` does NOT exist despite README mentioning it — use `make.cmd` or raw `go build` instead.
+`build.cmd` does NOT exist — use `make.cmd` or raw `go build` instead.
 
-Zero external Go dependencies (no `go.sum` yet). No `vendor/` dir.
+External Go dependencies managed via `go.mod` / `go.sum`. No `vendor/` dir.
 
 ## Pipeline Stages
 
@@ -29,12 +29,12 @@ Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to re
 
 ## Quirks
 
-- Package `internal/stage/` is named `stageimport` (not `stage`) — imports use `stagepkg "..."`.
+- Package `internal/stage/` is named `stage` (formerly `stageimport`).
 - `handbook/` is the default clone target, NOT tracked in git (but not gitignored either).
 - Journal caching lives in `.journal/` (gob files per stage). Delete it to force re-run.
 - `config.Config` is system-level only: `MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`.
 - Pipeline inputs (repo URL, chunk params, etc.) are parsed inline by each `cmd/*/main.go`, not in config. Stage functions accept explicit parameters instead of `*config.Config` — see per-stage signatures.
-- `go mod tidy` is only needed if adding external deps (currently none).
+- `go mod tidy` is only needed if adding external deps (currently none beyond existing go.mod).
 - Pipeline retries use exponential backoff + jitter. `MaxRetries=0` means no retries. `RetryBackoff` must be > 0.
 
 ## Preprocessor Transform Order
@@ -92,7 +92,7 @@ All four providers use **OpenAI-compatible API format** under the hood. The `--l
 
 | Provider     | Env API Key            | Env Base URL                      | Default Base URL                                              |
 |--------------|------------------------|-----------------------------------|---------------------------------------------------------------|
-| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` | `https://api.openai.com/v1`                 |
+| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` | `https://api.openai.com`                    |
 | `gemini`     | `GEMINI_API_KEY`       | `GEMINI_BASE_URL`                 | `https://generativelanguage.googleapis.com/v1beta/openai`     |
 | `openrouter` | `OPENROUTER_API_KEY`   | `OPENROUTER_BASE_URL`             | `https://openrouter.ai/api/v1`                                |
 | `lmstudio`   | *(none)*               | `LMSTUDIO_BASE_URL`               | `http://localhost:1234/v1`                                    |
@@ -133,6 +133,15 @@ Both use `config.ResolveProviderConfig(provider)` which maps provider names to e
 ### Rate Limiting
 
 Rate limiting is purely **reactive** — both the embedder and generator retry on 429 with: exponential backoff + jitter + `Retry-After` header respect. Generator retries up to 5 attempts with the same backoff strategy.
+
+## Embedding Model Dimension Mismatch
+
+When `EnsureCollection` finds an existing Qdrant collection, it returns immediately **without checking vector dimensions**. If you switch to an embedding model that produces different-sized vectors, Qdrant will reject the upsert at runtime with a dimension mismatch error. To fix:
+
+1. Delete the Qdrant collection manually (`DROP COLLECTION` via Qdrant UI or API)
+2. Or use a different `--tag` / collection name for the new index
+
+There is currently no `--force-recreate` flag — the safe workaround is to use a unique tag per embedding model configuration.
 
 ## Important: Rebuild workerd after provider changes
 
