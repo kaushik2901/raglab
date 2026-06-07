@@ -104,6 +104,8 @@ All four providers use **OpenAI-compatible API format** under the hood. The `--l
 | `--llm-provider`         | `LLM_PROVIDER`          | `openai`     | All CLIs (index, eval, query)     |
 | `--embedding-provider`   | `EMBEDDING_PROVIDER`    | → `--llm-provider` | index, eval, query          |
 | `--judge-provider`       | `JUDGE_PROVIDER`        | → `--llm-provider` | eval only                   |
+| `--batch-size`           | `BATCH_SIZE`            | `20`          | index, eval                      |
+| `--eval-concurrency`     | `EVAL_CONCURRENCY`      | `5`           | eval only                        |
 
 ### Usage examples
 

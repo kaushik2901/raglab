@@ -129,7 +129,7 @@ Artifacts are stored at `artifacts/preprocessing/<tag>/repo/` and `artifacts/pre
 
 | Flag             | Env Var        | Default                                                | Description                                      |
 | ---------------- | -------------- | ------------------------------------------------------ | ------------------------------------------------ |
-| `--repo-url`     | `REPO_URL`     | `https://gitlab.com/gitlab-com/content-sites/handbook` | Handbook repository URL                          |
+| `--repo-url`     | `REPO_URL`     | `https://gitlab.com/gitlab-com/content-sites/handbook.git` | Handbook repository URL                          |
 | `--tag`          | `TAG`          | `pre-<timestamp>`                                      | Workflow tag                                     |
 | `--include-dirs` | `INCLUDE_DIRS` | `""`                                                   | Comma-separated subdirs to process (empty = all) |
 
@@ -207,6 +207,8 @@ go build -o bin\eval.exe .\cmd\eval
 | `--judge-provider`     | `JUDGE_PROVIDER`     | (same as `--llm-provider`) | Judge provider for answer scoring                                   |
 | `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                                     |
 | `--judge-model`        | `JUDGE_MODEL`        | (same as `--llm-model`)    | LLM model for answer correctness scoring                            |
+| `--eval-concurrency`   | `EVAL_CONCURRENCY`   | `5`                        | Concurrency for eval questions (currently sequential — reserved)    |
+| `--batch-size`         | `BATCH_SIZE`         | `20`                       | Embedding API batch size                                            |
 | `--tag`                | —                    | `eval-<timestamp>`         | Eval run tag prefix                                                 |
 
 Each `.json` file in the dataset directory is evaluated in its own River workflow (all submitted concurrently). Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
@@ -240,22 +242,27 @@ go build -o bin\query.exe .\cmd\query
 
 Secrets and connection strings are read from environment variables (not CLI flags). The `--llm-provider` flag selects which set of vars to use:
 
-| Env Var               | Default                                                      | Description                    |
-| --------------------- | ------------------------------------------------------------ | ------------------------------ |
-| `LLM_PROVIDER`        | `openai`                                                     | LLM provider name              |
-| `OPENAI_API_KEY`      | (falls back to `LLM_API_KEY`)                                | OpenAI API key                 |
-| `OPENAI_BASE_URL`     | (falls back to `LLM_BASE_URL`) → `https://api.openai.com`    | OpenAI API base URL            |
-| `GEMINI_API_KEY`      | `""`                                                         | Google Gemini API key          |
-| `GEMINI_BASE_URL`     | `https://generativelanguage.googleapis.com/v1beta/openai`    | Gemini OpenAI-compat endpoint  |
-| `OPENROUTER_API_KEY`  | `""`                                                         | OpenRouter API key             |
-| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`                               | OpenRouter API base URL        |
-| `LMSTUDIO_BASE_URL`   | `http://localhost:1234/v1`                                   | LM Studio base URL (no key)    |
-| `QDRANT_URL`          | `http://localhost:6334`                                      | Qdrant gRPC endpoint           |
-| `QDRANT_API_KEY`      | `""`                                                         | Qdrant API key (optional)      |
-| `DATABASE_URL`        | `postgres://rag:rag@localhost:5432/rag?sslmode=disable`      | Postgres connection string     |
-| `MAX_RETRIES`         | `3`                                                          | Maximum retry count for stages |
-| `RETRY_BACKOFF`       | `5s`                                                         | Retry backoff duration         |
-| `LOG_LEVEL`           | `info`                                                       | Log level                      |
+| Env Var               | Default                                                      | Description                            |
+| --------------------- | ------------------------------------------------------------ | -------------------------------------- |
+| `LLM_PROVIDER`        | `openai`                                                     | LLM provider name                     |
+| `LLM_API_KEY`         | `""`                                                         | LLM API key (overridable per-provider) |
+| `LLM_BASE_URL`        | `https://api.openai.com`                                     | LLM API base URL (overridable per-provider) |
+| `LLM_MODEL`           | `gpt-4o-mini`                                                | Default LLM model for generation      |
+| `OPENAI_API_KEY`      | (falls back to `LLM_API_KEY`)                                | OpenAI API key                        |
+| `OPENAI_BASE_URL`     | (falls back to `LLM_BASE_URL`) → `https://api.openai.com`    | OpenAI API base URL                   |
+| `GEMINI_API_KEY`      | `""`                                                         | Google Gemini API key                 |
+| `GEMINI_BASE_URL`     | `https://generativelanguage.googleapis.com/v1beta/openai`    | Gemini OpenAI-compat endpoint         |
+| `OPENROUTER_API_KEY`  | `""`                                                         | OpenRouter API key                    |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`                               | OpenRouter API base URL               |
+| `LMSTUDIO_BASE_URL`   | `http://localhost:1234/v1`                                   | LM Studio base URL (no key)           |
+| `EVAL_CONCURRENCY`    | `5`                                                          | Eval question concurrency (reserved)  |
+| `BATCH_SIZE`          | `20`                                                         | Embedding API batch size              |
+| `QDRANT_URL`          | `http://localhost:6334`                                      | Qdrant gRPC endpoint                  |
+| `QDRANT_API_KEY`      | `""`                                                         | Qdrant API key (optional)             |
+| `DATABASE_URL`        | `postgres://rag:rag@localhost:5432/rag?sslmode=disable`      | Postgres connection string            |
+| `MAX_RETRIES`         | `3`                                                          | Maximum retry count for stages        |
+| `RETRY_BACKOFF`       | `5s`                                                         | Retry backoff duration                |
+| `LOG_LEVEL`           | `info`                                                       | Log level                              |
 
 ### Provider Quick Reference
 
