@@ -42,11 +42,29 @@ func Load() (*Config, error) {
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
 
-	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com/v1")
+	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com")
 	cfg.QdrantURL = EnvOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.DatabaseURL = EnvOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
 
 	return cfg, cfg.Validate()
+}
+
+func (c *Config) String() string {
+	return fmt.Sprintf(
+		"Config{MaxRetries=%d, RetryBackoff=%s, LogLevel=%s, DatabaseURL=%s, LLMBaseURL=%s, LLMApiKey=%s, QdrantURL=%s, QdrantAPIKey=%s}",
+		c.MaxRetries, c.RetryBackoff, c.LogLevel, c.DatabaseURL, c.LLMBaseURL,
+		redact(c.LLMApiKey), c.QdrantURL, redact(c.QdrantAPIKey),
+	)
+}
+
+func redact(s string) string {
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 8 {
+		return "****"
+	}
+	return s[:4] + "****" + s[len(s)-4:]
 }
 
 func (c *Config) Validate() error {
@@ -68,7 +86,7 @@ func (c *Config) Validate() error {
 func ResolveProviderConfig(p Provider) (baseURL, apiKey string) {
 	switch p {
 	case ProviderOpenAI:
-		return resolveWithFallback("OPENAI_BASE_URL", "LLM_BASE_URL", "https://api.openai.com/v1"),
+		return resolveWithFallback("OPENAI_BASE_URL", "LLM_BASE_URL", "https://api.openai.com"),
 			resolveWithFallback("OPENAI_API_KEY", "LLM_API_KEY", "")
 	case ProviderOpenRouter:
 		return EnvOrDefault("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
@@ -79,7 +97,7 @@ func ResolveProviderConfig(p Provider) (baseURL, apiKey string) {
 		return EnvOrDefault("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"),
 			os.Getenv("GEMINI_API_KEY")
 	default:
-		return EnvOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		return EnvOrDefault("OPENAI_BASE_URL", "https://api.openai.com"),
 			os.Getenv("OPENAI_API_KEY")
 	}
 }

@@ -28,6 +28,7 @@ type openAIGenerator struct {
 }
 
 func NewOpenAI(baseURL, apiKey, model string) Generator {
+	config.WarnOnInsecure(baseURL, apiKey, "generator")
 	baseURL = config.NormalizeBaseURL(baseURL)
 	opts := []option.RequestOption{
 		option.WithBaseURL(baseURL + "/v1/"),

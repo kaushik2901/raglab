@@ -1,7 +1,9 @@
 package config
 
 import (
+	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -12,6 +14,12 @@ func NormalizeBaseURL(baseURL string) string {
 		}
 	}
 	return baseURL
+}
+
+func WarnOnInsecure(baseURL, apiKey, label string) {
+	if apiKey != "" && strings.HasPrefix(baseURL, "http://") {
+		slog.Warn("API key sent over non-TLS connection", "label", label, "base_url", baseURL)
+	}
 }
 
 func ParseRetryAfter(val string) time.Duration {

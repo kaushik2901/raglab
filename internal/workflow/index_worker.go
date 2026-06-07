@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
@@ -126,6 +127,9 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	for _, filePath := range mdFiles {
 		fp := filePath
 		g.Go(func() error {
+			docCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer cancel()
+
 			relPath, err := filepath.Rel(inputDir, fp)
 			if err != nil {
 				return fmt.Errorf("relative path: %w", err)
@@ -156,14 +160,14 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 				return nil
 			}
 
-			embeddings, err := emb.Embed(ctx, chunks)
+			embeddings, err := emb.Embed(docCtx, chunks)
 			if err != nil {
 				return fmt.Errorf("embed %s: %w", relPath, err)
 			}
 
 			ensureOnce.Do(func() {
 				vectorSize := embeddings[0].Dimensions
-				initErr = qStore.EnsureCollection(ctx, collectionName, vectorSize, "Cosine")
+				initErr = qStore.EnsureCollection(docCtx, collectionName, vectorSize, "Cosine")
 			})
 			if initErr != nil {
 				return fmt.Errorf("ensure collection: %w", initErr)
@@ -177,7 +181,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 				}
 			}
 
-			if err := qStore.Store(ctx, collectionName, docChunks); err != nil {
+			if err := qStore.Store(docCtx, collectionName, docChunks); err != nil {
 				return fmt.Errorf("store %s: %w", relPath, err)
 			}
 

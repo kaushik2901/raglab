@@ -46,8 +46,11 @@ func Evaluate(ctx context.Context, args PipelineArgs) ([]types.RetrievalResult, 
 	for i, q := range args.Questions {
 		qStart := time.Now()
 
+		qCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+
 		queryVector := toFloat32(embeddings[i])
-		searchResults, err := args.Searcher.Search(ctx, args.Collection, queryVector, args.TopK)
+		searchResults, err := args.Searcher.Search(qCtx, args.Collection, queryVector, args.TopK)
 		if err != nil {
 			return nil, fmt.Errorf("search q=%s: %w", q.ID, err)
 		}
@@ -56,13 +59,13 @@ func Evaluate(ctx context.Context, args PipelineArgs) ([]types.RetrievalResult, 
 
 		if args.Generator != nil && len(searchResults) > 0 {
 			contextText := buildContextText(searchResults)
-			answer, promptTokens, completionTokens := generateForQuestion(ctx, args.Generator, q, contextText)
+			answer, promptTokens, completionTokens := generateForQuestion(qCtx, args.Generator, q, contextText)
 			results[i].Answer = answer
 			results[i].PromptTokens = promptTokens
 			results[i].CompletionTokens = completionTokens
 
 			if args.JudgeGen != nil && answer != "" {
-				score, err := JudgeAnswer(ctx, args.JudgeGen, q.Question, contextText, q.ExpectedAnswer, answer)
+				score, err := JudgeAnswer(qCtx, args.JudgeGen, q.Question, contextText, q.ExpectedAnswer, answer)
 				if err != nil {
 					slog.Warn("judge error", "question_id", q.ID, "err", err)
 				} else {

@@ -27,8 +27,9 @@ type embedder struct {
 }
 
 func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
+	config.WarnOnInsecure(baseURL, apiKey, "embedder")
 	return &embedder{
-		baseURL:          config.NormalizeBaseURL(baseURL),
+		baseURL: config.NormalizeBaseURL(baseURL),
 		apiKey:           apiKey,
 		model:            model,
 		batchSize:        batchSize,

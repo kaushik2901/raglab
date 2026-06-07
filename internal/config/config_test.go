@@ -153,7 +153,7 @@ func parseTestFlags(args []string) (*Config, error) {
 
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
-	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com/v1")
+	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com")
 	cfg.QdrantURL = EnvOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.DatabaseURL = EnvOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
 
