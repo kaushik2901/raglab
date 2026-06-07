@@ -1,8 +1,10 @@
 package stageimport
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 
@@ -31,10 +33,15 @@ func CloneStage(repoURL, repoPath string) types.Stage {
 }
 
 func gitClone(ctx context.Context, url, path string) error {
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "git", "-c", "core.longpaths=true", "clone", "--depth", "1", "--single-branch", url, path)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	return cmd.Run()
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git clone: %w\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+	}
+	slog.Debug("git clone", "stdout", stdout.String(), "stderr", stderr.String())
+	return nil
 }
 
 func gitUpdate(ctx context.Context, path string) error {
@@ -52,12 +59,14 @@ func gitUpdate(ctx context.Context, path string) error {
 }
 
 func runGit(ctx context.Context, path, desc string, args ...string) error {
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = path
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w", desc, err)
+		return fmt.Errorf("%s: %w\nstdout: %s\nstderr: %s", desc, err, stdout.String(), stderr.String())
 	}
+	slog.Debug(desc, "stdout", stdout.String(), "stderr", stderr.String())
 	return nil
 }

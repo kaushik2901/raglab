@@ -36,6 +36,7 @@ func NewOpenAI(baseURL, apiKey, model string) Generator {
 	if apiKey != "" {
 		opts = append(opts, option.WithAPIKey(apiKey))
 	}
+	opts = append(opts, option.WithMaxRetries(0))
 	return &openAIGenerator{
 		client:           openai.NewClient(opts...),
 		model:            model,

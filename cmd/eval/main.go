@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -17,6 +18,7 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
 )
 
@@ -94,6 +96,12 @@ func run() error {
 	}
 	if len(files) == 0 {
 		return fmt.Errorf("no .json files found in %s", *datasetDir)
+	}
+
+	for _, f := range files {
+		if err := validateDatasetFile(filepath.Join(absDir, f)); err != nil {
+			return fmt.Errorf("invalid dataset %s: %w", f, err)
+		}
 	}
 
 	ctx := context.Background()
@@ -201,5 +209,37 @@ func run() error {
 	}
 
 	slog.Info("all evaluations complete", "count", len(workflows))
+	return nil
+}
+
+func validateDatasetFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read file: %w", err)
+	}
+
+	var ds types.EvalDataset
+	if err := json.Unmarshal(data, &ds); err != nil {
+		return fmt.Errorf("decode JSON: %w", err)
+	}
+
+	if len(ds.Questions) == 0 {
+		return fmt.Errorf("dataset has no questions")
+	}
+
+	for i, q := range ds.Questions {
+		if q.ID == "" {
+			return fmt.Errorf("question %d: missing id", i)
+		}
+		if q.Question == "" {
+			return fmt.Errorf("question %d (%s): missing question text", i, q.ID)
+		}
+		for j, rel := range q.Relevance {
+			if rel.DocumentPath == "" {
+				return fmt.Errorf("question %d (%s): relevance[%d] missing document_path", i, q.ID, j)
+			}
+		}
+	}
+
 	return nil
 }

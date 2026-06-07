@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -81,113 +80,103 @@ func VerifyStage(outputPath string) types.Stage {
 }
 
 func checkFileCountMatch(report *VerificationReport, srcDir, dstDir string) {
-	srcCount := 0
-	filepath.Walk(srcDir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			slog.Warn("walk error", "path", path, "err", err)
-			return nil
-		}
-		if fi.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
-			srcCount++
-		}
-		return nil
-	})
-	dstCount := 0
-	filepath.Walk(dstDir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			slog.Warn("walk error", "path", path, "err", err)
-			return nil
-		}
-		if fi.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
-			dstCount++
-		}
-		return nil
-	})
-	passed := srcCount == dstCount
+	srcCount, srcErr := countMarkdownFiles(srcDir)
+	dstCount, dstErr := countMarkdownFiles(dstDir)
+	passed := srcCount == dstCount && srcErr == nil && dstErr == nil
 	detail := fmt.Sprintf("src: %d markdown files, dst: %d markdown files", srcCount, dstCount)
+	if srcErr != nil {
+		detail += "; src walk error: " + srcErr.Error()
+	}
+	if dstErr != nil {
+		detail += "; dst walk error: " + dstErr.Error()
+	}
 	report.Checks = append(report.Checks, CheckResult{
 		Name: "file_count_match", Passed: passed, Detail: detail,
 	})
 }
 
-func checkDirectoryStructure(report *VerificationReport, srcDir, dstDir string) {
-	collectRelPaths := func(root string) map[string]bool {
-		paths := make(map[string]bool)
-		filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
-			if err != nil {
-				slog.Warn("walk error", "path", path, "err", err)
-				return nil
-			}
-			if fi.IsDir() {
-				return nil
-			}
-			if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
-				rel, _ := filepath.Rel(root, path)
-				paths[rel] = true
-			}
+func countMarkdownFiles(dir string) (int, error) {
+	var count int
+	err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
 			return nil
-		})
-		return paths
-	}
-	srcPaths := collectRelPaths(srcDir)
-	dstPaths := collectRelPaths(dstDir)
+		}
+		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
+			count++
+		}
+		return nil
+	})
+	return count, err
+}
+
+func checkDirectoryStructure(report *VerificationReport, srcDir, dstDir string) {
+	srcPaths, srcErr := collectMarkdownPaths(srcDir)
+	dstPaths, dstErr := collectMarkdownPaths(dstDir)
 	passed := true
-	var diff []string
-	for p := range srcPaths {
-		if !dstPaths[p] {
-			diff = append(diff, "missing: "+p)
-		}
-	}
-	for p := range dstPaths {
-		if !srcPaths[p] {
-			diff = append(diff, "extra: "+p)
-		}
-	}
-	if len(diff) > 0 {
+	var detail string
+	if srcErr != nil {
+		detail = "src walk error: " + srcErr.Error()
 		passed = false
 	}
-	detail := "directory structure preserved"
-	if !passed {
-		detail = fmt.Sprintf("mismatched files: %d", len(diff))
+	if dstErr != nil {
+		if detail != "" {
+			detail += "; "
+		}
+		detail += "dst walk error: " + dstErr.Error()
+		passed = false
+	}
+	if passed {
+		var diff []string
+		for p := range srcPaths {
+			if !dstPaths[p] {
+				diff = append(diff, "missing: "+p)
+			}
+		}
+		for p := range dstPaths {
+			if !srcPaths[p] {
+				diff = append(diff, "extra: "+p)
+			}
+		}
+		if len(diff) > 0 {
+			passed = false
+			detail = fmt.Sprintf("mismatched files: %d", len(diff))
+		} else {
+			detail = "directory structure preserved"
+		}
 	}
 	report.Checks = append(report.Checks, CheckResult{
 		Name: "directory_structure", Passed: passed, Detail: detail,
 	})
 }
 
-func checkNoShortcodes(report *VerificationReport, dir string) {
-	issues := []string{}
-	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+func collectMarkdownPaths(root string) (map[string]bool, error) {
+	paths := make(map[string]bool)
+	err := filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
-			slog.Warn("walk error", "path", path, "err", err)
-			return nil
+			return err
 		}
 		if fi.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			slog.Warn("read error", "path", path, "err", err)
-			return nil
-		}
-		if shortcodePattern.Match(data) {
-			rel, _ := filepath.Rel(dir, path)
-			issues = append(issues, rel)
+		if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
+			rel, _ := filepath.Rel(root, path)
+			paths[rel] = true
 		}
 		return nil
 	})
-	passed := len(issues) == 0
+	return paths, err
+}
+
+func checkNoShortcodes(report *VerificationReport, dir string) {
+	issues, err := walkPatternMatches(dir, shortcodePattern)
+	passed := err == nil && len(issues) == 0
 	detail := fmt.Sprintf("files with shortcodes: %d", len(issues))
-	if len(issues) > 0 {
+	if err != nil {
+		detail += "; walk error: " + err.Error()
+	} else if len(issues) > 0 {
 		detail += ": " + strings.Join(issues, ", ")
 	}
 	report.Checks = append(report.Checks, CheckResult{
@@ -196,32 +185,12 @@ func checkNoShortcodes(report *VerificationReport, dir string) {
 }
 
 func checkNoRawHTML(report *VerificationReport, dir string) {
-	issues := []string{}
-	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			slog.Warn("walk error", "path", path, "err", err)
-			return nil
-		}
-		if fi.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			slog.Warn("read error", "path", path, "err", err)
-			return nil
-		}
-		if htmlTagPattern.Match(data) {
-			rel, _ := filepath.Rel(dir, path)
-			issues = append(issues, rel)
-		}
-		return nil
-	})
-	passed := len(issues) == 0
+	issues, err := walkPatternMatches(dir, htmlTagPattern)
+	passed := err == nil && len(issues) == 0
 	detail := fmt.Sprintf("files with HTML tags: %d", len(issues))
-	if len(issues) > 0 {
+	if err != nil {
+		detail += "; walk error: " + err.Error()
+	} else if len(issues) > 0 {
 		detail += ": " + strings.Join(issues, ", ")
 	}
 	report.Checks = append(report.Checks, CheckResult{
@@ -230,28 +199,13 @@ func checkNoRawHTML(report *VerificationReport, dir string) {
 }
 
 func checkMinimumContent(report *VerificationReport, dir string) {
-	minContent := 50
-	issues := []string{}
-	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			slog.Warn("walk error", "path", path, "err", err)
-			return nil
-		}
-		if fi.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
-			return nil
-		}
-		if fi.Size() < int64(minContent) {
-			rel, _ := filepath.Rel(dir, path)
-			issues = append(issues, rel)
-		}
-		return nil
-	})
-	passed := len(issues) == 0
+	const minContent = 50
+	issues, err := walkBelowSize(dir, minContent)
+	passed := err == nil && len(issues) == 0
 	detail := fmt.Sprintf("files below %d bytes: %d", minContent, len(issues))
-	if len(issues) > 0 {
+	if err != nil {
+		detail += "; walk error: " + err.Error()
+	} else if len(issues) > 0 {
 		detail += ": " + strings.Join(issues, ", ")
 	}
 	report.Checks = append(report.Checks, CheckResult{
@@ -259,26 +213,77 @@ func checkMinimumContent(report *VerificationReport, dir string) {
 	})
 }
 
+func walkPatternMatches(dir string, pattern *regexp.Regexp) ([]string, error) {
+	var issues []string
+	err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if pattern.Match(data) {
+			rel, _ := filepath.Rel(dir, path)
+			issues = append(issues, rel)
+		}
+		return nil
+	})
+	return issues, err
+}
+
+func walkBelowSize(dir string, minSize int) ([]string, error) {
+	var issues []string
+	err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(fi.Name(), ".md") && !strings.HasSuffix(fi.Name(), ".markdown") {
+			return nil
+		}
+		if fi.Size() < int64(minSize) {
+			rel, _ := filepath.Rel(dir, path)
+			issues = append(issues, rel)
+		}
+		return nil
+	})
+	return issues, err
+}
+
 func checkTotalSize(report *VerificationReport, srcDir, dstDir string) {
-	srcSize := computeTotalSize(srcDir)
-	dstSize := computeTotalSize(dstDir)
+	srcSize, srcErr := computeTotalSize(srcDir)
+	dstSize, dstErr := computeTotalSize(dstDir)
 	passed := dstSize > 0
-	if srcSize > 0 {
+	if srcErr == nil && srcSize > 0 {
 		ratio := float64(dstSize) / float64(srcSize)
 		passed = ratio >= 0.5 && ratio <= 2.0
 	}
 	detail := fmt.Sprintf("src size: %d bytes, dst size: %d bytes", srcSize, dstSize)
+	if srcErr != nil {
+		detail += "; src walk error: " + srcErr.Error()
+	}
+	if dstErr != nil {
+		detail += "; dst walk error: " + dstErr.Error()
+	}
 	report.Checks = append(report.Checks, CheckResult{
 		Name: "total_size", Passed: passed, Detail: detail,
 	})
 }
 
-func computeTotalSize(dir string) int64 {
+func computeTotalSize(dir string) (int64, error) {
 	var total int64
-	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+	err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
-			slog.Warn("walk error", "path", path, "err", err)
-			return nil
+			return err
 		}
 		if fi.IsDir() {
 			return nil
@@ -288,7 +293,7 @@ func computeTotalSize(dir string) int64 {
 		}
 		return nil
 	})
-	return total
+	return total, err
 }
 
 func countPassed(checks []CheckResult) int {

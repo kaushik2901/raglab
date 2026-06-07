@@ -116,6 +116,8 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 		initErr     error
 		totalDocs   atomic.Int32
 		totalChunks atomic.Int32
+		mu          sync.Mutex
+		skipErrors  []string
 	)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -133,15 +135,24 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 			doc, err := parser.ParseFile(fp, relPath)
 			if err != nil {
 				slog.Warn("parse error", "path", fp, "err", err)
+				mu.Lock()
+				skipErrors = append(skipErrors, relPath+": parse: "+err.Error())
+				mu.Unlock()
 				return nil
 			}
 
 			chunks, err := chunkr.Chunk(doc)
 			if err != nil {
 				slog.Warn("chunk error", "path", fp, "err", err)
+				mu.Lock()
+				skipErrors = append(skipErrors, relPath+": chunk: "+err.Error())
+				mu.Unlock()
 				return nil
 			}
 			if len(chunks) == 0 {
+				mu.Lock()
+				skipErrors = append(skipErrors, relPath+": empty chunks")
+				mu.Unlock()
 				return nil
 			}
 
@@ -179,6 +190,13 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 
 	if err := g.Wait(); err != nil {
 		return nil, err
+	}
+
+	if len(skipErrors) > 0 {
+		slog.Warn("indexing completed with skipped files",
+			"indexed", totalDocs.Load(),
+			"skipped", len(skipErrors),
+			"errors", skipErrors)
 	}
 
 	return &types.StageResult{
