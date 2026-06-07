@@ -6,37 +6,92 @@ Uses **River** (`github.com/riverqueue/river`) as the job engine — a lightweig
 
 ## Architecture
 
-```
-┌─────────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
-│  cmd/preprocess     │     │  cmd/index           │     │  cmd/eval            │
-│  (River job insert) │     │  (River job insert)  │     │  (River job insert)  │
-└─────────┬───────────┘     └──────────┬───────────┘     └──────────┬───────────┘
-          │                            │                            │
-          ▼                            ▼                            ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Postgres (River + State)                          │
-│  workflows │ workflow_steps │ eval_runs │ eval_queries │ river_job │ ...    │
-└─────────────────────────────────────────────────────────────────────────────┘
-          │                            │                            │
-          ▼                            ▼                            ▼
-┌──────────────────────┐    ┌──────────────────────┐     ┌──────────────────────┐
-│  cmd/workerd         │    │  cmd/workerd         │     │  cmd/workerd         │
-│  Clone → Preprocess  │    │  Parse → Chunk →     │     │  Retrieve → Generate │
-│  → Verify            │    │  Embed → Store       │     │  → Eval Metrics      │
-│  (3 workers)         │    │  (1 worker, parallel)│     │  (1 worker, parallel)│
-└──────────────────────┘    └──────────────────────┘     └──────────────────────┘
-                                                                    │
-          ┌─────────────────────────────────────────────────────────┘
-          ▼
-┌──────────────────────┐
-│  cmd/query           │
-│  (synchronous CLI)   │
-│  Embed → Search →    │
-│  Generate            │
-└──────────────────────┘
+```mermaid
+flowchart LR
+    subgraph CLIs["CLI Layer (River job inserters)"]
+        PP[cmd/preprocess]
+        IDX[cmd/index]
+        EV[cmd/eval]
+    end
+
+    subgraph PG["Postgres (River + State)"]
+        WF[workflows<br/>workflow_steps]
+        ER[eval_runs<br/>eval_queries]
+        RJ[river_job]
+    end
+
+    subgraph WORKER["workerd Process (River Workers)"]
+        PREW[Clone → Preprocess → Verify<br/>3 workers]
+        INDW[Parse → Chunk → Embed → Store<br/>1 worker, parallel files]
+        EVALW[Retrieve → Generate → Judge<br/>1 worker, sequential questions]
+    end
+
+    subgraph QUERY["Synchronous CLI"]
+        Q[cmd/query<br/>Embed → Search → Generate]
+    end
+
+    subgraph STORE["Vector Store"]
+        QDRANT[(Qdrant<br/>gRPC)]
+    end
+
+    PP --> PG
+    IDX --> PG
+    EV --> PG
+    PG --> PREW
+    PG --> INDW
+    PG --> EVALW
+    INDW --> QDRANT
+    PREW -.->|cleaned markdown<br/>on disk| INDW
+    EVALW --> QDRANT
+    Q --> QDRANT
 ```
 
 Three pipelines share a single `workerd` process. The preprocessing pipeline writes cleaned markdown to disk; the indexing pipeline reads it back and stores vectors in Qdrant; the eval pipeline measures retrieval quality. The query CLI runs synchronously (not a River workflow).
+
+### Pipeline Stage Flow
+
+```mermaid
+flowchart TD
+    subgraph PREPROC["Preprocessing Pipeline"]
+        C[Clone] --> P[Preprocess]
+        P --> V[Verify]
+        V --> OUT[(Cleaned Markdown<br/>on disk)]
+    end
+
+    subgraph INDEX["Indexing Pipeline"]
+        PA[Parse .md files] --> CH[Fixed-Window Chunk]
+        CH --> EM[Embed<br/>OpenAI-compatible API]
+        EM --> ST[Store in Qdrant]
+    end
+
+    subgraph EVAL["Evaluation Pipeline"]
+        BATCH[Phase 1: Batch Embed<br/>all queries] --> SEARCH[Phase 2: Sequential<br/>Qdrant Search]
+        SEARCH --> GEN[Phase 3: Sequential<br/>LLM Generate]
+        GEN --> JUDGE[Phase 4: Sequential<br/>Judge Answer]
+    end
+
+    OUT -.->|reads from| PA
+```
+
+### Evaluation 4-Phase Detail
+
+```mermaid
+sequenceDiagram
+    participant CLI as cmd/eval
+    participant Q as Qdrant
+    participant LLM as LLM API
+
+    CLI->>CLI: Batch embed all N queries
+    loop For each question (1..N)
+        CLI->>Q: Search (query vector)
+        Q-->>CLI: top-K results
+        CLI->>LLM: Generate answer (context + question)
+        LLM-->>CLI: answer + tokens
+        CLI->>LLM: Judge (question + expected + answer)
+        LLM-->>CLI: correctness score (0-1)
+    end
+    CLI->>CLI: Compute aggregate metrics
+```
 
 ## Prerequisites
 
@@ -189,7 +244,7 @@ Secrets and connection strings are read from environment variables (not CLI flag
 | --------------------- | ------------------------------------------------------------ | ------------------------------ |
 | `LLM_PROVIDER`        | `openai`                                                     | LLM provider name              |
 | `OPENAI_API_KEY`      | (falls back to `LLM_API_KEY`)                                | OpenAI API key                 |
-| `OPENAI_BASE_URL`     | (falls back to `LLM_BASE_URL`) → `https://api.openai.com/v1` | OpenAI API base URL            |
+| `OPENAI_BASE_URL`     | (falls back to `LLM_BASE_URL`) → `https://api.openai.com`    | OpenAI API base URL            |
 | `GEMINI_API_KEY`      | `""`                                                         | Google Gemini API key          |
 | `GEMINI_BASE_URL`     | `https://generativelanguage.googleapis.com/v1beta/openai`    | Gemini OpenAI-compat endpoint  |
 | `OPENROUTER_API_KEY`  | `""`                                                         | OpenRouter API key             |
@@ -206,7 +261,7 @@ Secrets and connection strings are read from environment variables (not CLI flag
 
 | Provider     | Env API Key                      | Env Base URL                       | Default Base URL                                          |
 | ------------ | -------------------------------- | ---------------------------------- | --------------------------------------------------------- |
-| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` | `https://api.openai.com/v1`                               |
+| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` | `https://api.openai.com`                                  |
 | `gemini`     | `GEMINI_API_KEY`                 | `GEMINI_BASE_URL`                  | `https://generativelanguage.googleapis.com/v1beta/openai` |
 | `openrouter` | `OPENROUTER_API_KEY`             | `OPENROUTER_BASE_URL`              | `https://openrouter.ai/api/v1`                            |
 | `lmstudio`   | _(none)_                         | `LMSTUDIO_BASE_URL`                | `http://localhost:1234/v1`                                |
