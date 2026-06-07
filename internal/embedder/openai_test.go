@@ -1,10 +1,13 @@
 package embedder
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -310,4 +313,74 @@ func TestNewEmbedder_Defaults(t *testing.T) {
 	e := newOpenAIEmbedder("https://api.openai.com/v1", "", "text-embedding-3-small", 20)
 	assert.Equal(t, "text-embedding-3-small", e.ModelName())
 	assert.Equal(t, 0, e.Dimensions())
+}
+
+func TestEmbed_RetryBodyPreserved(t *testing.T) {
+	var callCount int32
+	var bodies [][]byte
+	var mu sync.Mutex
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+
+		mu.Lock()
+		bodies = append(bodies, body)
+		count := atomic.AddInt32(&callCount, 1)
+		mu.Unlock()
+
+		if count < 3 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		json.NewEncoder(w).Encode(embedResponse{
+			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
+			Model: "m",
+		})
+	}))
+	defer srv.Close()
+
+	e := newTestEmbedder(srv.URL, "", "m", 10)
+	e.retryMaxAttempts = 5
+	chunks := []types.Chunk{{ID: "c1", Content: "hello world"}}
+
+	_, err := e.Embed(context.Background(), chunks)
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&callCount), "expected 3 calls (2 retries + success)")
+	require.Len(t, bodies, 3, "expected 3 request bodies")
+
+	for i := 1; i < len(bodies); i++ {
+		assert.True(t, bytes.Equal(bodies[0], bodies[i]),
+			"request body on attempt %d differs from attempt 0", i+1)
+	}
+}
+
+func TestEmbed_RetryBodyPreserved_Exhausted(t *testing.T) {
+	var bodies [][]byte
+	var mu sync.Mutex
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+
+		mu.Lock()
+		bodies = append(bodies, body)
+		mu.Unlock()
+
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	e := newTestEmbedder(srv.URL, "", "m", 10)
+	e.retryMaxAttempts = 2
+	chunks := []types.Chunk{{ID: "c1", Content: "fail me"}}
+
+	_, err := e.Embed(context.Background(), chunks)
+	require.Error(t, err)
+
+	require.Len(t, bodies, 3, "expected 3 attempts (initial + 2 retries)")
+	for i := 1; i < len(bodies); i++ {
+		assert.True(t, bytes.Equal(bodies[0], bodies[i]),
+			"request body on attempt %d differs from attempt 0", i+1)
+	}
 }
