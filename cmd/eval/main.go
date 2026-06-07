@@ -44,7 +44,7 @@ func run() error {
 	judgeModel := flag.String("judge-model", config.EnvOrDefault("JUDGE_MODEL", ""), "LLM model for answer scoring (defaults to --llm-model if empty)")
 	evalConcurrency := flag.Int("eval-concurrency", config.IntEnvOrDefault("EVAL_CONCURRENCY", 5), "Number of questions to evaluate concurrently (currently sequential — reserved for future use)")
 	batchSize := flag.Int("batch-size", config.IntEnvOrDefault("BATCH_SIZE", 20), "Embedding API batch size")
-	tag := flag.String("tag", "", "Eval run tag prefix (auto-generated if empty)")
+	tag := flag.String("tag", config.EnvOrDefault("TAG", ""), "Eval run tag prefix (auto-generated if empty)")
 
 	cfg, err := config.Load()
 	if err != nil {

@@ -29,7 +29,7 @@ func run() error {
 	flag.CommandLine = flag.NewFlagSet("query", flag.ExitOnError)
 
 	query := flag.String("query", "", "Question to answer (required)")
-	tag := flag.String("tag", "", "Qdrant collection name (required)")
+	tag := flag.String("tag", config.EnvOrDefault("TAG", ""), "Qdrant collection name (required)")
 	queryStrategy := flag.String("query-strategy", retriever.StrategyNaiveSearch, "Query strategy (naive-search)")
 	topK := flag.Int("top-k", 5, "Number of chunks to retrieve")
 	llmProvider := flag.String("llm-provider", config.EnvOrDefault("LLM_PROVIDER", "openai"), "LLM provider (openai, gemini, openrouter, lmstudio)")
@@ -39,7 +39,11 @@ func run() error {
 	temperature := flag.Float64("temperature", 0.3, "LLM temperature")
 	maxTokens := flag.Int("max-tokens", 1024, "Max answer tokens")
 	convID := flag.String("conversation-id", "", "Conversation ID for multi-turn memory")
-	flag.Parse()
+
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 
 	if *query == "" {
 		return fmt.Errorf("--query is required")
@@ -52,20 +56,14 @@ func run() error {
 		*embeddingProvider = *llmProvider
 	}
 
-	qdrantURL := os.Getenv("QDRANT_URL")
-	if qdrantURL == "" {
-		qdrantURL = "http://localhost:6334"
-	}
-	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
-
 	ctx := context.Background()
 
 	emb, err := embedder.New(config.Provider(*embeddingProvider), *embedModel, 1)
 	if err != nil {
 		return fmt.Errorf("create embedder: %w", err)
 	}
-	qStore := qstore.NewQdrantStore(qdrantAPIKey)
-	if err := qStore.Connect(ctx, qdrantURL); err != nil {
+	qStore := qstore.NewQdrantStore(cfg.QdrantAPIKey)
+	if err := qStore.Connect(ctx, cfg.QdrantURL); err != nil {
 		return fmt.Errorf("connect qdrant: %w", err)
 	}
 	defer qStore.Close()
