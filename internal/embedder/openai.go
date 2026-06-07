@@ -102,17 +102,8 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/v1/embeddings", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if e.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.apiKey)
-	}
-
 	var resp embedResponse
-	if err := e.doWithRetry(req, &resp); err != nil {
+	if err := e.doWithRetry(ctx, body, &resp); err != nil {
 		return nil, err
 	}
 
@@ -141,8 +132,17 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 	return embeddings, nil
 }
 
-func (e *embedder) doWithRetry(req *http.Request, respVal interface{}) error {
+func (e *embedder) doWithRetry(ctx context.Context, body []byte, respVal interface{}) error {
 	for attempt := 0; attempt <= e.retryMaxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.baseURL+"/v1/embeddings", bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if e.apiKey != "" {
+			req.Header.Set("Authorization", "Bearer "+e.apiKey)
+		}
+
 		backoff := e.retryBackoff * (1 << attempt)
 		resp, err := e.client.Do(req)
 		if err != nil {

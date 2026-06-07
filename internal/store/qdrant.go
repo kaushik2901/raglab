@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha1"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -178,7 +179,7 @@ func toPoint(doc types.DocumentChunk) *qdrant.PointStruct {
 
 	return &qdrant.PointStruct{
 		Id: &qdrant.PointId{
-			PointIdOptions: &qdrant.PointId_Num{Num: chunkIDToUint64(doc.Chunk.ID)},
+			PointIdOptions: &qdrant.PointId_Uuid{Uuid: chunkIDToUUID(doc.Chunk.ID)},
 		},
 		Vectors: qdrant.NewVectors(vectors...),
 		Payload: qdrant.NewValueMap(map[string]any{
@@ -191,13 +192,24 @@ func toPoint(doc types.DocumentChunk) *qdrant.PointStruct {
 	}
 }
 
-func chunkIDToUint64(id string) uint64 {
-	var h uint64 = 14695981039346656037
-	for i := 0; i < len(id); i++ {
-		h ^= uint64(id[i])
-		h *= 1099511628211
-	}
-	return h
+// dnsNamespace is the UUID for the DNS namespace (RFC 4122).
+var dnsNamespace = []byte{
+	0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
+	0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+}
+
+// chunkIDToUUID generates a deterministic UUID v5 from a chunk ID string
+// using the DNS namespace. This guarantees collision-free point IDs at any
+// corpus scale.
+func chunkIDToUUID(id string) string {
+	h := sha1.New()
+	h.Write(dnsNamespace)
+	h.Write([]byte(id))
+	sum := h.Sum(nil)[:16]
+	sum[6] = (sum[6] & 0x0f) | 0x50 // set version 5
+	sum[8] = (sum[8] & 0x3f) | 0x80 // set RFC 4122 variant
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
 }
 
 func parseDistance(d string) qdrant.Distance {

@@ -157,7 +157,7 @@ func TestQdrant_ToPoint_ID(t *testing.T) {
 	point := toPoint(doc)
 	require.NotNil(t, point)
 	require.NotNil(t, point.Id)
-	assert.Equal(t, chunkIDToUint64("test.md-chunk-0000"), point.Id.GetNum())
+	assert.Equal(t, chunkIDToUUID("test.md-chunk-0000"), point.Id.GetUuid())
 }
 
 func TestQdrant_ToPoint_Vector(t *testing.T) {
@@ -220,20 +220,21 @@ func TestQdrant_ToPoint_Payload(t *testing.T) {
 	assert.Equal(t, "text-embedding-3-small", point.Payload["model"].GetStringValue())
 }
 
-func TestChunkIDToUint64_Deterministic(t *testing.T) {
-	h1 := chunkIDToUint64("doc.md-chunk-0000")
-	h2 := chunkIDToUint64("doc.md-chunk-0000")
-	assert.Equal(t, h1, h2)
+func TestChunkIDToUUID_Deterministic(t *testing.T) {
+	u1 := chunkIDToUUID("doc.md-chunk-0000")
+	u2 := chunkIDToUUID("doc.md-chunk-0000")
+	assert.Equal(t, u1, u2)
 }
 
-func TestChunkIDToUint64_Different(t *testing.T) {
-	h1 := chunkIDToUint64("doc1.md-chunk-0000")
-	h2 := chunkIDToUint64("doc2.md-chunk-0000")
-	assert.NotEqual(t, h1, h2)
+func TestChunkIDToUUID_Different(t *testing.T) {
+	u1 := chunkIDToUUID("doc1.md-chunk-0000")
+	u2 := chunkIDToUUID("doc2.md-chunk-0000")
+	assert.NotEqual(t, u1, u2)
 }
 
-func TestChunkIDToUint64_Empty(t *testing.T) {
-	assert.NotEqual(t, uint64(0), chunkIDToUint64(""))
+func TestChunkIDToUUID_Format(t *testing.T) {
+	u := chunkIDToUUID("")
+	assert.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, u)
 }
 
 func TestParseDistance(t *testing.T) {
