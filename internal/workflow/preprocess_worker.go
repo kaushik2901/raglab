@@ -92,13 +92,11 @@ func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessAr
 		return err
 	}
 
-	repoPath := path.Join("artifacts", "preprocessing", job.Args.Tag, "repo")
-	outPath := path.Join("artifacts", "preprocessing", job.Args.Tag, "output")
 	_, err := w.Client.Insert(ctx, &VerifyArgs{
 		WorkflowID: job.Args.WorkflowID,
 		Tag:        job.Args.Tag,
-		RepoPath:   repoPath,
-		OutputPath: outPath,
+		RepoPath:   job.Args.RepoPath,
+		OutputPath: job.Args.OutputPath,
 	}, nil)
 	return err
 }

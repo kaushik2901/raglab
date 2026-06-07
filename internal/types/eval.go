@@ -36,6 +36,8 @@ type EvalStrategyConfig struct {
 type RetrievalResult struct {
 	QuestionID       string
 	Question         string
+	Category         string
+	Difficulty       string
 	ExpectedAnswer   string
 	Relevance        []RelevanceJudgment
 	ExpectedPaths    []string

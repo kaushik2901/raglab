@@ -87,6 +87,8 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	result := &types.RetrievalResult{
 		QuestionID:     q.ID,
 		Question:       q.Question,
+		Category:       q.Category,
+		Difficulty:     q.Difficulty,
 		ExpectedAnswer: q.ExpectedAnswer,
 		Relevance:      q.Relevance,
 		ExpectedPaths:  expectedPaths,

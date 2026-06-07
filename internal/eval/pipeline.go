@@ -129,6 +129,8 @@ func batchEmbedQueries(ctx context.Context, emb embedder.Embedder, questions []t
 func fillRetrievalResult(r *types.RetrievalResult, q types.EvalQuestion, searchResults []types.SearchResult, topK int) {
 	r.QuestionID = q.ID
 	r.Question = q.Question
+	r.Category = q.Category
+	r.Difficulty = q.Difficulty
 	r.ExpectedAnswer = q.ExpectedAnswer
 	r.Relevance = q.Relevance
 
