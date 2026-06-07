@@ -29,9 +29,13 @@ type PipelineArgs struct {
 	Questions  []types.EvalQuestion
 	TopK       int
 	EmbedBatch int
+	Concurrency int
 }
 
 func Evaluate(ctx context.Context, args PipelineArgs) ([]types.RetrievalResult, error) {
+	if args.Concurrency > 0 {
+		slog.Debug("concurrency requested but eval runs sequentially per design", "requested", args.Concurrency)
+	}
 	slog.Info("phase 1: batch embedding queries",
 		"count", len(args.Questions), "batch_size", args.EmbedBatch)
 	embeddings, err := batchEmbedQueries(ctx, args.Embedder, args.Questions, args.EmbedBatch)

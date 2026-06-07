@@ -42,7 +42,8 @@ func run() error {
 	embeddingModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model for query vectorization")
 	judgeProvider := flag.String("judge-provider", config.EnvOrDefault("JUDGE_PROVIDER", ""), "Judge provider (defaults to --llm-provider if empty)")
 	judgeModel := flag.String("judge-model", config.EnvOrDefault("JUDGE_MODEL", ""), "LLM model for answer scoring (defaults to --llm-model if empty)")
-	evalConcurrency := flag.Int("eval-concurrency", config.IntEnvOrDefault("EVAL_CONCURRENCY", 5), "Number of questions to evaluate concurrently")
+	evalConcurrency := flag.Int("eval-concurrency", config.IntEnvOrDefault("EVAL_CONCURRENCY", 5), "Number of questions to evaluate concurrently (currently sequential — reserved for future use)")
+	batchSize := flag.Int("batch-size", config.IntEnvOrDefault("BATCH_SIZE", 20), "Embedding API batch size")
 	tag := flag.String("tag", "", "Eval run tag prefix (auto-generated if empty)")
 
 	cfg, err := config.Load()
@@ -162,6 +163,7 @@ func run() error {
 			"judge_provider":     *judgeProvider,
 			"judge_model":        *judgeModel,
 			"concurrency":        *evalConcurrency,
+			"batch_size":         *batchSize,
 		})
 		if err != nil {
 			return fmt.Errorf("create workflow for %s: %w", f, err)
@@ -182,6 +184,7 @@ func run() error {
 			JudgeProvider:     *judgeProvider,
 			JudgeModel:        *judgeModel,
 			Concurrency:       *evalConcurrency,
+			BatchSize:         *batchSize,
 		}, nil)
 		if err != nil {
 			return fmt.Errorf("insert eval job for %s: %w", f, err)

@@ -134,14 +134,15 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 			batchSize = 20
 		}
 		results, err := eval.Evaluate(ctx, eval.PipelineArgs{
-			Embedder:   emb,
-			Searcher:   qStore,
-			Generator:  gen,
-			JudgeGen:   judgeGen,
-			Collection: args.IndexTag,
-			Questions:  dataset.Questions,
-			TopK:       args.TopK,
-			EmbedBatch: batchSize,
+			Embedder:    emb,
+			Searcher:    qStore,
+			Generator:   gen,
+			JudgeGen:    judgeGen,
+			Collection:  args.IndexTag,
+			Questions:   dataset.Questions,
+			TopK:        args.TopK,
+			EmbedBatch:  batchSize,
+			Concurrency: args.Concurrency,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("evaluation: %w", err)
