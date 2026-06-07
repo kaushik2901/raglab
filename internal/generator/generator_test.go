@@ -12,6 +12,8 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
 func TestNewOpenAI(t *testing.T) {
@@ -200,9 +202,9 @@ func TestNormalizeBaseURL(t *testing.T) {
 		{"http://localhost:1234/v1/", "http://localhost:1234"},
 	}
 
-	for _, tt := range tests {
+		for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := normalizeBaseURL(tt.input)
+			result := config.NormalizeBaseURL(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

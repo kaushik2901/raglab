@@ -35,6 +35,7 @@ type EvalArgs struct {
 	JudgeProvider     string `json:"judge_provider"`
 	JudgeModel        string `json:"judge_model"`
 	Concurrency       int    `json:"concurrency"`
+	BatchSize         int    `json:"batch_size"`
 }
 
 func (EvalArgs) Kind() string { return "eval" }
@@ -104,7 +105,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		if embeddingModel == "" {
 			embeddingModel = "text-embedding-3-small"
 		}
-		emb, err := embedder.New(embeddingProvider, embeddingModel, 20)
+		emb, err := embedder.New(embeddingProvider, embeddingModel, args.BatchSize)
 		if err != nil {
 			return nil, fmt.Errorf("create embedder: %w", err)
 		}
@@ -125,6 +126,10 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 
 		// 4. Run evaluation pipeline
 		slog.Info("running evaluation pipeline", "collection", args.IndexTag, "questions", len(dataset.Questions))
+		batchSize := args.BatchSize
+		if batchSize <= 0 {
+			batchSize = 20
+		}
 		results, err := eval.Evaluate(ctx, eval.PipelineArgs{
 			Embedder:   emb,
 			Searcher:   qStore,
@@ -133,7 +138,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 			Collection: args.IndexTag,
 			Questions:  dataset.Questions,
 			TopK:       args.TopK,
-			EmbedBatch: 20,
+			EmbedBatch: batchSize,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("evaluation: %w", err)

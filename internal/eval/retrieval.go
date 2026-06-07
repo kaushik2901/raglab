@@ -138,7 +138,7 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 		}
 		contextText := strings.Join(contextParts, "\n\n---\n\n")
 
-		systemPrompt := "You are a helpful assistant that answers questions based solely on the provided context. If the context does not contain enough information to answer, say so."
+		systemPrompt := SystemPrompt
 		userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s\n\nAnswer the question based on the context above.", contextText, q.Question)
 
 		completion, err := e.generator.Generate(ctx, openai.ChatCompletionNewParams{
@@ -170,17 +170,4 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	return result, nil
 }
 
-func computeNDCGGradedForQuestion(relevance []types.RelevanceJudgment, retrieved []string, k int) float64 {
-	n := min(k, len(retrieved))
-	relevances := make([]float64, n)
-	for i, path := range retrieved[:n] {
-		relevances[i] = gradeForPath(relevance, path)
-	}
-	dcgVal := computeDCG(relevances, k)
-	ideal := idealGradedRelevances(relevance, k)
-	idcg := computeDCG(ideal, k)
-	if idcg > 0 {
-		return dcgVal / idcg
-	}
-	return 0
-}
+

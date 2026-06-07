@@ -33,18 +33,18 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{}
 
-	flag.IntVar(&cfg.MaxRetries, "max-retries", intEnvOrDefault("MAX_RETRIES", 3), "Maximum retry count for stages")
-	flag.DurationVar(&cfg.RetryBackoff, "retry-backoff", durationEnvOrDefault("RETRY_BACKOFF", 5*time.Second), "Retry backoff duration")
-	flag.StringVar(&cfg.LogLevel, "log-level", envOrDefault("LOG_LEVEL", "info"), "Log level (debug/info/warn)")
+	flag.IntVar(&cfg.MaxRetries, "max-retries", IntEnvOrDefault("MAX_RETRIES", 3), "Maximum retry count for stages")
+	flag.DurationVar(&cfg.RetryBackoff, "retry-backoff", DurationEnvOrDefault("RETRY_BACKOFF", 5*time.Second), "Retry backoff duration")
+	flag.StringVar(&cfg.LogLevel, "log-level", EnvOrDefault("LOG_LEVEL", "info"), "Log level (debug/info/warn)")
 
 	flag.Parse()
 
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
 
-	cfg.LLMBaseURL = envOrDefault("LLM_BASE_URL", "https://api.openai.com/v1")
-	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")
-	cfg.DatabaseURL = envOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
+	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com/v1")
+	cfg.QdrantURL = EnvOrDefault("QDRANT_URL", "http://localhost:6334")
+	cfg.DatabaseURL = EnvOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
 
 	return cfg, cfg.Validate()
 }
@@ -71,15 +71,15 @@ func ResolveProviderConfig(p Provider) (baseURL, apiKey string) {
 		return resolveWithFallback("OPENAI_BASE_URL", "LLM_BASE_URL", "https://api.openai.com/v1"),
 			resolveWithFallback("OPENAI_API_KEY", "LLM_API_KEY", "")
 	case ProviderOpenRouter:
-		return envOrDefault("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+		return EnvOrDefault("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
 			os.Getenv("OPENROUTER_API_KEY")
 	case ProviderLMStudio:
-		return envOrDefault("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"), ""
+		return EnvOrDefault("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"), ""
 	case ProviderGemini:
-		return envOrDefault("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"),
+		return EnvOrDefault("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai"),
 			os.Getenv("GEMINI_API_KEY")
 	default:
-		return envOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		return EnvOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 			os.Getenv("OPENAI_API_KEY")
 	}
 }
@@ -88,7 +88,7 @@ func resolveWithFallback(primary, fallback, defaultVal string) string {
 	if v := os.Getenv(primary); v != "" {
 		return v
 	}
-	return envOrDefault(fallback, defaultVal)
+	return EnvOrDefault(fallback, defaultVal)
 }
 
 func EnvOrDefault(key, defaultVal string) string {
@@ -123,27 +123,4 @@ func ResolveTag(tag, prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, time.Now().Format("20060102-150405"))
 }
 
-func envOrDefault(key, defaultVal string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return defaultVal
-}
 
-func intEnvOrDefault(key string, defaultVal int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
-		}
-	}
-	return defaultVal
-}
-
-func durationEnvOrDefault(key string, defaultVal time.Duration) time.Duration {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		}
-	}
-	return defaultVal
-}

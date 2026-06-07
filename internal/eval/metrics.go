@@ -155,6 +155,21 @@ func idealGradedRelevances(relevance []types.RelevanceJudgment, k int) []float64
 	return grades
 }
 
+func computeNDCGGradedForQuestion(relevance []types.RelevanceJudgment, retrieved []string, k int) float64 {
+	n := min(k, len(retrieved))
+	relevances := make([]float64, n)
+	for i, path := range retrieved[:n] {
+		relevances[i] = gradeForPath(relevance, path)
+	}
+	dcgVal := computeDCG(relevances, k)
+	ideal := idealGradedRelevances(relevance, k)
+	idcg := computeDCG(ideal, k)
+	if idcg > 0 {
+		return dcgVal / idcg
+	}
+	return 0
+}
+
 func computeAvgAnswerScore(results []types.RetrievalResult) float64 {
 	if len(results) == 0 {
 		return 0
@@ -191,9 +206,4 @@ func matchPath(expected, actual string) bool {
 	return expected == actual
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+

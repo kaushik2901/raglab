@@ -75,68 +75,68 @@ func TestEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_ENV_KEY", "from_env")
 	defer os.Unsetenv("TEST_ENV_KEY")
 
-	assert.Equal(t, "from_env", envOrDefault("TEST_ENV_KEY", "default"))
+	assert.Equal(t, "from_env", EnvOrDefault("TEST_ENV_KEY", "default"))
 }
 
 func TestEnvOrDefault_Fallback(t *testing.T) {
-	assert.Equal(t, "default", envOrDefault("TEST_ENV_KEY_NONEXISTENT", "default"))
+	assert.Equal(t, "default", EnvOrDefault("TEST_ENV_KEY_NONEXISTENT", "default"))
 }
 
 func TestEnvOrDefault_EmptyVar(t *testing.T) {
 	os.Setenv("TEST_ENV_EMPTY", "")
 	defer os.Unsetenv("TEST_ENV_EMPTY")
 
-	assert.Equal(t, "default", envOrDefault("TEST_ENV_EMPTY", "default"))
+	assert.Equal(t, "default", EnvOrDefault("TEST_ENV_EMPTY", "default"))
 }
 
 func TestIntEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_INT_KEY", "42")
 	defer os.Unsetenv("TEST_INT_KEY")
 
-	assert.Equal(t, 42, intEnvOrDefault("TEST_INT_KEY", 1))
+	assert.Equal(t, 42, IntEnvOrDefault("TEST_INT_KEY", 1))
 }
 
 func TestIntEnvOrDefault_Fallback(t *testing.T) {
-	assert.Equal(t, 10, intEnvOrDefault("TEST_INT_NONEXISTENT", 10))
+	assert.Equal(t, 10, IntEnvOrDefault("TEST_INT_NONEXISTENT", 10))
 }
 
 func TestIntEnvOrDefault_InvalidValue(t *testing.T) {
 	os.Setenv("TEST_INT_INVALID", "not-a-number")
 	defer os.Unsetenv("TEST_INT_INVALID")
 
-	assert.Equal(t, 7, intEnvOrDefault("TEST_INT_INVALID", 7))
+	assert.Equal(t, 7, IntEnvOrDefault("TEST_INT_INVALID", 7))
 }
 
 func TestIntEnvOrDefault_EmptyValue(t *testing.T) {
 	os.Setenv("TEST_INT_EMPTY", "")
 	defer os.Unsetenv("TEST_INT_EMPTY")
 
-	assert.Equal(t, 5, intEnvOrDefault("TEST_INT_EMPTY", 5))
+	assert.Equal(t, 5, IntEnvOrDefault("TEST_INT_EMPTY", 5))
 }
 
 func TestDurationEnvOrDefault(t *testing.T) {
 	os.Setenv("TEST_DUR_KEY", "10s")
 	defer os.Unsetenv("TEST_DUR_KEY")
 
-	assert.Equal(t, 10*time.Second, durationEnvOrDefault("TEST_DUR_KEY", time.Second))
+	assert.Equal(t, 10*time.Second, DurationEnvOrDefault("TEST_DUR_KEY", time.Second))
 }
 
 func TestDurationEnvOrDefault_Fallback(t *testing.T) {
-	assert.Equal(t, 30*time.Second, durationEnvOrDefault("TEST_DUR_NONEXISTENT", 30*time.Second))
+	assert.Equal(t, 30*time.Second, DurationEnvOrDefault("TEST_DUR_NONEXISTENT", 30*time.Second))
 }
 
 func TestDurationEnvOrDefault_InvalidValue(t *testing.T) {
 	os.Setenv("TEST_DUR_INVALID", "not-a-duration")
 	defer os.Unsetenv("TEST_DUR_INVALID")
 
-	assert.Equal(t, 3*time.Second, durationEnvOrDefault("TEST_DUR_INVALID", 3*time.Second))
+	assert.Equal(t, 3*time.Second, DurationEnvOrDefault("TEST_DUR_INVALID", 3*time.Second))
 }
 
 func TestDurationEnvOrDefault_EmptyValue(t *testing.T) {
 	os.Setenv("TEST_DUR_EMPTY", "")
 	defer os.Unsetenv("TEST_DUR_EMPTY")
 
-	assert.Equal(t, 2*time.Second, durationEnvOrDefault("TEST_DUR_EMPTY", 2*time.Second))
+	assert.Equal(t, 2*time.Second, DurationEnvOrDefault("TEST_DUR_EMPTY", 2*time.Second))
 }
 
 func parseTestFlags(args []string) (*Config, error) {
@@ -153,9 +153,9 @@ func parseTestFlags(args []string) (*Config, error) {
 
 	cfg.LLMApiKey = os.Getenv("LLM_API_KEY")
 	cfg.QdrantAPIKey = os.Getenv("QDRANT_API_KEY")
-	cfg.LLMBaseURL = envOrDefault("LLM_BASE_URL", "https://api.openai.com/v1")
-	cfg.QdrantURL = envOrDefault("QDRANT_URL", "http://localhost:6334")
-	cfg.DatabaseURL = envOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
+	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com/v1")
+	cfg.QdrantURL = EnvOrDefault("QDRANT_URL", "http://localhost:6334")
+	cfg.DatabaseURL = EnvOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
 
 	return cfg, cfg.Validate()
 }

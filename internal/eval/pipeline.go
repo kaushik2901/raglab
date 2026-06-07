@@ -14,6 +14,8 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
+const SystemPrompt = "You are a helpful assistant that answers questions based solely on the provided context. If the context does not contain enough information to answer, say so."
+
 type VectorSearcher interface {
 	Search(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error)
 }
@@ -166,7 +168,7 @@ func buildContextText(searchResults []types.SearchResult) string {
 }
 
 func generateForQuestion(ctx context.Context, gen generator.Generator, q types.EvalQuestion, contextText string) (string, int, int) {
-	systemPrompt := "You are a helpful assistant that answers questions based solely on the provided context. If the context does not contain enough information to answer, say so."
+	systemPrompt := SystemPrompt
 	userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s\n\nAnswer the question based on the context above.", contextText, q.Question)
 
 	completion, err := gen.Generate(ctx, openai.ChatCompletionNewParams{

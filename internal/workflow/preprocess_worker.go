@@ -5,7 +5,7 @@ import (
 	"path"
 
 	"github.com/jackc/pgx/v5"
-	stagepkg "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/stage"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 	"github.com/riverqueue/river"
 )
@@ -51,7 +51,7 @@ func NewCloneWorker(store *Store, client *river.Client[pgx.Tx]) *CloneWorker {
 
 func (w *CloneWorker) Work(ctx context.Context, job *river.Job[CloneArgs]) error {
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "clone", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-		return stagepkg.CloneStage(job.Args.RepoURL, job.Args.RepoPath).Run(ctx, state)
+		return stage.CloneStage(job.Args.RepoURL, job.Args.RepoPath).Run(ctx, state)
 	}); err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func NewPreprocessWorker(store *Store, client *river.Client[pgx.Tx]) *Preprocess
 
 func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessArgs]) error {
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "preprocess", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-		return stagepkg.PreprocessStage(job.Args.OutputPath, job.Args.IncludeDirs).Run(ctx, state)
+		return stage.PreprocessStage(job.Args.OutputPath, job.Args.IncludeDirs).Run(ctx, state)
 	}); err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func NewVerifyWorker(store *Store, client *river.Client[pgx.Tx]) *VerifyWorker {
 
 func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "verify", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-		return stagepkg.VerifyStage(job.Args.OutputPath).Run(ctx, state)
+		return stage.VerifyStage(job.Args.OutputPath).Run(ctx, state)
 	}); err != nil {
 		return err
 	}

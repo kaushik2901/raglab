@@ -8,10 +8,10 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"strconv"
 	"sync/atomic"
 	"time"
 
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -28,7 +28,7 @@ type embedder struct {
 
 func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
 	return &embedder{
-		baseURL:          normalizeBaseURL(baseURL),
+		baseURL:          config.NormalizeBaseURL(baseURL),
 		apiKey:           apiKey,
 		model:            model,
 		batchSize:        batchSize,
@@ -36,17 +36,6 @@ func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
 		retryMaxAttempts: 5,
 		retryBackoff:     200 * time.Millisecond,
 	}
-}
-
-// normalizeBaseURL strips any trailing /v1 or /v1/ suffix so that all
-// endpoint paths can be constructed as baseURL + "/v1/" + endpoint.
-func normalizeBaseURL(baseURL string) string {
-	for _, suffix := range []string{"/v1/", "/v1"} {
-		if len(baseURL) >= len(suffix) && baseURL[len(baseURL)-len(suffix):] == suffix {
-			return baseURL[:len(baseURL)-len(suffix)]
-		}
-	}
-	return baseURL
 }
 
 func (e *embedder) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
@@ -149,7 +138,7 @@ func (e *embedder) doWithRetry(ctx context.Context, body []byte, respVal interfa
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests && attempt < e.retryMaxAttempts {
-			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+			retryAfter := config.ParseRetryAfter(resp.Header.Get("Retry-After"))
 			if retryAfter > backoff {
 				backoff = retryAfter
 			}
@@ -174,24 +163,6 @@ func (e *embedder) doWithRetry(ctx context.Context, body []byte, respVal interfa
 	}
 
 	return fmt.Errorf("rate limit exceeded after %d retries", e.retryMaxAttempts)
-}
-
-// parseRetryAfter parses the Retry-After header value and returns the duration to wait.
-// The header can be an integer number of seconds or an HTTP-date.
-func parseRetryAfter(val string) time.Duration {
-	if val == "" {
-		return 0
-	}
-	if seconds, err := strconv.Atoi(val); err == nil {
-		return time.Duration(seconds) * time.Second
-	}
-	if t, err := time.Parse(time.RFC1123, val); err == nil {
-		d := time.Until(t)
-		if d > 0 {
-			return d
-		}
-	}
-	return 0
 }
 
 func (e *embedder) Dimensions() int {

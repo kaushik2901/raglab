@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -29,7 +28,7 @@ type openAIGenerator struct {
 }
 
 func NewOpenAI(baseURL, apiKey, model string) Generator {
-	baseURL = normalizeBaseURL(baseURL)
+	baseURL = config.NormalizeBaseURL(baseURL)
 	opts := []option.RequestOption{
 		option.WithBaseURL(baseURL + "/v1/"),
 	}
@@ -55,17 +54,6 @@ func New(provider config.Provider, model string) (Generator, error) {
 	return NewOpenAI(baseURL, apiKey, model), nil
 }
 
-// normalizeBaseURL strips any trailing /v1 or /v1/ suffix so that all
-// endpoint paths can be constructed as baseURL + "/v1/" + endpoint.
-func normalizeBaseURL(baseURL string) string {
-	for _, suffix := range []string{"/v1/", "/v1"} {
-		if len(baseURL) >= len(suffix) && baseURL[len(baseURL)-len(suffix):] == suffix {
-			return baseURL[:len(baseURL)-len(suffix)]
-		}
-	}
-	return baseURL
-}
-
 func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 	params.Model = openai.ChatModel(g.model)
 
@@ -79,7 +67,7 @@ func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatComple
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests && attempt < g.retryMaxAttempts {
 			backoff := g.retryBackoff * (1 << attempt)
 			if apiErr.Response != nil {
-				if retryAfter := parseRetryAfter(apiErr.Response.Header.Get("Retry-After")); retryAfter > backoff {
+				if retryAfter := config.ParseRetryAfter(apiErr.Response.Header.Get("Retry-After")); retryAfter > backoff {
 					backoff = retryAfter
 				}
 			}
@@ -94,23 +82,6 @@ func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatComple
 
 	slog.Warn("rate limit retries exhausted", "max_attempts", g.retryMaxAttempts, "model", g.model)
 	return nil, fmt.Errorf("rate limit exceeded after %d retries", g.retryMaxAttempts)
-}
-
-// parseRetryAfter parses the Retry-After header value and returns the duration to wait.
-// The header can be an integer number of seconds or an HTTP-date.
-func parseRetryAfter(val string) time.Duration {
-	if val == "" {
-		return 0
-	}
-	if seconds, err := strconv.Atoi(val); err == nil {
-		return time.Duration(seconds) * time.Second
-	}
-	if t, err := time.Parse(time.RFC1123, val); err == nil {
-		if d := time.Until(t); d > 0 {
-			return d
-		}
-	}
-	return 0
 }
 
 func (g *openAIGenerator) ModelName() string {
