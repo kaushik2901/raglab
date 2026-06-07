@@ -205,7 +205,9 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 			{
 				QuestionID:       "q1",
 				Question:         "what is x?",
+				ExpectedAnswer:   "x is y (ground truth)",
 				Answer:           "x is y",
+				NDCGGraded:       0.85,
 				ExpectedPaths:    []string{"doc1.md"},
 				RetrievedPaths:   []string{"doc1.md", "doc2.md"},
 				Scores:           []float64{0.95, 0.50},
@@ -220,7 +222,9 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 			{
 				QuestionID:       "q2",
 				Question:         "what is z?",
+				ExpectedAnswer:   "z is w (ground truth)",
 				Answer:           "z is w",
+				NDCGGraded:       0.50,
 				ExpectedPaths:    []string{"doc2.md"},
 				RetrievedPaths:   []string{"doc3.md"},
 				Scores:           []float64{0.30},
@@ -253,7 +257,9 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 
 		assert.Equal(t, "q1", got[0].QuestionID)
 		assert.Equal(t, "what is x?", got[0].Question)
+		assert.Equal(t, "x is y (ground truth)", got[0].ExpectedAnswer)
 		assert.Equal(t, "x is y", got[0].Answer)
+		assert.InDelta(t, 0.85, got[0].NDCGGraded, 0.01)
 		assert.Equal(t, []string{"doc1.md"}, got[0].ExpectedPaths)
 		assert.Equal(t, []string{"doc1.md", "doc2.md"}, got[0].RetrievedPaths)
 		assert.InDeltaSlice(t, []float64{0.95, 0.50}, got[0].Scores, 0.01)

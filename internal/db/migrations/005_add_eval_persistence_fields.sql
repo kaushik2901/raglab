@@ -1,0 +1,2 @@
+ALTER TABLE eval_queries ADD COLUMN expected_answer TEXT NOT NULL DEFAULT '';
+ALTER TABLE eval_queries ADD COLUMN ndcg_graded DOUBLE PRECISION NOT NULL DEFAULT 0;
