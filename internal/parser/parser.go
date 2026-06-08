@@ -10,6 +10,10 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
+type Parser interface {
+	Parse(filePath string) (types.ElementReader, error)
+}
+
 func ParseDir(dirPath string) ([]types.Document, error) {
 	info, err := os.Stat(dirPath)
 	if err != nil {
