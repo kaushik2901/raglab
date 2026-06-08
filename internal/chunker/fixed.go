@@ -1,6 +1,7 @@
 package chunker
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -19,42 +20,84 @@ func NewFixedChunker(size, overlap int) *FixedChunker {
 	return &FixedChunker{Size: size, Overlap: overlap}
 }
 
-func (c *FixedChunker) Chunk(doc types.Document) ([]types.Chunk, error) {
-	words := strings.Fields(doc.Content)
-	if len(words) == 0 {
-		return nil, nil
-	}
+func (c *FixedChunker) Chunk(ctx context.Context, reader types.ElementReader, docPath string) (<-chan types.Chunk, <-chan error) {
+	chunkCh := make(chan types.Chunk)
+	errCh := make(chan error, 1)
 
-	step := c.Size - c.Overlap
-	if step <= 0 {
-		step = 1
-	}
+	go func() {
+		defer close(chunkCh)
+		defer close(errCh)
 
-	var chunks []types.Chunk
-	idx := 0
-	for start := 0; start < len(words); start += step {
-		end := start + c.Size
-		if end > len(words) {
-			end = len(words)
+		var window []string
+		step := c.Size - c.Overlap
+		if step <= 0 {
+			step = 1
 		}
-		chunkWords := words[start:end]
-		content := strings.Join(chunkWords, " ")
+		idx := 0
 
-		chunks = append(chunks, types.Chunk{
-			ID:           fmt.Sprintf("%s-chunk-%04d", doc.Path, idx),
-			DocumentPath: doc.Path,
-			Content:      content,
-			TokenCount:   estimateTokens(content),
-			Index:        idx,
-		})
-		idx++
+		for {
+			elem, err := reader.ReadElement()
+			if err != nil {
+				if err.Error() == "EOF" {
+					break
+				}
+				errCh <- fmt.Errorf("read element: %w", err)
+				return
+			}
 
-		if end == len(words) {
-			break
+			words := strings.Fields(elem.Text)
+			for _, word := range words {
+				select {
+				case <-ctx.Done():
+					errCh <- ctx.Err()
+					return
+				default:
+				}
+
+				window = append(window, word)
+
+				for len(window) >= c.Size {
+					content := strings.Join(window[:c.Size], " ")
+					chunk := types.Chunk{
+						ID:           fmt.Sprintf("%s-chunk-%04d", docPath, idx),
+						DocumentPath: docPath,
+						Content:      content,
+						TokenCount:   estimateTokens(content),
+						Index:        idx,
+					}
+					idx++
+
+					select {
+					case chunkCh <- chunk:
+					case <-ctx.Done():
+						errCh <- ctx.Err()
+						return
+					}
+
+					window = window[step:]
+				}
+			}
 		}
-	}
 
-	return chunks, nil
+		if len(window) > 0 {
+			content := strings.Join(window, " ")
+			chunk := types.Chunk{
+				ID:           fmt.Sprintf("%s-chunk-%04d", docPath, idx),
+				DocumentPath: docPath,
+				Content:      content,
+				TokenCount:   estimateTokens(content),
+				Index:        idx,
+			}
+			select {
+			case chunkCh <- chunk:
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			}
+		}
+	}()
+
+	return chunkCh, errCh
 }
 
 func estimateTokens(text string) int {

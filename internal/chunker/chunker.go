@@ -1,7 +1,11 @@
 package chunker
 
-import "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+import (
+	"context"
+
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+)
 
 type Chunker interface {
-	Chunk(doc types.Document) ([]types.Chunk, error)
+	Chunk(ctx context.Context, reader types.ElementReader, docPath string) (<-chan types.Chunk, <-chan error)
 }
