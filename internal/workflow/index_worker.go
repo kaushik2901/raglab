@@ -27,6 +27,7 @@ type IndexArgs struct {
 	WorkflowID        string `json:"workflow_id"`
 	Tag               string `json:"tag"`
 	InputTag          string `json:"input_tag"`
+	ParserStrategy    string `json:"parser_strategy"`
 	ChunkStrategy     string `json:"chunk_strategy"`
 	ChunkSize         int    `json:"chunk_size"`
 	ChunkOverlap      int    `json:"chunk_overlap"`
@@ -82,10 +83,10 @@ func embedAndStore(ctx context.Context, emb embedder.Embedder, qStore qstore.Vec
 }
 
 func processFile(ctx context.Context, fp, relPath, collectionName string,
-	chunkr chunker.Chunker, emb embedder.Embedder, qStore qstore.VectorStore,
+	parsr parser.Parser, chunkr chunker.Chunker, emb embedder.Embedder, qStore qstore.VectorStore,
 	batchSize int) (int, error) {
 
-	reader, err := (&parser.MarkdownParser{}).Parse(fp)
+	reader, err := parsr.Parse(fp)
 	if err != nil {
 		return 0, fmt.Errorf("parse: %w", err)
 	}
@@ -145,7 +146,23 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 		qdrantURL = "http://localhost:6334"
 	}
 	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
-	chunkr := chunker.NewFixedChunker(args.ChunkSize, args.ChunkOverlap)
+	parserStrategy := args.ParserStrategy
+	if parserStrategy == "" {
+		parserStrategy = "markdown"
+	}
+	parsr, err := parser.New(parserStrategy)
+	if err != nil {
+		return nil, fmt.Errorf("create parser: %w", err)
+	}
+
+	chunkStrategy := args.ChunkStrategy
+	if chunkStrategy == "" {
+		chunkStrategy = "fixed"
+	}
+	chunkr, err := chunker.New(chunkStrategy, args.ChunkSize, args.ChunkOverlap)
+	if err != nil {
+		return nil, fmt.Errorf("create chunker: %w", err)
+	}
 
 	qStore := qstore.NewQdrantStore(qdrantAPIKey)
 	if err := qStore.Connect(ctx, qdrantURL); err != nil {
@@ -212,7 +229,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 			}
 			relPath = filepath.ToSlash(relPath)
 
-			chunkCount, err := processFile(docCtx, fp, relPath, collectionName, chunkr, emb, qStore, args.BatchSize)
+			chunkCount, err := processFile(docCtx, fp, relPath, collectionName, parsr, chunkr, emb, qStore, args.BatchSize)
 			if err != nil {
 				mu.Lock()
 				skipErrors = append(skipErrors, relPath+": "+err.Error())

@@ -26,7 +26,8 @@ func run() error {
 	flag.CommandLine = flag.NewFlagSet("index", flag.ExitOnError)
 
 	inputTag := flag.String("input-tag", config.EnvOrDefault("INPUT_TAG", ""), "Source preprocessed tag (for indexing)")
-	chunkStrategy := flag.String("chunk-strategy", config.EnvOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed only)")
+	parserStrategy := flag.String("parser", config.EnvOrDefault("PARSER", "markdown"), "Parser strategy (markdown)")
+	chunkStrategy := flag.String("chunk-strategy", config.EnvOrDefault("CHUNK_STRATEGY", "fixed"), "Chunking strategy (fixed, semantic, recursive)")
 	chunkSize := flag.Int("chunk-size", config.IntEnvOrDefault("CHUNK_SIZE", 512), "Target token count per chunk")
 	chunkOverlap := flag.Int("chunk-overlap", config.IntEnvOrDefault("CHUNK_OVERLAP", 64), "Token overlap between chunks")
 	llmProvider := flag.String("llm-provider", config.EnvOrDefault("LLM_PROVIDER", "openai"), "LLM provider (openai, gemini, openrouter, lmstudio)")
@@ -67,6 +68,7 @@ func run() error {
 
 	wfID, err := store.CreateWorkflow(ctx, "index", resolvedTag, map[string]any{
 		"input_tag":          *inputTag,
+		"parser_strategy":    *parserStrategy,
 		"chunk_strategy":     *chunkStrategy,
 		"chunk_size":         *chunkSize,
 		"chunk_overlap":      *chunkOverlap,
@@ -92,6 +94,7 @@ func run() error {
 		WorkflowID:        wfID,
 		Tag:               resolvedTag,
 		InputTag:          *inputTag,
+		ParserStrategy:    *parserStrategy,
 		ChunkStrategy:     *chunkStrategy,
 		ChunkSize:         *chunkSize,
 		ChunkOverlap:      *chunkOverlap,
