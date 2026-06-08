@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -225,10 +226,10 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 		fp := filePath
 		g.Go(func() error {
 			docTimeout := args.DocTimeout
-		if docTimeout <= 0 {
-			docTimeout = 30 * time.Minute
-		}
-		docCtx, cancel := context.WithTimeout(ctx, docTimeout)
+			if docTimeout <= 0 {
+				docTimeout = 30 * time.Minute
+			}
+			docCtx, cancel := context.WithTimeout(ctx, docTimeout)
 			defer cancel()
 
 			relPath, err := filepath.Rel(inputDir, fp)
@@ -236,6 +237,21 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 				return fmt.Errorf("relative path: %w", err)
 			}
 			relPath = filepath.ToSlash(relPath)
+
+			fi, err := os.Stat(fp)
+			if err != nil {
+				mu.Lock()
+				skipErrors = append(skipErrors, relPath+": stat: "+err.Error())
+				mu.Unlock()
+				return nil
+			}
+			maxSize := config.IntEnvOrDefault("MAX_INDEX_FILE_SIZE", 100*1024*1024)
+			if fi.Size() > int64(maxSize) {
+				mu.Lock()
+				skipErrors = append(skipErrors, relPath+": file too large ("+strconv.FormatInt(fi.Size(), 10)+" bytes, max "+strconv.Itoa(maxSize)+")")
+				mu.Unlock()
+				return nil
+			}
 
 			chunkCount, err := processFile(docCtx, fp, relPath, collectionName, parsr, chunkr, emb, qStore, args.BatchSize)
 			if err != nil {

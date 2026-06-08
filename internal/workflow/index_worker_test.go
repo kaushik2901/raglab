@@ -2,8 +2,11 @@ package workflow
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
@@ -55,6 +58,24 @@ func TestIndexArgs_DocTimeoutDefault(t *testing.T) {
 		}
 		assert.Equal(t, 10*time.Minute, timeout)
 	})
+}
+
+func TestMaxIndexFileSize_EnvVar(t *testing.T) {
+	orig := os.Getenv("MAX_INDEX_FILE_SIZE")
+	os.Setenv("MAX_INDEX_FILE_SIZE", "50")
+	defer os.Setenv("MAX_INDEX_FILE_SIZE", orig)
+
+	maxSize := config.IntEnvOrDefault("MAX_INDEX_FILE_SIZE", 100*1024*1024)
+	assert.Equal(t, 50, maxSize, "should read from env var")
+}
+
+func TestMaxIndexFileSize_Default(t *testing.T) {
+	orig := os.Getenv("MAX_INDEX_FILE_SIZE")
+	os.Unsetenv("MAX_INDEX_FILE_SIZE")
+	defer os.Setenv("MAX_INDEX_FILE_SIZE", orig)
+
+	maxSize := config.IntEnvOrDefault("MAX_INDEX_FILE_SIZE", 100*1024*1024)
+	assert.Equal(t, 100*1024*1024, maxSize, "should use default when env unset")
 }
 
 func TestIndexWorker_Work_ErrorPropagation(t *testing.T) {
