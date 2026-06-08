@@ -237,6 +237,32 @@ func TestChunkIDToUUID_Format(t *testing.T) {
 	assert.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, u)
 }
 
+func TestQdrantStore_LastDSN(t *testing.T) {
+	s := NewQdrantStore("test-key")
+	_ = s.Connect(context.Background(), "http://qdrant:6334")
+	assert.Equal(t, "http://qdrant:6334", s.lastDSN)
+}
+
+func TestQdrantStore_StoreOnce_NotConnected(t *testing.T) {
+	s := NewQdrantStore("")
+	err := s.storeOnce(context.Background(), "test", []types.DocumentChunk{
+		{Chunk: types.Chunk{ID: "c1"}, Embedding: types.Embedding{Vector: []float64{0.1}}},
+	})
+	assert.ErrorContains(t, err, "not connected")
+}
+
+func TestQdrantStore_SearchOnce_NotConnected(t *testing.T) {
+	s := NewQdrantStore("")
+	_, err := s.searchOnce(context.Background(), "test", nil, 5)
+	assert.ErrorContains(t, err, "not connected")
+}
+
+func TestQdrantStore_EnsureCollectionOnce_NotConnected(t *testing.T) {
+	s := NewQdrantStore("")
+	err := s.ensureCollectionOnce(context.Background(), "test", 4, "Cosine")
+	assert.ErrorContains(t, err, "not connected")
+}
+
 func TestParseDistance(t *testing.T) {
 	assert.Equal(t, qdrant.Distance_Cosine, parseDistance("Cosine"))
 	assert.Equal(t, qdrant.Distance_Euclid, parseDistance("Euclid"))

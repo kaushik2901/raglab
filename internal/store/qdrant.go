@@ -15,8 +15,9 @@ import (
 const upsertBatchSize = 100
 
 type QdrantStore struct {
-	client *qdrant.GrpcClient
-	apiKey string
+	client  *qdrant.GrpcClient
+	apiKey  string
+	lastDSN string
 }
 
 func NewQdrantStore(apiKey string) *QdrantStore {
@@ -24,6 +25,8 @@ func NewQdrantStore(apiKey string) *QdrantStore {
 }
 
 func (s *QdrantStore) Connect(ctx context.Context, dsn string) error {
+	s.lastDSN = dsn
+
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return fmt.Errorf("parse dsn: %w", err)
@@ -60,6 +63,10 @@ func (s *QdrantStore) Connect(ctx context.Context, dsn string) error {
 }
 
 func (s *QdrantStore) EnsureCollection(ctx context.Context, name string, vectorSize int, distance string) error {
+	return s.ensureCollectionOnce(ctx, name, vectorSize, distance)
+}
+
+func (s *QdrantStore) ensureCollectionOnce(ctx context.Context, name string, vectorSize int, distance string) error {
 	if s.client == nil {
 		return fmt.Errorf("not connected")
 	}
@@ -92,6 +99,10 @@ func (s *QdrantStore) EnsureCollection(ctx context.Context, name string, vectorS
 }
 
 func (s *QdrantStore) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
+	return s.storeOnce(ctx, collectionName, chunks)
+}
+
+func (s *QdrantStore) storeOnce(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}
@@ -125,6 +136,10 @@ func (s *QdrantStore) Store(ctx context.Context, collectionName string, chunks [
 }
 
 func (s *QdrantStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
+	return s.searchOnce(ctx, collectionName, queryVector, topK)
+}
+
+func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	if s.client == nil {
 		return nil, fmt.Errorf("not connected")
 	}
