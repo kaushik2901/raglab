@@ -134,6 +134,15 @@ func DurationEnvOrDefault(key string, defaultVal time.Duration) time.Duration {
 	return defaultVal
 }
 
+func FloatEnvOrDefault(key string, defaultVal float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return defaultVal
+}
+
 func ResolveTag(tag, prefix string) string {
 	if tag != "" {
 		return tag

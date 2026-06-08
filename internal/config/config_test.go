@@ -180,6 +180,36 @@ func TestResolveTag_Generated(t *testing.T) {
 	assert.Len(t, tag, len("eval-")+15)
 }
 
+func TestFloatEnvOrDefault(t *testing.T) {
+	os.Setenv("TEST_FLOAT_KEY", "42.5")
+	defer os.Unsetenv("TEST_FLOAT_KEY")
+
+	val := FloatEnvOrDefault("TEST_FLOAT_KEY", 10.0)
+	assert.InDelta(t, 42.5, val, 0.0001)
+}
+
+func TestFloatEnvOrDefault_Default(t *testing.T) {
+	os.Unsetenv("TEST_FLOAT_KEY_MISSING")
+	val := FloatEnvOrDefault("TEST_FLOAT_KEY_MISSING", 10.0)
+	assert.InDelta(t, 10.0, val, 0.0001)
+}
+
+func TestFloatEnvOrDefault_Invalid(t *testing.T) {
+	os.Setenv("TEST_FLOAT_KEY_INVALID", "not-a-number")
+	defer os.Unsetenv("TEST_FLOAT_KEY_INVALID")
+
+	val := FloatEnvOrDefault("TEST_FLOAT_KEY_INVALID", 10.0)
+	assert.InDelta(t, 10.0, val, 0.0001, "should fall back to default on parse error")
+}
+
+func TestFloatEnvOrDefault_Empty(t *testing.T) {
+	os.Setenv("TEST_FLOAT_KEY_EMPTY", "")
+	defer os.Unsetenv("TEST_FLOAT_KEY_EMPTY")
+
+	val := FloatEnvOrDefault("TEST_FLOAT_KEY_EMPTY", 10.0)
+	assert.InDelta(t, 10.0, val, 0.0001, "should fall back to default on empty string")
+}
+
 func TestLoad_WithFlags(t *testing.T) {
 	cfg, err := parseTestFlags([]string{
 		"--max-retries", "5",

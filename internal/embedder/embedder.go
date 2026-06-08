@@ -21,5 +21,10 @@ func New(provider config.Provider, model string, batchSize int) (Embedder, error
 	if baseURL == "" {
 		return nil, fmt.Errorf("empty base URL for provider %q", provider)
 	}
-	return newOpenAIEmbedder(baseURL, apiKey, model, batchSize), nil
+	var e Embedder = newOpenAIEmbedder(baseURL, apiKey, model, batchSize)
+	rpm := config.FloatEnvOrDefault("EMBEDDER_RATE_LIMIT_RPM", 100)
+	if rpm > 0 {
+		e = NewRateLimitedEmbedder(e, rpm)
+	}
+	return e, nil
 }

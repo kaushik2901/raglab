@@ -52,7 +52,9 @@ func New(provider config.Provider, model string) (Generator, error) {
 	if baseURL == "" {
 		return nil, fmt.Errorf("empty base URL for provider %q", provider)
 	}
-	return NewOpenAI(baseURL, apiKey, model), nil
+	gen := NewOpenAI(baseURL, apiKey, model)
+	rpm := config.FloatEnvOrDefault("GENERATOR_RATE_LIMIT_RPM", 100)
+	return NewRateLimitedGenerator(gen, rpm), nil
 }
 
 func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
