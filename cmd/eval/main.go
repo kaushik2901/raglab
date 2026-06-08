@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -220,6 +221,8 @@ func validateDatasetFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
 	}
+	// Strip UTF-8 BOM if present
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 
 	var ds types.EvalDataset
 	if err := json.Unmarshal(data, &ds); err != nil {

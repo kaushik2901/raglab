@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/joho/godotenv v1.5.1
 	github.com/openai/openai-go v1.12.0
 	github.com/qdrant/go-client v1.18.2
 	github.com/riverqueue/river v0.38.0

@@ -26,7 +26,7 @@ type CheckResult struct {
 var shortcodePattern = regexp.MustCompile(`\{\{(?:%|<)`)
 var htmlTagPattern = regexp.MustCompile(`<[a-z]+[^>]*>`)
 
-func VerifyStage(outputPath string) types.Stage {
+func VerifyStage(outputPath string, includeDirs []string) types.Stage {
 	return types.Stage{
 		Name:     "verify",
 		Requires: []types.StageID{"clone", "preprocess"},
@@ -37,12 +37,12 @@ func VerifyStage(outputPath string) types.Stage {
 
 			report := VerificationReport{Passed: true}
 
-			checkFileCountMatch(&report, srcDir, dstDir)
-			checkDirectoryStructure(&report, srcDir, dstDir)
+			checkFileCountMatch(&report, srcDir, dstDir, includeDirs)
+			checkDirectoryStructure(&report, srcDir, dstDir, includeDirs)
 			checkNoShortcodes(&report, dstDir)
 			checkNoRawHTML(&report, dstDir)
 			checkMinimumContent(&report, dstDir)
-			checkTotalSize(&report, srcDir, dstDir)
+			checkTotalSize(&report, srcDir, dstDir, includeDirs)
 
 			for _, c := range report.Checks {
 				if !c.Passed {
@@ -79,8 +79,8 @@ func VerifyStage(outputPath string) types.Stage {
 	}
 }
 
-func checkFileCountMatch(report *VerificationReport, srcDir, dstDir string) {
-	srcCount, srcErr := countMarkdownFiles(srcDir)
+func checkFileCountMatch(report *VerificationReport, srcDir, dstDir string, includeDirs []string) {
+	srcCount, srcErr := countMarkdownFilesInDirs(srcDir, includeDirs)
 	dstCount, dstErr := countMarkdownFiles(dstDir)
 	passed := srcCount == dstCount && srcErr == nil && dstErr == nil
 	detail := fmt.Sprintf("src: %d markdown files, dst: %d markdown files", srcCount, dstCount)
@@ -112,8 +112,8 @@ func countMarkdownFiles(dir string) (int, error) {
 	return count, err
 }
 
-func checkDirectoryStructure(report *VerificationReport, srcDir, dstDir string) {
-	srcPaths, srcErr := collectMarkdownPaths(srcDir)
+func checkDirectoryStructure(report *VerificationReport, srcDir, dstDir string, includeDirs []string) {
+	srcPaths, srcErr := collectMarkdownPathsInDirs(srcDir, includeDirs)
 	dstPaths, dstErr := collectMarkdownPaths(dstDir)
 	passed := true
 	var detail string
@@ -259,8 +259,8 @@ func walkBelowSize(dir string, minSize int) ([]string, error) {
 	return issues, err
 }
 
-func checkTotalSize(report *VerificationReport, srcDir, dstDir string) {
-	srcSize, srcErr := computeTotalSize(srcDir)
+func checkTotalSize(report *VerificationReport, srcDir, dstDir string, includeDirs []string) {
+	srcSize, srcErr := computeTotalSizeInDirs(srcDir, includeDirs)
 	dstSize, dstErr := computeTotalSize(dstDir)
 	passed := dstSize > 0
 	if srcErr == nil && srcSize > 0 {
@@ -294,6 +294,57 @@ func computeTotalSize(dir string) (int64, error) {
 		return nil
 	})
 	return total, err
+}
+
+func resolveWalkDirs(srcDir string, includeDirs []string) []string {
+	if len(includeDirs) == 0 {
+		return []string{srcDir}
+	}
+	var dirs []string
+	for _, sd := range includeDirs {
+		sd = strings.TrimPrefix(sd, "content/")
+		sd = strings.TrimPrefix(sd, "content\\")
+		dirs = append(dirs, filepath.Join(srcDir, sd))
+	}
+	return dirs
+}
+
+func countMarkdownFilesInDirs(srcDir string, includeDirs []string) (int, error) {
+	var total int
+	for _, d := range resolveWalkDirs(srcDir, includeDirs) {
+		n, err := countMarkdownFiles(d)
+		if err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+func collectMarkdownPathsInDirs(srcDir string, includeDirs []string) (map[string]bool, error) {
+	allPaths := make(map[string]bool)
+	for _, d := range resolveWalkDirs(srcDir, includeDirs) {
+		paths, err := collectMarkdownPaths(d)
+		if err != nil {
+			return nil, err
+		}
+		for k := range paths {
+			allPaths[k] = true
+		}
+	}
+	return allPaths, nil
+}
+
+func computeTotalSizeInDirs(srcDir string, includeDirs []string) (int64, error) {
+	var total int64
+	for _, d := range resolveWalkDirs(srcDir, includeDirs) {
+		n, err := computeTotalSize(d)
+		if err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
 }
 
 func countPassed(checks []CheckResult) int {

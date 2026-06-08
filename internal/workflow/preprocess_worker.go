@@ -32,10 +32,11 @@ type PreprocessArgs struct {
 func (PreprocessArgs) Kind() string { return "preprocess" }
 
 type VerifyArgs struct {
-	WorkflowID string `json:"workflow_id"`
-	Tag        string `json:"tag"`
-	RepoPath   string `json:"repo_path"`
-	OutputPath string `json:"output_path"`
+	WorkflowID  string   `json:"workflow_id"`
+	Tag         string   `json:"tag"`
+	RepoPath    string   `json:"repo_path"`
+	OutputPath  string   `json:"output_path"`
+	IncludeDirs []string `json:"include_dirs,omitempty"`
 }
 
 func (VerifyArgs) Kind() string { return "verify" }
@@ -93,10 +94,11 @@ func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessAr
 	}
 
 	_, err := w.Client.Insert(ctx, &VerifyArgs{
-		WorkflowID: job.Args.WorkflowID,
-		Tag:        job.Args.Tag,
-		RepoPath:   job.Args.RepoPath,
-		OutputPath: job.Args.OutputPath,
+		WorkflowID:  job.Args.WorkflowID,
+		Tag:         job.Args.Tag,
+		RepoPath:    job.Args.RepoPath,
+		OutputPath:  job.Args.OutputPath,
+		IncludeDirs: job.Args.IncludeDirs,
 	}, nil)
 	return err
 }
@@ -116,7 +118,7 @@ func (w *VerifyWorker) Work(ctx context.Context, job *river.Job[VerifyArgs]) err
 	logger.Debug("starting verify worker")
 
 	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "verify", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-		return stage.VerifyStage(job.Args.OutputPath).Run(ctx, state)
+		return stage.VerifyStage(job.Args.OutputPath, job.Args.IncludeDirs).Run(ctx, state)
 	}); err != nil {
 		return err
 	}

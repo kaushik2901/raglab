@@ -87,5 +87,3 @@ func TestIndexWorker_Work_StageCreation(t *testing.T) {
 		assert.Equal(t, "failed", steps[0].Status)
 	})
 }
-
-

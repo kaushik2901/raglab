@@ -21,14 +21,14 @@ type VectorSearcher interface {
 }
 
 type PipelineArgs struct {
-	Embedder   embedder.Embedder
-	Searcher   VectorSearcher
-	Generator  generator.Generator
-	JudgeGen   generator.Generator
-	Collection string
-	Questions  []types.EvalQuestion
-	TopK       int
-	EmbedBatch int
+	Embedder    embedder.Embedder
+	Searcher    VectorSearcher
+	Generator   generator.Generator
+	JudgeGen    generator.Generator
+	Collection  string
+	Questions   []types.EvalQuestion
+	TopK        int
+	EmbedBatch  int
 	Concurrency int
 }
 

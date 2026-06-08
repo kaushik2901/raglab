@@ -170,6 +170,114 @@ func TestNDCGGraded_MultipleQuestions(t *testing.T) {
 	assert.InDelta(t, 0.5, ndcg[1], 0.001)
 }
 
+func TestRecall_DuplicatePaths_NotDoubleCounted(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md", "doc1.md", "doc2.md"},
+		},
+	}
+
+	recall := computeRecall(results, []int{3})
+	assert.InDelta(t, 1.0, recall[3], 0.001, "same doc at multiple ranks should count once")
+}
+
+func TestRecall_DuplicatePaths_NoInflationAbove1(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md", "doc1.md", "doc1.md"},
+		},
+	}
+
+	recall := computeRecall(results, []int{3})
+	assert.InDelta(t, 1.0, recall[3], 0.001, "recall must never exceed 1.0 even with duplicates")
+}
+
+func TestPrecision_DuplicatePaths_NotDoubleCounted(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md", "doc1.md", "doc2.md"},
+		},
+	}
+
+	precision := computePrecision(results, []int{3})
+	assert.InDelta(t, 1.0/3.0, precision[3], 0.001, "duplicate doc should count once in numerator")
+}
+
+func TestPrecision_DuplicatePaths_AllRelevant(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md", "doc1.md", "doc1.md"},
+		},
+	}
+
+	precision := computePrecision(results, []int{3})
+	assert.InDelta(t, 1.0/3.0, precision[3], 0.001, "only 1 unique relevant doc out of 3 results")
+}
+
+func TestNDCG_DuplicatePaths_NotAbove1(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md", "doc1.md", "doc2.md"},
+		},
+	}
+
+	ndcg := computeNDCG(results, []int{3})
+	assert.LessOrEqual(t, ndcg[3], 1.0+0.001, "NDCG must not exceed 1.0")
+	assert.InDelta(t, 1.0, ndcg[3], 0.001, "doc1 at rank 1, doc2 irrelevant -> ideal retrieval")
+}
+
+func TestNDCG_DuplicatePaths_OnlyFirstCounts(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID:     "q1",
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc2.md", "doc1.md", "doc1.md"},
+		},
+	}
+
+	ndcg := computeNDCG(results, []int{3})
+	assert.LessOrEqual(t, ndcg[3], 1.0+0.001, "NDCG must not exceed 1.0")
+	assert.Greater(t, ndcg[3], 0.0, "doc1 at rank 2 should still contribute")
+}
+
+func TestNDCGGraded_DuplicatePaths_NotAbove1(t *testing.T) {
+	results := []types.RetrievalResult{
+		{
+			QuestionID: "q1",
+			Relevance: []types.RelevanceJudgment{
+				{DocumentPath: "doc1.md", Grade: 3},
+			},
+			ExpectedPaths:  []string{"doc1.md"},
+			RetrievedPaths: []string{"doc1.md", "doc1.md", "doc2.md"},
+		},
+	}
+
+	ndcg := computeNDCGGraded(results, []int{3})
+	assert.LessOrEqual(t, ndcg[3], 1.0+0.001, "graded NDCG must not exceed 1.0")
+	assert.InDelta(t, 1.0, ndcg[3], 0.001, "doc1 (grade 3) at rank 1 is ideal")
+}
+
+func TestNDCGGradedForQuestion_DuplicatePaths_NotAbove1(t *testing.T) {
+	relevance := []types.RelevanceJudgment{
+		{DocumentPath: "doc1.md", Grade: 3},
+	}
+	retrieved := []string{"doc1.md", "doc1.md", "doc2.md"}
+
+	ndcg := computeNDCGGradedForQuestion(relevance, retrieved, 3)
+	assert.LessOrEqual(t, ndcg, 1.0+0.001, "per-question graded NDCG must not exceed 1.0")
+	assert.InDelta(t, 1.0, ndcg, 0.001, "doc1 (grade 3) at rank 1 is ideal")
+}
+
 func TestGradeForPath(t *testing.T) {
 	relevance := []types.RelevanceJudgment{
 		{DocumentPath: "doc1.md", Grade: 3},

@@ -286,7 +286,7 @@ func TestEvalStore_ConcurrentWrites(t *testing.T) {
 		for i := 0; i < 10; i++ {
 			go func(n int) {
 				done <- s.AddQueryResult(ctx, runID, types.RetrievalResult{
-					QuestionID: json.Number(string(rune('0'+n))).String(),
+					QuestionID: json.Number(string(rune('0' + n))).String(),
 					Question:   "q",
 					Hit:        map[int]bool{1: n == 0},
 				})

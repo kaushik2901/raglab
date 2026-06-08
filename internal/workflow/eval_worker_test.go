@@ -22,9 +22,9 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 		w := NewEvalWorker(store, evalStore)
 		job := &river.Job[EvalArgs]{
 			Args: EvalArgs{
-				WorkflowID: "00000000-0000-0000-0000-000000000000",
-				Tag:        "test-eval-err",
-				IndexTag:   "test-collection",
+				WorkflowID:  "00000000-0000-0000-0000-000000000000",
+				Tag:         "test-eval-err",
+				IndexTag:    "test-collection",
 				DatasetPath: "/tmp/nonexistent.json",
 			},
 		}

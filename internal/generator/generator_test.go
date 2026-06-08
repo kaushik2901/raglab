@@ -202,7 +202,7 @@ func TestNormalizeBaseURL(t *testing.T) {
 		{"http://localhost:1234/v1/", "http://localhost:1234"},
 	}
 
-		for _, tt := range tests {
+	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := config.NormalizeBaseURL(tt.input)
 			assert.Equal(t, tt.expected, result)

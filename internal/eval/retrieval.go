@@ -171,5 +171,3 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	result.LatencyMs = time.Since(start).Milliseconds()
 	return result, nil
 }
-
-

@@ -183,7 +183,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		}
 
 		datasetFile := strings.TrimSuffix(filepath.Base(args.DatasetPath), ".json")
-		reportPath := filepath.Join("artifacts", "evaluation", args.MainTag, datasetFile+".json")
+		reportPath := filepath.Join("artifacts", "evaluation", args.MainTag, datasetFile+"-report.json")
 		if err := eval.WriteJSONReport(report, reportPath); err != nil {
 			slog.Warn("failed to write report", "path", reportPath, "err", err)
 		}

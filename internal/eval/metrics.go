@@ -43,9 +43,14 @@ func computeNDCG(results []types.RetrievalResult, ks []int) map[int]float64 {
 		sum := 0.0
 		for _, r := range results {
 			relevances := make([]float64, min(k, len(r.RetrievedPaths)))
+			matched := make(map[string]bool)
 			for i := 0; i < len(relevances); i++ {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
-					relevances[i] = 1.0
+					path := r.RetrievedPaths[i]
+					if !matched[path] {
+						matched[path] = true
+						relevances[i] = 1.0
+					}
 				}
 			}
 			dcgVal := computeDCG(relevances, k)
@@ -79,13 +84,13 @@ func computePrecision(results []types.RetrievalResult, ks []int) map[int]float64
 	for _, k := range ks {
 		sum := 0.0
 		for _, r := range results {
-			relevant := 0
+			matched := make(map[string]bool)
 			for i := 0; i < min(k, len(r.RetrievedPaths)); i++ {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
-					relevant++
+					matched[r.RetrievedPaths[i]] = true
 				}
 			}
-			sum += float64(relevant) / float64(k)
+			sum += float64(len(matched)) / float64(k)
 		}
 		out[k] = sum / float64(len(results))
 	}
@@ -100,13 +105,13 @@ func computeRecall(results []types.RetrievalResult, ks []int) map[int]float64 {
 			if len(r.ExpectedPaths) == 0 {
 				continue
 			}
-			relevant := 0
+			matched := make(map[string]bool)
 			for i := 0; i < min(k, len(r.RetrievedPaths)); i++ {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
-					relevant++
+					matched[r.RetrievedPaths[i]] = true
 				}
 			}
-			sum += float64(relevant) / float64(len(r.ExpectedPaths))
+			sum += float64(len(matched)) / float64(len(r.ExpectedPaths))
 		}
 		out[k] = sum / float64(len(results))
 	}
@@ -119,8 +124,15 @@ func computeNDCGGraded(results []types.RetrievalResult, ks []int) map[int]float6
 		sum := 0.0
 		for _, r := range results {
 			relevances := make([]float64, min(k, len(r.RetrievedPaths)))
+			matched := make(map[string]bool)
 			for i, path := range r.RetrievedPaths[:min(k, len(r.RetrievedPaths))] {
+				if matched[path] {
+					continue
+				}
 				relevances[i] = gradeForPath(r.Relevance, path)
+				if relevances[i] > 0 {
+					matched[path] = true
+				}
 			}
 			dcgVal := computeDCG(relevances, k)
 			ideal := idealGradedRelevances(r.Relevance, k)
@@ -158,8 +170,15 @@ func idealGradedRelevances(relevance []types.RelevanceJudgment, k int) []float64
 func computeNDCGGradedForQuestion(relevance []types.RelevanceJudgment, retrieved []string, k int) float64 {
 	n := min(k, len(retrieved))
 	relevances := make([]float64, n)
+	matched := make(map[string]bool)
 	for i, path := range retrieved[:n] {
+		if matched[path] {
+			continue
+		}
 		relevances[i] = gradeForPath(relevance, path)
+		if relevances[i] > 0 {
+			matched[path] = true
+		}
 	}
 	dcgVal := computeDCG(relevances, k)
 	ideal := idealGradedRelevances(relevance, k)
@@ -205,5 +224,3 @@ func containsPath(paths []string, target string) bool {
 func matchPath(expected, actual string) bool {
 	return expected == actual
 }
-
-

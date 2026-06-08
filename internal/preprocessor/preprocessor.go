@@ -3,6 +3,7 @@ package preprocessor
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,8 @@ func ProcessAllFiles(srcRoot string, subdirs []string, dstDir string, concurrenc
 		walkDirs = []string{srcRoot}
 	} else {
 		for _, sd := range subdirs {
+			sd = strings.TrimPrefix(sd, "content/")
+			sd = strings.TrimPrefix(sd, "content\\")
 			walkDirs = append(walkDirs, filepath.Join(srcRoot, sd))
 		}
 	}
@@ -70,6 +73,7 @@ func ProcessAllFiles(srcRoot string, subdirs []string, dstDir string, concurrenc
 		_, statErr := os.Stat(wd)
 		if statErr != nil {
 			if os.IsNotExist(statErr) {
+				slog.Warn("include directory not found, skipping", "path", wd)
 				continue
 			}
 			return 0, fmt.Errorf("stat walk dir %s: %w", wd, statErr)

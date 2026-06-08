@@ -19,7 +19,7 @@ func TestVerifyStage_Execute(t *testing.T) {
 	dstDir := t.TempDir()
 	os.WriteFile(filepath.Join(dstDir, "good.md"), []byte("# Valid\n\nSome content."), 0644)
 
-	stage := VerifyStage(dstDir)
+	stage := VerifyStage(dstDir, nil)
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
@@ -36,7 +36,7 @@ func TestVerifyStage_EmptyDir(t *testing.T) {
 	os.MkdirAll(filepath.Join(srcDir, "content"), 0755)
 	dstDir := t.TempDir()
 
-	stage := VerifyStage(dstDir)
+	stage := VerifyStage(dstDir, nil)
 	result, err := stage.Run(context.Background(), map[string]any{
 		"repo_path": srcDir,
 	})
@@ -49,12 +49,12 @@ func TestVerifyStage_EmptyDir(t *testing.T) {
 }
 
 func TestVerifyStage_Name(t *testing.T) {
-	stage := VerifyStage(t.TempDir())
+	stage := VerifyStage(t.TempDir(), nil)
 	assert.Equal(t, "verify", string(stage.Name))
 }
 
 func TestVerifyStage_Requires(t *testing.T) {
-	stage := VerifyStage(t.TempDir())
+	stage := VerifyStage(t.TempDir(), nil)
 	assert.Equal(t, 2, len(stage.Requires))
 	assert.Equal(t, "clone", string(stage.Requires[0]))
 	assert.Equal(t, "preprocess", string(stage.Requires[1]))

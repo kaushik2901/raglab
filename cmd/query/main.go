@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/openai/openai-go"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
@@ -26,6 +27,10 @@ func main() {
 }
 
 func run() error {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("load .env: %w", err)
+	}
+
 	flag.CommandLine = flag.NewFlagSet("query", flag.ExitOnError)
 
 	query := flag.String("query", "", "Question to answer (required)")

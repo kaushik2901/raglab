@@ -140,5 +140,3 @@ func ResolveTag(tag, prefix string) string {
 	}
 	return fmt.Sprintf("%s-%s", prefix, time.Now().Format("20060102-150405"))
 }
-
-
