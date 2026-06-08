@@ -295,6 +295,28 @@ func TestIsConnError_PlainError(t *testing.T) {
 	assert.False(t, isConnError(fmt.Errorf("some random error")))
 }
 
+func TestQdrantStore_Retry_NonConnError(t *testing.T) {
+	s := NewQdrantStore("")
+	// No client → storeOnce returns "not connected" which is NOT a conn error
+	// so Store should return immediately without retry
+	err := s.Store(context.Background(), "test", []types.DocumentChunk{
+		{Chunk: types.Chunk{ID: "c1"}, Embedding: types.Embedding{Vector: []float64{0.1}}},
+	})
+	assert.ErrorContains(t, err, "not connected")
+}
+
+func TestQdrantStore_Retry_SearchNonConnError(t *testing.T) {
+	s := NewQdrantStore("")
+	_, err := s.Search(context.Background(), "test", []float32{0.1}, 5)
+	assert.ErrorContains(t, err, "not connected")
+}
+
+func TestQdrantStore_Retry_EnsureCollectionNonConnError(t *testing.T) {
+	s := NewQdrantStore("")
+	err := s.EnsureCollection(context.Background(), "test", 4, "Cosine")
+	assert.ErrorContains(t, err, "not connected")
+}
+
 func TestParseDistance(t *testing.T) {
 	assert.Equal(t, qdrant.Distance_Cosine, parseDistance("Cosine"))
 	assert.Equal(t, qdrant.Distance_Euclid, parseDistance("Euclid"))
