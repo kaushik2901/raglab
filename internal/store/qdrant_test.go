@@ -8,6 +8,8 @@ import (
 	"github.com/qdrant/go-client/qdrant"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -261,6 +263,36 @@ func TestQdrantStore_EnsureCollectionOnce_NotConnected(t *testing.T) {
 	s := NewQdrantStore("")
 	err := s.ensureCollectionOnce(context.Background(), "test", 4, "Cosine")
 	assert.ErrorContains(t, err, "not connected")
+}
+
+func TestQdrantStore_Reconnect_NoDSN(t *testing.T) {
+	s := NewQdrantStore("")
+	err := s.reconnect(context.Background())
+	assert.ErrorContains(t, err, "no last DSN")
+}
+
+func TestIsConnError_Unavailable(t *testing.T) {
+	st := status.New(codes.Unavailable, "service temporarily unavailable")
+	assert.True(t, isConnError(st.Err()))
+}
+
+func TestIsConnError_DeadlineExceeded(t *testing.T) {
+	st := status.New(codes.DeadlineExceeded, "deadline exceeded")
+	assert.True(t, isConnError(st.Err()))
+}
+
+func TestIsConnError_Canceled(t *testing.T) {
+	st := status.New(codes.Canceled, "context canceled")
+	assert.True(t, isConnError(st.Err()))
+}
+
+func TestIsConnError_NotFound(t *testing.T) {
+	st := status.New(codes.NotFound, "not found")
+	assert.False(t, isConnError(st.Err()))
+}
+
+func TestIsConnError_PlainError(t *testing.T) {
+	assert.False(t, isConnError(fmt.Errorf("some random error")))
 }
 
 func TestParseDistance(t *testing.T) {

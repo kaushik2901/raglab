@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"github.com/qdrant/go-client/qdrant"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -184,6 +186,29 @@ func (s *QdrantStore) Close() error {
 		return nil
 	}
 	return s.client.Close()
+}
+
+func (s *QdrantStore) reconnect(ctx context.Context) error {
+	if s.client != nil {
+		s.client.Close()
+		s.client = nil
+	}
+	if s.lastDSN == "" {
+		return fmt.Errorf("no last DSN — Connect was never called")
+	}
+	return s.Connect(ctx, s.lastDSN)
+}
+
+func isConnError(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	switch st.Code() {
+	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:
+		return true
+	}
+	return false
 }
 
 func toPoint(doc types.DocumentChunk) *qdrant.PointStruct {
