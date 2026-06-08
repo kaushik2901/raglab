@@ -68,10 +68,15 @@ func Evaluate(ctx context.Context, args PipelineArgs) ([]types.RetrievalResult, 
 			results[i].PromptTokens = promptTokens
 			results[i].CompletionTokens = completionTokens
 
+			if answer == "" {
+				results[i].Failed = true
+			}
+
 			if args.JudgeGen != nil && answer != "" {
 				score, err := JudgeAnswer(qCtx, args.JudgeGen, q.Question, contextText, q.ExpectedAnswer, answer)
 				if err != nil {
 					slog.Warn("judge error", "question_id", q.ID, "err", err)
+					results[i].Failed = true
 				} else {
 					results[i].AnswerScore = score
 				}
@@ -166,6 +171,7 @@ func fillRetrievalResult(r *types.RetrievalResult, q types.EvalQuestion, searchR
 	}
 
 	r.NDCGGraded = computeNDCGGradedForQuestion(q.Relevance, r.RetrievedPaths, topK)
+	r.NDCGGradedK = topK
 }
 
 func buildContextText(searchResults []types.SearchResult) string {

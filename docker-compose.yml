@@ -43,6 +43,8 @@ services:
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+    volumes:
+      - ./workspace:/workspace
     depends_on:
       postgres:
         condition: service_healthy

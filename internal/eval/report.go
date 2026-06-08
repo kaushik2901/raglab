@@ -20,7 +20,10 @@ func PrintReport(report *types.EvalReport) {
 
 	cfg := report.Strategy
 	fmt.Printf("  Collection: %s  Strategy: %s\n", cfg.IndexTag, cfg.QueryStrategy)
-	fmt.Printf("  Top-K: %d  Model: %s\n", cfg.TopK, cfg.LLMModel)
+	fmt.Printf("  Top-K: %d\n", cfg.TopK)
+	fmt.Printf("  Generator: %s / %s\n", cfg.LLMProvider, cfg.LLMModel)
+	fmt.Printf("  Embedder:  %s / %s\n", cfg.EmbeddingProvider, cfg.EmbeddingModel)
+	fmt.Printf("  Judge:     %s / %s\n", cfg.JudgeProvider, cfg.JudgeModel)
 	fmt.Printf("  Questions: %d\n\n", report.Questions)
 
 	printSection("Retrieval (K=5)", "")
@@ -29,6 +32,10 @@ func PrintReport(report *types.EvalReport) {
 	fmt.Printf("    NDCG@5       %.3f\n", report.Aggregate.NDCG[5])
 	fmt.Printf("    Precision@5  %.3f\n", report.Aggregate.Precision[5])
 	fmt.Printf("    Recall@5     %.3f\n\n", report.Aggregate.Recall[5])
+
+	printSection("Answer Quality", "")
+	fmt.Printf("    AvgAnswerScore   %.3f\n", report.Aggregate.AvgAnswerScore)
+	fmt.Printf("    Failed Questions %d / %d\n\n", report.QuestionsFailed, report.Questions)
 
 	printSection("Retrieval by K", "")
 	var ks []int
@@ -42,6 +49,13 @@ func PrintReport(report *types.EvalReport) {
 		fmt.Printf("    %-12d %-12.3f %-12.3f %-12.3f\n", k, report.Aggregate.HitRate[k], report.Aggregate.Precision[k], report.Aggregate.Recall[k])
 	}
 	fmt.Println()
+
+	printSection("Performance", "")
+	fmt.Printf("    Avg Latency        %8.0f ms\n", report.Aggregate.AvgLatencyMs)
+	fmt.Printf("    Total Latency      %8d ms\n", report.Aggregate.TotalLatencyMs)
+	fmt.Printf("    Avg Prompt Tokens  %8.0f\n", report.Aggregate.AvgPromptTokens)
+	fmt.Printf("    Avg Completion Tok %8.0f\n", report.Aggregate.AvgCompletionTokens)
+	fmt.Printf("    Total Tokens       %8d\n\n", report.Aggregate.TotalPromptTokens+report.Aggregate.TotalCompletionTokens)
 
 	failed := 0
 	for _, r := range report.PerQuestion {

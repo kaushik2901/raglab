@@ -84,6 +84,8 @@ func run() error {
 	}
 	// Forward-slash path for cross-platform compatibility (works locally + in Docker)
 	*datasetDir = filepath.ToSlash(relDir)
+	// Strip leading workspace/ segment — Docker mounts ./workspace at /workspace
+	*datasetDir = strings.TrimPrefix(*datasetDir, "workspace/")
 
 	entries, err := os.ReadDir(absDir)
 	if err != nil {
