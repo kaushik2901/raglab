@@ -24,17 +24,18 @@ import (
 )
 
 type IndexArgs struct {
-	WorkflowID        string `json:"workflow_id"`
-	Tag               string `json:"tag"`
-	InputTag          string `json:"input_tag"`
-	ParserStrategy    string `json:"parser_strategy"`
-	ChunkStrategy     string `json:"chunk_strategy"`
-	ChunkSize         int    `json:"chunk_size"`
-	ChunkOverlap      int    `json:"chunk_overlap"`
-	EmbeddingProvider string `json:"embedding_provider"`
-	EmbeddingModel    string `json:"embedding_model"`
-	BatchSize         int    `json:"batch_size"`
-	IndexConcurrency  int    `json:"index_concurrency"`
+	WorkflowID        string        `json:"workflow_id"`
+	Tag               string        `json:"tag"`
+	InputTag          string        `json:"input_tag"`
+	ParserStrategy    string        `json:"parser_strategy"`
+	ChunkStrategy     string        `json:"chunk_strategy"`
+	ChunkSize         int           `json:"chunk_size"`
+	ChunkOverlap      int           `json:"chunk_overlap"`
+	EmbeddingProvider string        `json:"embedding_provider"`
+	EmbeddingModel    string        `json:"embedding_model"`
+	BatchSize         int           `json:"batch_size"`
+	IndexConcurrency  int           `json:"index_concurrency"`
+	DocTimeout        time.Duration `json:"doc_timeout"`
 }
 
 func (IndexArgs) Kind() string { return "index" }
@@ -220,7 +221,11 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	for _, filePath := range mdFiles {
 		fp := filePath
 		g.Go(func() error {
-			docCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			docTimeout := args.DocTimeout
+		if docTimeout <= 0 {
+			docTimeout = 30 * time.Minute
+		}
+		docCtx, cancel := context.WithTimeout(ctx, docTimeout)
 			defer cancel()
 
 			relPath, err := filepath.Rel(inputDir, fp)

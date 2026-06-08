@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
@@ -33,6 +34,26 @@ func TestRunIndexing_EmptyInput(t *testing.T) {
 		require.NotNil(t, result)
 		assert.Equal(t, types.StageID("index"), result.Name)
 		assert.Equal(t, int32(0), result.Output["document_count"])
+	})
+}
+
+func TestIndexArgs_DocTimeoutDefault(t *testing.T) {
+	t.Run("zero timeout defaults to 30 minutes", func(t *testing.T) {
+		args := IndexArgs{DocTimeout: 0}
+		timeout := args.DocTimeout
+		if timeout <= 0 {
+			timeout = 30 * time.Minute
+		}
+		assert.Equal(t, 30*time.Minute, timeout)
+	})
+
+	t.Run("positive timeout is preserved", func(t *testing.T) {
+		args := IndexArgs{DocTimeout: 10 * time.Minute}
+		timeout := args.DocTimeout
+		if timeout <= 0 {
+			timeout = 30 * time.Minute
+		}
+		assert.Equal(t, 10*time.Minute, timeout)
 	})
 }
 

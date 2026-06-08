@@ -35,6 +35,7 @@ func run() error {
 	embeddingModel := flag.String("embedding-model", config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
 	batchSize := flag.Int("batch-size", config.IntEnvOrDefault("BATCH_SIZE", 20), "Embedding batch size")
 	indexConcurrency := flag.Int("index-concurrency", config.IntEnvOrDefault("INDEX_CONCURRENCY", 5), "Number of files to index concurrently")
+	docTimeout := flag.Duration("doc-timeout", config.DurationEnvOrDefault("DOC_TIMEOUT", 30*time.Minute), "Timeout per document (parse+chunk+embed+store)")
 	tag := flag.String("tag", config.EnvOrDefault("TAG", ""), "Workflow tag (auto-generated if empty)")
 
 	cfg, err := config.Load()
@@ -76,6 +77,7 @@ func run() error {
 		"embedding_model":    *embeddingModel,
 		"batch_size":         *batchSize,
 		"index_concurrency":  *indexConcurrency,
+		"doc_timeout":        docTimeout.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("create workflow: %w", err)
@@ -102,6 +104,7 @@ func run() error {
 		EmbeddingModel:    *embeddingModel,
 		BatchSize:         *batchSize,
 		IndexConcurrency:  *indexConcurrency,
+		DocTimeout:        *docTimeout,
 	}, nil)
 	if err != nil {
 		return fmt.Errorf("insert parse job: %w", err)
