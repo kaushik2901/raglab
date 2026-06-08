@@ -61,6 +61,67 @@ func (w *IndexWorker) Work(ctx context.Context, job *river.Job[IndexArgs]) error
 	return w.Store.UpdateWorkflowStatus(ctx, job.Args.WorkflowID, "succeeded")
 }
 
+func embedAndStore(ctx context.Context, emb embedder.Embedder, qStore qstore.VectorStore, collectionName string, batch []types.Chunk) error {
+	embeddings, err := emb.Embed(ctx, batch)
+	if err != nil {
+		return fmt.Errorf("embed batch: %w", err)
+	}
+
+	docChunks := make([]types.DocumentChunk, len(batch))
+	for i := range batch {
+		docChunks[i] = types.DocumentChunk{
+			Chunk:     batch[i],
+			Embedding: embeddings[i],
+		}
+	}
+
+	if err := qStore.Store(ctx, collectionName, docChunks); err != nil {
+		return fmt.Errorf("store batch: %w", err)
+	}
+	return nil
+}
+
+func processFile(ctx context.Context, fp, relPath, collectionName string,
+	chunkr chunker.Chunker, emb embedder.Embedder, qStore qstore.VectorStore,
+	batchSize int) (int, error) {
+
+	reader, err := (&parser.MarkdownParser{}).Parse(fp)
+	if err != nil {
+		return 0, fmt.Errorf("parse: %w", err)
+	}
+	defer reader.Close()
+
+	chunkChan, errChan := chunkr.Chunk(ctx, reader, relPath)
+
+	var (
+		batch       []types.Chunk
+		chunksCount int
+	)
+	for {
+		select {
+		case chunk, ok := <-chunkChan:
+			if !ok {
+				if len(batch) > 0 {
+					if err := embedAndStore(ctx, emb, qStore, collectionName, batch); err != nil {
+						return chunksCount, err
+					}
+				}
+				return chunksCount, nil
+			}
+			batch = append(batch, chunk)
+			if len(batch) >= batchSize {
+				if err := embedAndStore(ctx, emb, qStore, collectionName, batch); err != nil {
+					return chunksCount, err
+				}
+				chunksCount += len(batch)
+				batch = batch[:0]
+			}
+		case err := <-errChan:
+			return chunksCount, fmt.Errorf("chunk: %w", err)
+		}
+	}
+}
+
 func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error) {
 	concurrency := args.IndexConcurrency
 	if concurrency <= 0 {
@@ -94,7 +155,6 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 
 	collectionName := args.Tag
 
-	// Phase 1: collect all .md file paths
 	var mdFiles []string
 	if err := filepath.WalkDir(inputDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -115,9 +175,22 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 
 	slog.Info("indexing files", "count", len(mdFiles), "concurrency", concurrency)
 
+	if len(mdFiles) > 0 {
+		probeEmb, err := emb.Embed(ctx, []types.Chunk{{ID: "dimension-probe", Content: "test"}})
+		if err != nil {
+			return nil, fmt.Errorf("probe embedding dimension: %w", err)
+		}
+		if len(probeEmb) == 0 {
+			return nil, fmt.Errorf("no embedding returned for dimension probe")
+		}
+		vectorSize := probeEmb[0].Dimensions
+
+		if err := qStore.EnsureCollection(ctx, collectionName, vectorSize, "Cosine"); err != nil {
+			return nil, fmt.Errorf("ensure collection: %w", err)
+		}
+	}
+
 	var (
-		ensureOnce  sync.Once
-		initErr     error
 		totalDocs   atomic.Int32
 		totalChunks atomic.Int32
 		mu          sync.Mutex
@@ -139,58 +212,24 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 			}
 			relPath = filepath.ToSlash(relPath)
 
-			doc, err := parser.ParseFile(fp, relPath)
+			chunkCount, err := processFile(docCtx, fp, relPath, collectionName, chunkr, emb, qStore, args.BatchSize)
 			if err != nil {
-				slog.Warn("parse error", "path", fp, "err", err)
 				mu.Lock()
-				skipErrors = append(skipErrors, relPath+": parse: "+err.Error())
+				skipErrors = append(skipErrors, relPath+": "+err.Error())
 				mu.Unlock()
 				return nil
 			}
 
-			chunks, err := chunkr.Chunk(doc)
-			if err != nil {
-				slog.Warn("chunk error", "path", fp, "err", err)
-				mu.Lock()
-				skipErrors = append(skipErrors, relPath+": chunk: "+err.Error())
-				mu.Unlock()
-				return nil
-			}
-			if len(chunks) == 0 {
+			if chunkCount == 0 {
 				mu.Lock()
 				skipErrors = append(skipErrors, relPath+": empty chunks")
 				mu.Unlock()
 				return nil
 			}
 
-			embeddings, err := emb.Embed(docCtx, chunks)
-			if err != nil {
-				return fmt.Errorf("embed %s: %w", relPath, err)
-			}
-
-			ensureOnce.Do(func() {
-				vectorSize := embeddings[0].Dimensions
-				initErr = qStore.EnsureCollection(docCtx, collectionName, vectorSize, "Cosine")
-			})
-			if initErr != nil {
-				return fmt.Errorf("ensure collection: %w", initErr)
-			}
-
-			docChunks := make([]types.DocumentChunk, len(chunks))
-			for i := range chunks {
-				docChunks[i] = types.DocumentChunk{
-					Chunk:     chunks[i],
-					Embedding: embeddings[i],
-				}
-			}
-
-			if err := qStore.Store(docCtx, collectionName, docChunks); err != nil {
-				return fmt.Errorf("store %s: %w", relPath, err)
-			}
-
 			totalDocs.Add(1)
-			totalChunks.Add(int32(len(chunks)))
-			slog.Info("indexed document", "path", relPath, "chunks", len(chunks))
+			totalChunks.Add(int32(chunkCount))
+			slog.Info("indexed document", "path", relPath, "chunks", chunkCount)
 			return nil
 		})
 	}
