@@ -64,7 +64,10 @@ func (w *IndexWorker) Work(ctx context.Context, job *river.Job[IndexArgs]) error
 }
 
 func embedAndStore(ctx context.Context, emb embedder.Embedder, qStore qstore.VectorStore, collectionName string, batch []types.Chunk) error {
-	embeddings, err := emb.Embed(ctx, batch)
+	batchCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	embeddings, err := emb.Embed(batchCtx, batch)
 	if err != nil {
 		return fmt.Errorf("embed batch: %w", err)
 	}
@@ -77,7 +80,7 @@ func embedAndStore(ctx context.Context, emb embedder.Embedder, qStore qstore.Vec
 		}
 	}
 
-	if err := qStore.Store(ctx, collectionName, docChunks); err != nil {
+	if err := qStore.Store(batchCtx, collectionName, docChunks); err != nil {
 		return fmt.Errorf("store batch: %w", err)
 	}
 	return nil
