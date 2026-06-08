@@ -1,2 +1,0 @@
-ALTER TABLE eval_queries ADD COLUMN category TEXT NOT NULL DEFAULT '';
-ALTER TABLE eval_queries ADD COLUMN difficulty TEXT NOT NULL DEFAULT '';
