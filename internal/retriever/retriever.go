@@ -11,8 +11,10 @@ import (
 
 const StrategyNaiveSearch = "naive-search"
 
-var validStrategies = map[string]bool{
-	StrategyNaiveSearch: true,
+type RetrievalFunc func(ctx context.Context, coll, query string, topK int) ([]types.SearchResult, error)
+
+var strategies = map[string]func(*Retriever) RetrievalFunc{
+	StrategyNaiveSearch: func(r *Retriever) RetrievalFunc { return r.naiveSearch },
 }
 
 type Retriever struct {
@@ -22,19 +24,18 @@ type Retriever struct {
 }
 
 func New(embedder embedder.Embedder, store qstore.VectorStore, strategy string) (*Retriever, error) {
-	if !validStrategies[strategy] {
+	if _, ok := strategies[strategy]; !ok {
 		return nil, fmt.Errorf("unknown query strategy: %q (supported: naive-search)", strategy)
 	}
 	return &Retriever{embedder: embedder, store: store, strategy: strategy}, nil
 }
 
 func (r *Retriever) Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error) {
-	switch r.strategy {
-	case StrategyNaiveSearch:
-		return r.naiveSearch(ctx, collection, query, topK)
-	default:
+	fn, ok := strategies[r.strategy]
+	if !ok {
 		return nil, fmt.Errorf("strategy %q not implemented", r.strategy)
 	}
+	return fn(r)(ctx, collection, query, topK)
 }
 
 func (r *Retriever) naiveSearch(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error) {
@@ -58,4 +59,8 @@ func (r *Retriever) naiveSearch(ctx context.Context, collection string, query st
 	}
 
 	return results, nil
+}
+
+func RegisterRetriever(name string, fn func(*Retriever) RetrievalFunc) {
+	strategies[name] = fn
 }
