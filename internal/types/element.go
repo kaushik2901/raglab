@@ -20,5 +20,3 @@ const (
 	ElementTable     = "table"
 	ElementListItem  = "list_item"
 )
-
-

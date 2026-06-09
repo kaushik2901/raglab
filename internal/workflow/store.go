@@ -18,6 +18,10 @@ func (s *Store) runStep(ctx context.Context, wfID, stepName string, fn func(cont
 		return fmt.Errorf("create step: %w", err)
 	}
 
+	if err := s.UpdateWorkflowStatus(ctx, wfID, "running"); err != nil {
+		slog.Warn("failed to set workflow running", "wf_id", wfID, "err", err)
+	}
+
 	slog.Info("step started", "wf_id", wfID, "step", stepName)
 
 	if err := s.UpdateStepStatus(ctx, stepID, "running", nil, nil); err != nil {

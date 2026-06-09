@@ -49,7 +49,7 @@ func ProcessFile(filePath string, repoRoot string) (*types.Document, error) {
 	}, nil
 }
 
-func ProcessAllFiles(srcRoot string, subdirs []string, dstDir string, concurrency int) (int, error) {
+func ProcessAllFiles(ctx context.Context, srcRoot string, subdirs []string, dstDir string, concurrency int) (int, error) {
 	if concurrency <= 0 {
 		concurrency = 10
 	}
@@ -97,7 +97,7 @@ func ProcessAllFiles(srcRoot string, subdirs []string, dstDir string, concurrenc
 		}
 	}
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(concurrency)
 
 	var processed atomic.Int32

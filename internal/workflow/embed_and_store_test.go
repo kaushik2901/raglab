@@ -18,7 +18,7 @@ func (m *mockEmbedder) Embed(ctx context.Context, chunks []types.Chunk) ([]types
 	return m.embedFn(ctx, chunks)
 }
 
-func (m *mockEmbedder) Dimensions() int  { return 0 }
+func (m *mockEmbedder) Dimensions() int   { return 0 }
 func (m *mockEmbedder) ModelName() string { return "mock" }
 
 type mockStore struct {

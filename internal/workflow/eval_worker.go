@@ -221,15 +221,15 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		return &types.StageResult{
 			Name: "eval",
 			Output: map[string]any{
-				"eval_run_id":       evalRunID,
-				"report_path":       reportPath,
-				"question_count":    len(results),
-				"questions_failed":  failedCount,
-				"hit_rate@5":        aggregate.HitRate[5],
-				"mrr":               aggregate.MRR,
-				"avg_answer_score":  aggregate.AvgAnswerScore,
-				"total_latency_ms":  totalLatency,
-				"total_tokens":      totalPrompt + totalCompletion,
+				"eval_run_id":      evalRunID,
+				"report_path":      reportPath,
+				"question_count":   len(results),
+				"questions_failed": failedCount,
+				"hit_rate@5":       aggregate.HitRate[5],
+				"mrr":              aggregate.MRR,
+				"avg_answer_score": aggregate.AvgAnswerScore,
+				"total_latency_ms": totalLatency,
+				"total_tokens":     totalPrompt + totalCompletion,
 			},
 		}, nil
 	}); err != nil {

@@ -51,11 +51,11 @@ func Evaluate(ctx context.Context, args PipelineArgs) ([]types.RetrievalResult, 
 		qStart := time.Now()
 
 		qCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-		defer cancel()
 
 		queryVector := toFloat32(embeddings[i])
 		searchResults, err := args.Searcher.Search(qCtx, args.Collection, queryVector, args.TopK)
 		if err != nil {
+			cancel()
 			return nil, fmt.Errorf("search q=%s: %w", q.ID, err)
 		}
 
@@ -84,6 +84,7 @@ func Evaluate(ctx context.Context, args PipelineArgs) ([]types.RetrievalResult, 
 		}
 
 		results[i].LatencyMs = time.Since(qStart).Milliseconds()
+		cancel()
 	}
 
 	slog.Info("evaluation complete",

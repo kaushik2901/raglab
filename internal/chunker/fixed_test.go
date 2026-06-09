@@ -235,8 +235,8 @@ func TestFixedChunker_ExactMatchWithOldImpl(t *testing.T) {
 	docPath := "test/doc.md"
 
 	// Old batch implementation (kept as reference oracle)
-	oldChunk := func(doc types.Document) ([]types.Chunk, error) {
-		words := strings.Fields(doc.Content)
+	oldChunk := func(content string) ([]types.Chunk, error) {
+		words := strings.Fields(content)
 		if len(words) == 0 {
 			return nil, nil
 		}
@@ -252,12 +252,12 @@ func TestFixedChunker_ExactMatchWithOldImpl(t *testing.T) {
 				end = len(words)
 			}
 			chunkWords := words[start:end]
-			content := strings.Join(chunkWords, " ")
+			chunkContent := strings.Join(chunkWords, " ")
 			chunks = append(chunks, types.Chunk{
 				ID:           fmt.Sprintf("%s-chunk-%04d", docPath, idx),
 				DocumentPath: docPath,
-				Content:      content,
-				TokenCount:   len(content) / 4,
+				Content:      chunkContent,
+				TokenCount:   len(chunkContent) / 4,
 				Index:        idx,
 			})
 			idx++
@@ -268,7 +268,7 @@ func TestFixedChunker_ExactMatchWithOldImpl(t *testing.T) {
 		return chunks, nil
 	}
 
-	oldChunks, err := oldChunk(types.Document{Path: docPath, Content: docContent})
+	oldChunks, err := oldChunk(docContent)
 	require.NoError(t, err)
 
 	reader := elementReaderFromText(docPath, docContent)

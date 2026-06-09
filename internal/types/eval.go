@@ -51,8 +51,8 @@ type RetrievalResult struct {
 	Hit              map[int]bool
 	RankFirst        int
 	NDCGGraded       float64
-	NDCGGradedK      int    // k used to compute NDCGGraded
-	Failed           bool   // true if generate/judge failed for this question
+	NDCGGradedK      int  // k used to compute NDCGGraded
+	Failed           bool // true if generate/judge failed for this question
 	Answer           string
 	AnswerScore      float64
 	PromptTokens     int
@@ -61,18 +61,18 @@ type RetrievalResult struct {
 }
 
 type AggregateMetrics struct {
-	HitRate              map[int]float64
-	MRR                  float64
-	NDCG                 map[int]float64
-	NDCGGraded           map[int]float64
-	Precision            map[int]float64
-	Recall               map[int]float64
-	AvgAnswerScore       float64
-	AvgLatencyMs         float64
-	TotalLatencyMs       int64
-	AvgPromptTokens      float64
-	AvgCompletionTokens  float64
-	TotalPromptTokens    int
+	HitRate               map[int]float64
+	MRR                   float64
+	NDCG                  map[int]float64
+	NDCGGraded            map[int]float64
+	Precision             map[int]float64
+	Recall                map[int]float64
+	AvgAnswerScore        float64
+	AvgLatencyMs          float64
+	TotalLatencyMs        int64
+	AvgPromptTokens       float64
+	AvgCompletionTokens   float64
+	TotalPromptTokens     int
 	TotalCompletionTokens int
 }
 

@@ -31,8 +31,8 @@ type markdownReader struct {
 	lang    string
 	err     error
 
-	pending   types.Element
-	hasPending bool
+	pending     types.Element
+	hasPending  bool
 	pendingLine string
 	hasLine     bool
 }

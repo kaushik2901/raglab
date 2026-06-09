@@ -3,8 +3,8 @@ package generator
 import (
 	"context"
 
-	"golang.org/x/time/rate"
 	"github.com/openai/openai-go"
+	"golang.org/x/time/rate"
 )
 
 type RateLimitedGenerator struct {

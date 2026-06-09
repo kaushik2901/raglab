@@ -20,7 +20,7 @@ func PreprocessStage(outputPath string, includeDirs []string) types.Stage {
 			}
 			srcDir := filepath.Join(repoPath, "content")
 			dstDir := outputPath
-			count, err := preprocessor.ProcessAllFiles(srcDir, includeDirs, dstDir, 10)
+			count, err := preprocessor.ProcessAllFiles(ctx, srcDir, includeDirs, dstDir, 10)
 			if err != nil {
 				return nil, fmt.Errorf("preprocess: %w", err)
 			}

@@ -32,6 +32,7 @@ func NewOpenAI(baseURL, apiKey, model string) Generator {
 	baseURL = config.NormalizeBaseURL(baseURL)
 	opts := []option.RequestOption{
 		option.WithBaseURL(baseURL + "/v1/"),
+		option.WithHeader("Content-Type", "application/json"),
 	}
 	if apiKey != "" {
 		opts = append(opts, option.WithAPIKey(apiKey))

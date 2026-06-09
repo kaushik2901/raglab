@@ -1,6 +1,9 @@
 package memory
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 type Message struct {
 	Role    string
@@ -19,9 +22,10 @@ type Memory interface {
 }
 
 type RingBuffer struct {
-	mu       sync.Mutex
-	maxTurns int
-	buffer   map[string][]Turn
+	mu           sync.Mutex
+	maxTurns     int
+	buffer       map[string][]Turn
+	lastAccessed map[string]time.Time
 }
 
 func NewRingBuffer(maxTurns int) *RingBuffer {
@@ -29,8 +33,9 @@ func NewRingBuffer(maxTurns int) *RingBuffer {
 		maxTurns = 10
 	}
 	return &RingBuffer{
-		maxTurns: maxTurns,
-		buffer:   make(map[string][]Turn),
+		maxTurns:     maxTurns,
+		buffer:       make(map[string][]Turn),
+		lastAccessed: make(map[string]time.Time),
 	}
 }
 
@@ -50,11 +55,14 @@ func (r *RingBuffer) Add(conversationID string, userMsg, assistantMsg string) {
 	}
 
 	r.buffer[conversationID] = turns
+	r.lastAccessed[conversationID] = time.Now()
 }
 
 func (r *RingBuffer) Get(conversationID string) []Turn {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	r.lastAccessed[conversationID] = time.Now()
 
 	turns := r.buffer[conversationID]
 	result := make([]Turn, len(turns))
@@ -66,4 +74,18 @@ func (r *RingBuffer) Clear(conversationID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.buffer, conversationID)
+	delete(r.lastAccessed, conversationID)
+}
+
+func (r *RingBuffer) Purge(threshold time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cutoff := time.Now().Add(-threshold)
+	for id, last := range r.lastAccessed {
+		if last.Before(cutoff) {
+			delete(r.buffer, id)
+			delete(r.lastAccessed, id)
+		}
+	}
 }

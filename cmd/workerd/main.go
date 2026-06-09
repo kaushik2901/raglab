@@ -10,6 +10,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
@@ -55,7 +56,7 @@ func run(ctx context.Context) error {
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		JobTimeout: 60 * time.Minute,
 		Queues: map[string]river.QueueConfig{
-			"default": {MaxWorkers: 5},
+			"default": {MaxWorkers: config.IntEnvOrDefault("WORKER_CONCURRENCY", 20)},
 		},
 		Workers: workers,
 	})

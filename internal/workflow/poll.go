@@ -8,8 +8,11 @@ import (
 )
 
 func PollUntilDone(ctx context.Context, store *Store, wfID string, interval time.Duration) error {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
+	const maxInterval = 30 * time.Second
+	currentInterval := interval
+	if currentInterval <= 0 {
+		currentInterval = time.Second
+	}
 
 	var lastStepLog string
 
@@ -53,7 +56,12 @@ func PollUntilDone(ctx context.Context, store *Store, wfID string, interval time
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-tick.C:
+		case <-time.After(currentInterval):
+		}
+
+		currentInterval *= 2
+		if currentInterval > maxInterval {
+			currentInterval = maxInterval
 		}
 	}
 }

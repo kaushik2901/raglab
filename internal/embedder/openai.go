@@ -29,6 +29,7 @@ func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
 	config.WarnOnInsecure(baseURL, apiKey, "embedder")
 	opts := []option.RequestOption{
 		option.WithBaseURL(config.NormalizeBaseURL(baseURL) + "/v1/"),
+		option.WithHeader("Content-Type", "application/json"),
 	}
 	if apiKey != "" {
 		opts = append(opts, option.WithAPIKey(apiKey))
