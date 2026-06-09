@@ -97,6 +97,7 @@ func processFile(ctx context.Context, fp, relPath, collectionName string,
 					if err := embedAndStore(ctx, emb, qStore, collectionName, batch); err != nil {
 						return chunksCount, err
 					}
+					chunksCount += len(batch)
 				}
 				return chunksCount, nil
 			}
@@ -109,6 +110,9 @@ func processFile(ctx context.Context, fp, relPath, collectionName string,
 				batch = batch[:0]
 			}
 		case err := <-errChan:
+			if err == nil {
+				continue
+			}
 			return chunksCount, fmt.Errorf("chunk: %w", err)
 		}
 	}

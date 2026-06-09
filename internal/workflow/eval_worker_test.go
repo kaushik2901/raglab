@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,6 +32,7 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 		cleanEvalTables(t, pool)
 		w := NewEvalWorker(evalStore)
 		job := &river.Job[EvalArgs]{
+			JobRow: &rivertype.JobRow{},
 			Args: EvalArgs{
 				Tag:         "test-eval-err",
 				IndexTag:    "test-collection",

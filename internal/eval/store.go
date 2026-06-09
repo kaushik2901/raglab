@@ -19,6 +19,9 @@ func NewEvalStore(pool *pgxpool.Pool) *EvalStore {
 }
 
 func (s *EvalStore) CreateRun(ctx context.Context, tag string, strategy map[string]any) (string, error) {
+	if strategy == nil {
+		strategy = make(map[string]any)
+	}
 	var id string
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO eval_runs (tag, strategy) VALUES ($1, $2) RETURNING id`,

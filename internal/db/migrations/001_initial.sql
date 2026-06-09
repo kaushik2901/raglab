@@ -20,7 +20,6 @@ CREATE TABLE IF NOT EXISTS eval_queries (
     expected_answer  TEXT NOT NULL DEFAULT '',
     expected_paths JSONB,
     retrieved     JSONB,
-    answer        TEXT,
     hit           JSONB,
     rank_first    INT,
     relevance     JSONB,

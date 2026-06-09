@@ -123,10 +123,10 @@ func TestEvalStore_UpdateRunMetrics(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("fails for non-existent run", func(t *testing.T) {
+	t.Run("no-op for non-existent run", func(t *testing.T) {
 		cleanEvalTables(t, pool)
 		err := s.UpdateRunMetrics(context.Background(), "00000000-0000-0000-0000-000000000000", types.AggregateMetrics{})
-		require.Error(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -213,10 +213,11 @@ func TestEvalStore_GetRunResults(t *testing.T) {
 		assert.Empty(t, results)
 	})
 
-	t.Run("fails for non-existent run", func(t *testing.T) {
+	t.Run("empty for non-existent run", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		_, err := s.GetRunResults(context.Background(), "00000000-0000-0000-0000-000000000000")
-		require.Error(t, err)
+		results, err := s.GetRunResults(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.NoError(t, err)
+		assert.Empty(t, results)
 	})
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -45,7 +46,8 @@ type workUnit struct {
 }
 
 type evalCheckpoint struct {
-	QuestionsProcessed int `json:"questions_processed"`
+	RunID              string `json:"run_id"`
+	QuestionsProcessed int    `json:"questions_processed"`
 }
 
 type EvalWorker struct {
@@ -74,6 +76,13 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		batchSize = 20
 	}
 
+	// On retry, clean up the previous run's results before creating a new one
+	if cp.QuestionsProcessed > 0 && cp.RunID != "" {
+		if err := w.EvalStore.DeleteRunResults(ctx, cp.RunID); err != nil {
+			return fmt.Errorf("delete previous results: %w", err)
+		}
+	}
+
 	evalRunID, err := w.EvalStore.CreateRun(ctx, args.Tag, map[string]any{
 		"index_tag":      args.IndexTag,
 		"query_strategy": args.QueryStrategy,
@@ -85,13 +94,6 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 	})
 	if err != nil {
 		return fmt.Errorf("create eval run: %w", err)
-	}
-
-	// On retry, clear any previously stored results for this run
-	if cp.QuestionsProcessed > 0 {
-		if err := w.EvalStore.DeleteRunResults(ctx, evalRunID); err != nil {
-			return fmt.Errorf("delete previous results: %w", err)
-		}
 	}
 
 	// Create dependencies
@@ -127,11 +129,21 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 	})
 
 	// Subscribers: evaluate questions
+	var workerWg sync.WaitGroup
 	for i := 0; i < workers; i++ {
+		workerWg.Add(1)
 		g.Go(func() error {
+			defer workerWg.Done()
 			return evaluateQuestions(ctx, args, qStore, gen, judgeGen, workChan, resultChan)
 		})
 	}
+
+	// Closer: close resultChan when all workers complete
+	g.Go(func() error {
+		workerWg.Wait()
+		close(resultChan)
+		return nil
+	})
 
 	// Collector: gathers results, stores to DB, aggregates at end
 	g.Go(func() error {
@@ -318,7 +330,7 @@ func collectResults(
 
 				// Checkpoint
 				processed := len(*allResults)
-				if err := saveEvalCheckpoint(ctx, client, job, processed); err != nil {
+				if err := saveEvalCheckpoint(ctx, client, job, evalRunID, processed); err != nil {
 					slog.Warn("failed to save checkpoint", "err", err)
 				}
 				results = results[:0]
@@ -392,9 +404,9 @@ func readEvalCheckpoint(job *river.Job[EvalArgs]) evalCheckpoint {
 	return cp
 }
 
-func saveEvalCheckpoint(ctx context.Context, client *river.Client[pgx.Tx], job *river.Job[EvalArgs], questionsProcessed int) error {
+func saveEvalCheckpoint(ctx context.Context, client *river.Client[pgx.Tx], job *river.Job[EvalArgs], runID string, questionsProcessed int) error {
 	_, err := client.JobUpdate(ctx, job.ID, &river.JobUpdateParams{
-		Output: evalCheckpoint{QuestionsProcessed: questionsProcessed},
+		Output: evalCheckpoint{RunID: runID, QuestionsProcessed: questionsProcessed},
 	})
 	return err
 }
