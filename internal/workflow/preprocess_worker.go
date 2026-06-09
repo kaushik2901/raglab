@@ -126,8 +126,8 @@ func runGit(ctx context.Context, path, desc string, args ...string) error {
 // --- Verify helpers ---
 
 type verificationReport struct {
-	Passed bool            `json:"passed"`
-	Checks []checkResult   `json:"checks"`
+	Passed bool          `json:"passed"`
+	Checks []checkResult `json:"checks"`
 }
 
 type checkResult struct {

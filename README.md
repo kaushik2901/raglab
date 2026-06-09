@@ -133,6 +133,8 @@ Artifacts are stored at `artifacts/preprocessing/<tag>/repo/` and `artifacts/pre
 | `--tag`          | `TAG`          | `pre-<timestamp>`                                      | Workflow tag                                     |
 | `--include-dirs` | `INCLUDE_DIRS` | `""`                                                   | Comma-separated subdirs to process (empty = all) |
 
+The preprocess worker runs clone → preprocess → verify as a single River job with checkpointing (resumes from the last completed step on crash).
+
 ## Indexing Pipeline
 
 Builds on the preprocessing output. Reads cleaned markdown, chunks documents, generates embeddings, and stores vectors in Qdrant. **Files are processed concurrently** (configurable via `--index-concurrency`).
@@ -161,12 +163,14 @@ go build -o bin\index.exe .\cmd\index
 | `--tag`                | `TAG`                | `idx-<timestamp>`          | Workflow tag                                                |
 | `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`) |
 | `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider                                          |
-| `--chunk-strategy`     | `CHUNK_STRATEGY`     | `fixed`                    | Chunking strategy (fixed only)                              |
+| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model name                                        |
+| `--parser`             | `PARSER`             | `markdown`                 | Parser strategy (`markdown`)                                |
+| `--chunk-strategy`     | `CHUNK_STRATEGY`     | `fixed`                    | Chunking strategy (`fixed`, `semantic`, `recursive`)        |
 | `--chunk-size`         | `CHUNK_SIZE`         | `512`                      | Target token count per chunk                                |
 | `--chunk-overlap`      | `CHUNK_OVERLAP`      | `64`                       | Token overlap between chunks                                |
-| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model name                                        |
 | `--batch-size`         | `BATCH_SIZE`         | `20`                       | Embedding API batch size                                    |
 | `--index-concurrency`  | `INDEX_CONCURRENCY`  | `5`                        | Number of files to index concurrently                       |
+| `--doc-timeout`        | `DOC_TIMEOUT`        | `30m`                      | Timeout per document (parse+chunk+embed+store)              |
 
 ## Evaluation Pipeline
 
@@ -190,7 +194,7 @@ Relevance judgments use `document_path` (the relative path within the preprocess
 go build -o bin\eval.exe .\cmd\eval
 .\bin\workerd.exe
 
-.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/preprocessing/pre-20260603-141651/eval-dataset
+.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset artifacts/preprocessing/pre-20260603-141651/eval-dataset/dataset.jsonl
 ```
 
 ### CLI Flags
@@ -199,19 +203,20 @@ go build -o bin\eval.exe .\cmd\eval
 | ---------------------- | -------------------- | -------------------------- | ------------------------------------------------------------------- |
 | `--index-tag`          | —                    | —                          | **Required.** Existing Qdrant collection name to evaluate           |
 | `--query-strategy`     | —                    | —                          | **Required.** Query strategy (`naive-search`)                       |
-| `--dataset-dir`        | —                    | —                          | **Required.** Directory containing `.json` evaluation dataset files |
+| `--dataset`            | —                    | —                          | **Required.** Path to `.jsonl` dataset file                         |
 | `--top-k`              | —                    | `5`                        | Top-K retrieval                                                     |
+| `--ks`                 | —                    | `1,3,5,10`                 | Comma-separated K values for metrics                                |
 | `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`)         |
 | `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider for query embedding                              |
 | `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model for query vectorization                             |
 | `--judge-provider`     | `JUDGE_PROVIDER`     | (same as `--llm-provider`) | Judge provider for answer scoring                                   |
 | `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                                     |
 | `--judge-model`        | `JUDGE_MODEL`        | (same as `--llm-model`)    | LLM model for answer correctness scoring                            |
-| `--eval-concurrency`   | `EVAL_CONCURRENCY`   | `5`                        | Concurrency for eval questions (currently sequential — reserved)    |
+| `--workers`            | `WORKERS`            | `5`                        | Number of concurrent evaluator goroutines                           |
 | `--batch-size`         | `BATCH_SIZE`         | `20`                       | Embedding API batch size                                            |
-| `--tag`                | —                    | `eval-<timestamp>`         | Eval run tag prefix                                                 |
+| `--tag`                | `TAG`                | `eval-<timestamp>`         | Eval run tag prefix                                                 |
 
-Each `.json` file in the dataset directory is evaluated in its own River workflow (all submitted concurrently). Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
+Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
 
 ## Query CLI
 
@@ -255,8 +260,16 @@ Secrets and connection strings are read from environment variables (not CLI flag
 | `OPENROUTER_API_KEY`  | `""`                                                         | OpenRouter API key                    |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`                               | OpenRouter API base URL               |
 | `LMSTUDIO_BASE_URL`   | `http://localhost:1234/v1`                                   | LM Studio base URL (no key)           |
-| `EVAL_CONCURRENCY`    | `5`                                                          | Eval question concurrency (reserved)  |
+| `WORKER_CONCURRENCY`  | `20`                                                         | River worker pool concurrency         |
+| `WORKERS`             | `5`                                                          | Eval concurrent goroutines            |
 | `BATCH_SIZE`          | `20`                                                         | Embedding API batch size              |
+| `INDEX_CONCURRENCY`   | `5`                                                          | Index file processing concurrency     |
+| `EMBEDDING_MODEL`     | `text-embedding-3-small`                                     | Embedding model name                  |
+| `DOC_TIMEOUT`         | `30m`                                                        | Per-document timeout for indexing     |
+| `PARSER`              | `markdown`                                                   | Parser strategy                       |
+| `CHUNK_STRATEGY`      | `fixed`                                                      | Chunking strategy                     |
+| `CHUNK_SIZE`          | `512`                                                        | Target tokens per chunk               |
+| `CHUNK_OVERLAP`       | `64`                                                         | Token overlap between chunks          |
 | `QDRANT_URL`          | `http://localhost:6334`                                      | Qdrant gRPC endpoint                  |
 | `QDRANT_API_KEY`      | `""`                                                         | Qdrant API key (optional)             |
 | `DATABASE_URL`        | `postgres://rag:rag@localhost:5432/rag?sslmode=disable`      | Postgres connection string            |
@@ -293,7 +306,7 @@ Key concurrent processing in the pipeline:
 | Preprocessor file processing |      10 goroutines       | `errgroup.SetLimit(10)`            |
 | Indexer file processing      | Configurable (default 5) | `errgroup.SetLimit(concurrency)`   |
 | Eval question phases         |        Sequential        | Batch embed → sequential gen/judge |
-| River worker pool            |            5             | `MaxWorkers: 5` in queue config    |
+| River worker pool            | Configurable (default 20)| `WORKER_CONCURRENCY` env var       |
 
 The indexer uses `golang.org/x/sync/errgroup` with a bounded semaphore to process files in parallel. The eval pipeline is sequential by design — the rate limit (API's 429 + `Retry-After`) is the bottleneck, not CPU, so concurrency can't improve throughput.
 
@@ -315,7 +328,6 @@ internal/
     migrations/          — SQL migration files
   types/
     document.go          — Document type
-    pipeline.go          — Stage, StageResult types
     indexing.go          — Chunk, Embedding, DocumentChunk types
     workflow.go          — Workflow, WorkflowStep types
     eval.go              — EvalQuestion, RetrievalResult, AggregateMetrics, EvalReport
@@ -323,7 +335,7 @@ internal/
   workflow/
     store.go             — Workflow/step CRUD + runStep helper
     poll.go              — PollUntilDone helper
-    preprocess_worker.go — Clone, Preprocess, Verify workers
+    preprocess_worker.go — Preprocess worker (clone repo → preprocess → verify)
     index_worker.go      — Index worker (parse + chunk + embed + store)
     eval_worker.go       — Eval worker (retrieve + generate + metrics)
   preprocessor/
@@ -354,10 +366,6 @@ internal/
     metrics.go           — HitRate, MRR, NDCG, Precision, Recall computation
     report.go            — PrintReport + WriteJSONReport
     store.go             — EvalStore CRUD (eval_runs, eval_queries tables)
-  stage/
-    clone.go             — Git clone/pull stage
-    preprocess.go        — Preprocess pipeline stage
-    verify.go            — Verification stage
 
 docs/
   river-implementation-plan.md
@@ -389,8 +397,7 @@ Key unit test coverage areas:
 | `store/`        | Point conversion, payload encoding, chunk ID hashing, distance parsing                                                                    |
 | `types/`        | All struct creation, zero values, round-trip serialization                                                                                |
 | `config/`       | Validation, env overrides, ResolveTag                                                                                                     |
-| `stage/`        | Clone, preprocess, verify stage execution                                                                                                 |
-| `workflow/`     | Store CRUD, status transitions, state merging, Kind() methods                                                                             |
+| `workflow/`     | Store CRUD, status transitions, state merging, Kind() methods, preprocess/index/eval workers                              |
 | `db/`           | Migration version parsing                                                                                                                 |
 
 ## License
