@@ -124,7 +124,7 @@ The following is already built. See `README.md` and `AGENTS.md` for full details
 
 **Goal:** Full-featured web UI and REST API. Replace CLI interaction with a dashboard.
 
-- **API server** — new `cmd/api/` (Go, `net/http` + chi or similar):
+- **API server** — new `cmd/api/` (Go, `net/http` + chi):
   - `POST /api/v1/workflows/preprocess` — insert River job, return workflow ID
   - `POST /api/v1/workflows/index` — insert River job, return workflow ID
   - `POST /api/v1/workflows/eval` — insert River job, return workflow ID
@@ -136,14 +136,15 @@ The following is already built. See `README.md` and `AGENTS.md` for full details
   - `GET /api/v1/eval/runs/:id` — per-run results + metrics
   - `GET /api/v1/eval/runs/:id/compare` — compare across strategies
 - **Streaming** — SSE for chat responses, optionally for workflow progress
-- **Web UI** — new `web/` directory (React + shadcn/ui):
+- **Workerd** stays as a separate process — API server and worker have different lifecycles, scaling needs, and failure domains. They communicate through Postgres (River jobs).
+- **Web UI** — new `web/` directory (React + shadcn/ui), served by **nginx** in a separate container. Nginx also proxies `/api/*` to the Go API server — same origin, no CORS:
   - **Dashboard** — recent workflows, system health
   - **Workflow Detail** — status, progress, logs (polled from River job state)
   - **Chat Playground** — select tag, type questions, see retrieved chunks + answer
   - **Evaluation** — trigger runs, browse results, compare strategies side-by-side
   - **Artifact Browser** — browse by tag, view metadata
 - **Eval results storage** — already in Postgres (no change needed)
-- **Update docker-compose.yml** — add `api` and `web` services
+- **Update docker-compose.yml** — add `api` (Go binary) and `nginx` (serves static React build + reverse-proxies `/api/*` to the API container)
 
 **Deliverables:**
 - Full REST API replacing CLI usage for common operations
@@ -197,31 +198,40 @@ The following is already built. See `README.md` and `AGENTS.md` for full details
 ### 1. Workflow Engine
 **River** (`github.com/riverqueue/river`). Lightweight Go queue backed by Postgres — zero extra infra. No custom workflow tables — River's internal tables are the single source of truth. No job chaining — each pipeline is a single worker that internally sequences its steps with checkpointing.
 
-### 2. UI Framework
+### 2. Process Architecture
+**Separate `workerd` and API processes.** Different concerns and lifecycles: API stays up serving requests regardless of worker restarts; workers can be scaled independently (more replicas for longer index/eval jobs); a crash in one process doesn't take down the other. Docker Compose runs them as separate services.
+
+### 3. UI Framework
 **React + shadcn/ui** — use existing components where possible, avoid building custom ones.
 
-### 3. Authentication
+### 4. UI Serving
+**nginx container** serving the compiled React build and reverse-proxying `/api/*` to the Go API server. Same origin, proper compression/caching/ETags, no CORS needed during development or production.
+
+### 5. Go API Router
+**chi** (`github.com/go-chi/chi`). Lightweight, idiomatic `net/http` handlers, actively maintained, middleware chaining, SSE-friendly. Matches the rest of the codebase's plain `net/http` style.
+
+### 6. Authentication
 **None** for now. No auth layer.
 
 ### 4. Deployment
 **Docker Compose only.** No Kubernetes. The whole stack lives in `docker-compose.yml`.
 
-### 5. Chat Memory Persistence
+### 7. Chat Memory Persistence
 **Postgres** (planned). Currently in-memory ring buffer; the `Memory` interface allows swapping to Postgres-backed persistence.
 
-### 6. Blob Storage
+### 8. Blob Storage
 **Filesystem** for now. Abstract behind an interface if/when S3/MinIO is needed later.
 
-### 7. Qdrant Collection Namespacing
+### 9. Qdrant Collection Namespacing
 **Separate collection per tag** (e.g. `handbook-v2`, `company-policies`). Payload filtering is reserved for hybrid search / metadata filtering within a collection, not for tag-based isolation.
 
-### 8. LLM Providers
+### 10. LLM Providers
 **OpenAI-compatible API only** (OpenAI, OpenRouter, LM Studio, Gemini via compatibility endpoint). No provider-specific adapters.
 
-### 9. Monitoring Stack
+### 11. Monitoring Stack
 **Self-hosted** via Docker Compose — OpenTelemetry Collector + Prometheus + Grafana + Jaeger, all as containers (planned).
 
-### 10. Inter-service Communication
+### 12. Inter-service Communication
 **HTTP/REST only.** No gRPC.
 
 ---
@@ -229,7 +239,6 @@ The following is already built. See `README.md` and `AGENTS.md` for full details
 ## Open Questions
 
 1. **API auth model** — simple API key header? Skip auth entirely for MVP?
-2. **Web UI hosting** — served by the Go API server (embed static files), or separate service?
-3. **Qdrant collection management** — should the API support creating/deleting collections directly, or only through workflows?
-4. **Multi-user** — any concept of users/teams, or single-tenant only?
-5. **Cost tracking** — pull token pricing from an external source, or maintain a hardcoded table?
+2. **Qdrant collection management** — should the API support creating/deleting collections directly, or only through workflows?
+3. **Multi-user** — any concept of users/teams, or single-tenant only?
+4. **Cost tracking** — pull token pricing from an external source, or maintain a hardcoded table?
