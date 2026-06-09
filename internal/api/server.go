@@ -27,6 +27,7 @@ type Server struct {
 	qdrant    qstore.VectorStore
 	workflows *WorkflowService
 	chat      *ChatService
+	evalSvc   *EvalService
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -58,6 +59,14 @@ func New(cfg *config.Config) (*Server, error) {
 	r.Get("/health", s.healthHandler)
 
 	s.workflows = s.newWorkflowService(pool)
+	s.evalSvc = NewEvalService(pool)
+
+	r.Route("/api/v1/eval", func(r chi.Router) {
+		r.Get("/runs", s.evalListHandler)
+		r.Get("/runs/{id}", s.evalDetailHandler)
+		r.Get("/runs/{id}/compare", s.evalCompareHandler)
+	})
+
 	r.Route("/api/v1/workflows", func(r chi.Router) {
 		r.Post("/preprocess", s.preprocessHandler)
 		r.Post("/index", s.indexHandler)
