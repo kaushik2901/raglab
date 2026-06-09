@@ -31,6 +31,13 @@ func (r *RateLimitedGenerator) Generate(ctx context.Context, params openai.ChatC
 	return r.inner.Generate(ctx, params)
 }
 
+func (r *RateLimitedGenerator) GenerateStream(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error) {
+	if err := r.bucket.Wait(ctx); err != nil {
+		return nil, err
+	}
+	return r.inner.GenerateStream(ctx, params, cb)
+}
+
 func (r *RateLimitedGenerator) ModelName() string {
 	return r.inner.ModelName()
 }

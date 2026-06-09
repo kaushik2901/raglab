@@ -71,6 +71,7 @@ func New(cfg *config.Config) (*Server, error) {
 	} else {
 		s.chat = chatSvc
 		r.Post("/api/v1/chat", s.chatHandler)
+		r.Post("/api/v1/chat/stream", s.chatStreamHandler)
 	}
 
 	return s, nil

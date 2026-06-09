@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -15,8 +16,11 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 )
 
+type StreamCallback func(token string) error
+
 type Generator interface {
 	Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
+	GenerateStream(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error)
 	ModelName() string
 }
 
@@ -86,6 +90,43 @@ func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatComple
 
 	slog.Warn("rate limit retries exhausted", "max_attempts", g.retryMaxAttempts, "model", g.model)
 	return nil, fmt.Errorf("rate limit exceeded after %d retries", g.retryMaxAttempts)
+}
+
+func (g *openAIGenerator) GenerateStream(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error) {
+	params.Model = openai.ChatModel(g.model)
+	stream := g.client.Chat.Completions.NewStreaming(ctx, params)
+	defer stream.Close()
+
+	var full strings.Builder
+	var lastChunk openai.ChatCompletionChunk
+	for stream.Next() {
+		chunk := stream.Current()
+		lastChunk = chunk
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Content != "" {
+				full.WriteString(choice.Delta.Content)
+				if err := cb(choice.Delta.Content); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, fmt.Errorf("stream: %w", err)
+	}
+
+	usage := openai.CompletionUsage{
+		PromptTokens:     lastChunk.Usage.PromptTokens,
+		CompletionTokens: lastChunk.Usage.CompletionTokens,
+		TotalTokens:      lastChunk.Usage.TotalTokens,
+	}
+
+	return &openai.ChatCompletion{
+		Choices: []openai.ChatCompletionChoice{
+			{Message: openai.ChatCompletionMessage{Content: full.String()}},
+		},
+		Usage: usage,
+	}, nil
 }
 
 func (g *openAIGenerator) ModelName() string {

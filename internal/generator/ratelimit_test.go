@@ -25,6 +25,10 @@ func (m *mockGenerator) Generate(ctx context.Context, params openai.ChatCompleti
 	return &openai.ChatCompletion{}, nil
 }
 
+func (m *mockGenerator) GenerateStream(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error) {
+	return m.Generate(ctx, params)
+}
+
 func (m *mockGenerator) ModelName() string {
 	if m.modelNameFn != nil {
 		return m.modelNameFn()
