@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
@@ -18,11 +20,12 @@ import (
 const version = "0.1.0"
 
 type Server struct {
-	cfg    *config.Config
-	router *chi.Mux
-	http   *http.Server
-	pool   *pgxpool.Pool
-	qdrant qstore.VectorStore
+	cfg       *config.Config
+	router    *chi.Mux
+	http      *http.Server
+	pool      *pgxpool.Pool
+	qdrant    qstore.VectorStore
+	workflows *WorkflowService
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -53,7 +56,26 @@ func New(cfg *config.Config) (*Server, error) {
 
 	r.Get("/health", s.healthHandler)
 
+	s.workflows = s.newWorkflowService(pool)
+	r.Route("/api/v1/workflows", func(r chi.Router) {
+		r.Post("/preprocess", s.preprocessHandler)
+		r.Post("/index", s.indexHandler)
+		r.Post("/eval", s.evalHandler)
+		r.Get("/{id}", s.workflowStatusHandler)
+	})
+
 	return s, nil
+}
+
+func (s *Server) newWorkflowService(pool *pgxpool.Pool) *WorkflowService {
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		MaxAttempts: s.cfg.MaxRetries,
+	})
+	if err != nil {
+		slog.Warn("river client init failed, workflow endpoints unavailable", "err", err)
+		return nil
+	}
+	return NewWorkflowServiceWithClient(client)
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {
