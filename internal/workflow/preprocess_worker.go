@@ -12,20 +12,20 @@ import (
 	"github.com/riverqueue/river"
 )
 
-type PreprocessWorkflowArgs struct {
+type PreprocessArgs struct {
 	Tag         string   `json:"tag"`
 	RepoURL     string   `json:"repo_url"`
 	IncludeDirs []string `json:"include_dirs,omitempty"`
 }
 
-func (PreprocessWorkflowArgs) Kind() string { return "preprocess" }
+func (PreprocessArgs) Kind() string { return "preprocess" }
 
-type PreprocessWorkflowWorker struct {
-	river.WorkerDefaults[PreprocessWorkflowArgs]
+type PreprocessWorker struct {
+	river.WorkerDefaults[PreprocessArgs]
 	Client *river.Client[pgx.Tx]
 }
 
-func (w *PreprocessWorkflowWorker) Work(ctx context.Context, job *river.Job[PreprocessWorkflowArgs]) error {
+func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessArgs]) error {
 	logger := slog.With("job_id", job.ID, "worker", "preprocess")
 	logger.Debug("starting preprocess workflow")
 
@@ -73,7 +73,7 @@ func (w *PreprocessWorkflowWorker) Work(ctx context.Context, job *river.Job[Prep
 	return nil
 }
 
-func readCheckpoint(job *river.Job[PreprocessWorkflowArgs]) map[string]bool {
+func readCheckpoint(job *river.Job[PreprocessArgs]) map[string]bool {
 	cp := map[string]bool{}
 	raw := job.Output()
 	if len(raw) == 0 {
@@ -89,7 +89,7 @@ func readCheckpoint(job *river.Job[PreprocessWorkflowArgs]) map[string]bool {
 	return cp
 }
 
-func (w *PreprocessWorkflowWorker) saveCheckpoint(ctx context.Context, job *river.Job[PreprocessWorkflowArgs], step string, cp map[string]bool) error {
+func (w *PreprocessWorker) saveCheckpoint(ctx context.Context, job *river.Job[PreprocessArgs], step string, cp map[string]bool) error {
 	cp[step] = true
 	_, err := w.Client.JobUpdate(ctx, job.ID, &river.JobUpdateParams{
 		Output: cp,

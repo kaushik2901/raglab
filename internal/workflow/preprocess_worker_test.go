@@ -9,12 +9,12 @@ import (
 	"github.com/riverqueue/river"
 )
 
-func TestPreprocessWorkflowArgs_Kind(t *testing.T) {
-	assert.Equal(t, "preprocess", PreprocessWorkflowArgs{}.Kind())
+func TestPreprocessArgs_Kind(t *testing.T) {
+	assert.Equal(t, "preprocess", PreprocessArgs{}.Kind())
 }
 
 func TestReadCheckpoint_Empty(t *testing.T) {
-	job := &river.Job[PreprocessWorkflowArgs]{
+	job := &river.Job[PreprocessArgs]{
 		JobRow: &rivertype.JobRow{},
 	}
 	cp := readCheckpoint(job)

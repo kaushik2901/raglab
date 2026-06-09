@@ -39,7 +39,7 @@ func run(ctx context.Context) error {
 
 	evalStore := eval.NewEvalStore(pool)
 
-	preprocessWorker := &workflow.PreprocessWorkflowWorker{}
+	preprocessWorker := &workflow.PreprocessWorker{}
 	indexWorker := &workflow.IndexWorker{}
 	evalWorker := workflow.NewEvalWorker(evalStore)
 

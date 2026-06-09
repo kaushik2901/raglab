@@ -57,7 +57,7 @@ func run() error {
 		}
 	}
 
-	result, err := rc.Client.Insert(ctx, &workflow.PreprocessWorkflowArgs{
+	result, err := rc.Client.Insert(ctx, &workflow.PreprocessArgs{
 		Tag:         resolvedTag,
 		RepoURL:     *repoURL,
 		IncludeDirs: includeDirs,
