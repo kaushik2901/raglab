@@ -22,6 +22,11 @@ type Server struct {
 
 func New(cfg *config.Config) (*Server, error) {
 	r := chi.NewRouter()
+	r.Use(RequestID)
+	r.Use(StructuredLog)
+	r.Use(Recovery)
+	r.Use(Timeout(60 * time.Second))
+	r.Use(CORS)
 	return &Server{
 		cfg:    cfg,
 		router: r,
