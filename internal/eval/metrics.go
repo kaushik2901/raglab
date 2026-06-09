@@ -12,7 +12,7 @@ func computeHitRate(results []types.RetrievalResult, ks []int) map[int]float64 {
 	for _, k := range ks {
 		hits := 0
 		for _, r := range results {
-			for i := 0; i < min(k, len(r.RetrievedPaths)); i++ {
+			for i := range min(k, len(r.RetrievedPaths)) {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
 					hits++
 					break
@@ -44,7 +44,7 @@ func computeNDCG(results []types.RetrievalResult, ks []int) map[int]float64 {
 		for _, r := range results {
 			relevances := make([]float64, min(k, len(r.RetrievedPaths)))
 			matched := make(map[string]bool)
-			for i := 0; i < len(relevances); i++ {
+			for i := range relevances {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
 					path := r.RetrievedPaths[i]
 					if !matched[path] {
@@ -85,7 +85,7 @@ func computePrecision(results []types.RetrievalResult, ks []int) map[int]float64
 		sum := 0.0
 		for _, r := range results {
 			matched := make(map[string]bool)
-			for i := 0; i < min(k, len(r.RetrievedPaths)); i++ {
+			for i := range min(k, len(r.RetrievedPaths)) {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
 					matched[r.RetrievedPaths[i]] = true
 				}
@@ -106,7 +106,7 @@ func computeRecall(results []types.RetrievalResult, ks []int) map[int]float64 {
 				continue
 			}
 			matched := make(map[string]bool)
-			for i := 0; i < min(k, len(r.RetrievedPaths)); i++ {
+			for i := range min(k, len(r.RetrievedPaths)) {
 				if containsPath(r.ExpectedPaths, r.RetrievedPaths[i]) {
 					matched[r.RetrievedPaths[i]] = true
 				}

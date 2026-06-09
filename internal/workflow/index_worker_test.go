@@ -10,8 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
 func TestIndexArgs_Kind(t *testing.T) {
@@ -19,8 +17,8 @@ func TestIndexArgs_Kind(t *testing.T) {
 }
 
 func TestRunIndexing_EmptyInput(t *testing.T) {
-	t.Run("returns zero docs for nonexistent input dir (walk warning)", func(t *testing.T) {
-		result, err := RunIndexing(context.Background(), IndexArgs{
+	t.Run("returns no error for nonexistent input dir (walk warning)", func(t *testing.T) {
+		err := RunIndexing(context.Background(), IndexArgs{
 			Tag:               "test-collection",
 			InputTag:          "nonexistent-tag-12345",
 			EmbeddingProvider: "openai",
@@ -28,9 +26,6 @@ func TestRunIndexing_EmptyInput(t *testing.T) {
 			BatchSize:         10,
 		})
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		assert.Equal(t, types.StageID("index"), result.Name)
-		assert.Equal(t, int32(0), result.Output["document_count"])
 	})
 }
 

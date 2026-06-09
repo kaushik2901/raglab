@@ -47,8 +47,7 @@ func (w *IndexWorker) Work(ctx context.Context, job *river.Job[IndexArgs]) error
 	logger := slog.With("job_id", job.ID, "worker", "index")
 	logger.Debug("starting index worker")
 
-	_, err := RunIndexing(ctx, job.Args)
-	return err
+	return RunIndexing(ctx, job.Args)
 }
 
 func embedAndStore(ctx context.Context, emb embedder.Embedder, qStore qstore.VectorStore, collectionName string, batch []types.Chunk) error {
@@ -115,7 +114,7 @@ func processFile(ctx context.Context, fp, relPath, collectionName string,
 	}
 }
 
-func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error) {
+func RunIndexing(ctx context.Context, args IndexArgs) error {
 	concurrency := args.IndexConcurrency
 	if concurrency <= 0 {
 		concurrency = 5
@@ -130,7 +129,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 
 	emb, err := embedder.New(embeddingProvider, args.EmbeddingModel, args.BatchSize)
 	if err != nil {
-		return nil, fmt.Errorf("create embedder: %w", err)
+		return fmt.Errorf("create embedder: %w", err)
 	}
 
 	qdrantURL := os.Getenv("QDRANT_URL")
@@ -144,7 +143,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	}
 	parsr, err := parser.New(parserStrategy)
 	if err != nil {
-		return nil, fmt.Errorf("create parser: %w", err)
+		return fmt.Errorf("create parser: %w", err)
 	}
 
 	chunkStrategy := args.ChunkStrategy
@@ -153,12 +152,12 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	}
 	chunkr, err := chunker.New(chunkStrategy, args.ChunkSize, args.ChunkOverlap)
 	if err != nil {
-		return nil, fmt.Errorf("create chunker: %w", err)
+		return fmt.Errorf("create chunker: %w", err)
 	}
 
 	qStore := qstore.NewQdrantStore(qdrantAPIKey)
 	if err := qStore.Connect(ctx, qdrantURL); err != nil {
-		return nil, fmt.Errorf("connect qdrant: %w", err)
+		return fmt.Errorf("connect qdrant: %w", err)
 	}
 	defer qStore.Close()
 
@@ -179,7 +178,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 		mdFiles = append(mdFiles, path)
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("walk input dir: %w", err)
+		return fmt.Errorf("walk input dir: %w", err)
 	}
 
 	slog.Info("indexing files", "count", len(mdFiles), "concurrency", concurrency)
@@ -187,15 +186,15 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	if len(mdFiles) > 0 {
 		probeEmb, err := emb.Embed(ctx, []types.Chunk{{ID: "dimension-probe", Content: "test"}})
 		if err != nil {
-			return nil, fmt.Errorf("probe embedding dimension: %w", err)
+			return fmt.Errorf("probe embedding dimension: %w", err)
 		}
 		if len(probeEmb) == 0 {
-			return nil, fmt.Errorf("no embedding returned for dimension probe")
+			return fmt.Errorf("no embedding returned for dimension probe")
 		}
 		vectorSize := probeEmb[0].Dimensions
 
 		if err := qStore.EnsureCollection(ctx, collectionName, vectorSize, "Cosine"); err != nil {
-			return nil, fmt.Errorf("ensure collection: %w", err)
+			return fmt.Errorf("ensure collection: %w", err)
 		}
 	}
 
@@ -263,7 +262,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return err
 	}
 
 	if len(skipErrors) > 0 {
@@ -273,12 +272,5 @@ func RunIndexing(ctx context.Context, args IndexArgs) (*types.StageResult, error
 			"errors", skipErrors)
 	}
 
-	return &types.StageResult{
-		Name: "index",
-		Output: map[string]any{
-			"document_count": totalDocs.Load(),
-			"chunk_count":    totalChunks.Load(),
-			"collection":     collectionName,
-		},
-	}, nil
+	return nil
 }

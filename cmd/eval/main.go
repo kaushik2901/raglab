@@ -62,7 +62,7 @@ func run() error {
 	}
 
 	var ks []int
-	for _, s := range strings.Split(*ksRaw, ",") {
+	for s := range strings.SplitSeq(*ksRaw, ",") {
 		k, err := strconv.Atoi(strings.TrimSpace(s))
 		if err != nil {
 			return fmt.Errorf("invalid value in --ks: %q", s)

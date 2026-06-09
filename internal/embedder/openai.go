@@ -51,10 +51,7 @@ func (e *embedder) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Emb
 
 	var embeddings []types.Embedding
 	for i := 0; i < len(chunks); i += e.batchSize {
-		end := i + e.batchSize
-		if end > len(chunks) {
-			end = len(chunks)
-		}
+		end := min(i+e.batchSize, len(chunks))
 		batch := chunks[i:end]
 
 		batchEmbeddings, err := e.embedBatch(ctx, batch)

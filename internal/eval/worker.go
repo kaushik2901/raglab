@@ -94,7 +94,7 @@ func fillRetrievalResult(r *types.RetrievalResult, q types.EvalQuestion, searchR
 	r.Hit = make(map[int]bool)
 	for k := 1; k <= topK; k++ {
 		hit := false
-		for i := 0; i < min(k, len(searchResults)); i++ {
+		for i := range min(k, len(searchResults)) {
 			if containsPath(r.ExpectedPaths, searchResults[i].DocumentPath) {
 				hit = true
 				if !foundFirst {

@@ -16,8 +16,7 @@ type judgeResponse struct {
 	Reasoning string  `json:"reasoning"`
 }
 
-func JudgeAnswer(ctx context.Context, gen generator.Generator, question, context, expectedAnswer, generatedAnswer string) (float64, error) {
-	prompt := fmt.Sprintf(`You are evaluating the correctness of a generated answer against a ground-truth answer and the retrieved context that was used to generate it.
+const prompt = `You are evaluating the correctness of a generated answer against a ground-truth answer and the retrieved context that was used to generate it.
 
 Question: %s
 Retrieved context: %s
@@ -28,7 +27,10 @@ Rate the generated answer on a scale from 0.0 to 1.0 where:
 - 1.0 means perfectly correct and complete based on the context
 - 0.0 means completely wrong or hallucinated from the context
 
-Penalize answers that contradict the context or add information not present in it.`, question, context, expectedAnswer, generatedAnswer)
+Penalize answers that contradict the context or add information not present in it.`
+
+func JudgeAnswer(ctx context.Context, gen generator.Generator, question, context, expectedAnswer, generatedAnswer string) (float64, error) {
+	prompt := fmt.Sprintf(prompt, question, context, expectedAnswer, generatedAnswer)
 
 	completion, err := gen.Generate(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{

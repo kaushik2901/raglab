@@ -120,14 +120,6 @@ func findMatchingClose(content string, pos int, name string, mode string) int {
 	return pos + idx
 }
 
-func parseShortcodeName(s string) string {
-	s = strings.TrimSpace(s)
-	if idx := strings.IndexAny(s, " \t\n"); idx >= 0 {
-		return s[:idx]
-	}
-	return s
-}
-
 func defaultShortcodeRules() []ShortcodeRule {
 	return []ShortcodeRule{
 		{Name: "include", Action: Resolve},

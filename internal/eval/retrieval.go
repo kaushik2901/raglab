@@ -114,7 +114,7 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	result.Hit = make(map[int]bool)
 	for k := 1; k <= e.topK; k++ {
 		hit := false
-		for i := 0; i < min(k, len(searchResults)); i++ {
+		for i := range min(k, len(searchResults)) {
 			if containsPath(expectedPaths, searchResults[i].DocumentPath) {
 				hit = true
 				if !foundFirst {
