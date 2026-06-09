@@ -15,14 +15,7 @@ type EvalQuestion struct {
 }
 
 type EvalDataset struct {
-	Meta      EvalDatasetMeta `json:"meta"`
-	Questions []EvalQuestion  `json:"questions"`
-}
-
-type EvalDatasetMeta struct {
-	Created     string `json:"created"`
-	Version     int    `json:"version"`
-	Description string `json:"description"`
+	Questions []EvalQuestion `json:"questions"`
 }
 
 type RetrievalResult struct {

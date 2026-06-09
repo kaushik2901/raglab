@@ -130,6 +130,59 @@ func TestEvalStore_UpdateRunMetrics(t *testing.T) {
 	})
 }
 
+func TestEvalStore_DeleteRunResults(t *testing.T) {
+	pool := connectOrSkip(t)
+	runMigrations(t, pool)
+	s := NewEvalStore(pool)
+
+	t.Run("deletes results for existing run", func(t *testing.T) {
+		cleanEvalTables(t, pool)
+		runID, _ := s.CreateRun(context.Background(), "eval-del", nil)
+
+		require.NoError(t, s.BulkAddQueryResults(context.Background(), runID, []types.RetrievalResult{
+			{QuestionID: "q1", Question: "q?", Hit: map[int]bool{1: true}},
+			{QuestionID: "q2", Question: "q2?", Hit: map[int]bool{3: true}},
+		}))
+
+		results, _ := s.GetRunResults(context.Background(), runID)
+		require.Len(t, results, 2)
+
+		require.NoError(t, s.DeleteRunResults(context.Background(), runID))
+
+		results, err := s.GetRunResults(context.Background(), runID)
+		require.NoError(t, err)
+		assert.Empty(t, results)
+	})
+
+	t.Run("no-op for non-existent run", func(t *testing.T) {
+		cleanEvalTables(t, pool)
+		err := s.DeleteRunResults(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.NoError(t, err)
+	})
+
+	t.Run("does not affect other runs", func(t *testing.T) {
+		cleanEvalTables(t, pool)
+		runID1, _ := s.CreateRun(context.Background(), "eval-del-other-1", nil)
+		runID2, _ := s.CreateRun(context.Background(), "eval-del-other-2", nil)
+
+		require.NoError(t, s.BulkAddQueryResults(context.Background(), runID1, []types.RetrievalResult{
+			{QuestionID: "q1", Question: "keep", Hit: map[int]bool{1: true}},
+		}))
+		require.NoError(t, s.BulkAddQueryResults(context.Background(), runID2, []types.RetrievalResult{
+			{QuestionID: "q2", Question: "delete", Hit: map[int]bool{1: true}},
+		}))
+
+		require.NoError(t, s.DeleteRunResults(context.Background(), runID2))
+
+		results, _ := s.GetRunResults(context.Background(), runID1)
+		require.Len(t, results, 1)
+		assert.Equal(t, "keep", results[0].Question)
+
+		results, _ = s.GetRunResults(context.Background(), runID2)
+		assert.Empty(t, results)
+	})
+}
+
 func TestEvalStore_GetRunResults(t *testing.T) {
 	pool := connectOrSkip(t)
 	runMigrations(t, pool)

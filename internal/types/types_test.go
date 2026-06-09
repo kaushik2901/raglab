@@ -99,22 +99,6 @@ func TestEvalQuestionCreation(t *testing.T) {
 	assert.Equal(t, 3, q.Relevance[0].Grade)
 }
 
-func TestEvalDatasetCreation(t *testing.T) {
-	ds := EvalDataset{
-		Meta: EvalDatasetMeta{
-			Created:     "2024-01-01",
-			Version:     1,
-			Description: "Test dataset",
-		},
-		Questions: []EvalQuestion{
-			{ID: "q1", Question: "test", Relevance: []RelevanceJudgment{{DocumentPath: "doc.md", Grade: 1}}},
-		},
-	}
-	assert.Equal(t, "2024-01-01", ds.Meta.Created)
-	assert.Equal(t, 1, ds.Meta.Version)
-	assert.Len(t, ds.Questions, 1)
-}
-
 func TestRetrievalResultCreation(t *testing.T) {
 	r := RetrievalResult{
 		QuestionID:       "q1",

@@ -90,6 +90,14 @@ func (s *EvalStore) UpdateRunMetrics(ctx context.Context, runID string, metrics 
 	return nil
 }
 
+func (s *EvalStore) DeleteRunResults(ctx context.Context, runID string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM eval_queries WHERE run_id = $1`, runID)
+	if err != nil {
+		return fmt.Errorf("delete run results: %w", err)
+	}
+	return nil
+}
+
 func (s *EvalStore) GetRunResults(ctx context.Context, runID string) ([]types.RetrievalResult, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT question_id, question, category, difficulty, expected_answer, generated_answer, ndcg_graded, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms, answer_score
