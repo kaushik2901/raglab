@@ -57,6 +57,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	r.Get("/health", s.healthHandler)
+	r.Get("/api/v1/artifacts", s.artifactListHandler)
 
 	s.workflows = s.newWorkflowService(pool)
 	s.evalSvc = NewEvalService(pool)
