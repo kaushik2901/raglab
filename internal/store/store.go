@@ -15,5 +15,7 @@ type VectorStore interface {
 
 	Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error)
 
+	HealthCheck(ctx context.Context) error
+
 	Close() error
 }

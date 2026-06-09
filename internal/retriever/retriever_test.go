@@ -54,6 +54,11 @@ func (m *mockStore) Search(ctx context.Context, collectionName string, queryVect
 	return args.Get(0).([]types.SearchResult), args.Error(1)
 }
 
+func (m *mockStore) HealthCheck(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 func (m *mockStore) Close() error {
 	args := m.Called()
 	return args.Error(0)

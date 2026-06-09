@@ -226,6 +226,13 @@ func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, que
 	return results, nil
 }
 
+func (s *QdrantStore) HealthCheck(ctx context.Context) error {
+	_, err := s.client.Collections().CollectionExists(ctx, &qdrant.CollectionExistsRequest{
+		CollectionName: "_health_check",
+	})
+	return err
+}
+
 func (s *QdrantStore) Close() error {
 	if s.client == nil {
 		return nil

@@ -35,6 +35,7 @@ func (m *mockStore) Store(ctx context.Context, collectionName string, chunks []t
 func (m *mockStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	return nil, nil
 }
+func (m *mockStore) HealthCheck(ctx context.Context) error { return nil }
 func (m *mockStore) Close() error { return nil }
 
 func TestEmbedAndStore_ContextCancel(t *testing.T) {
