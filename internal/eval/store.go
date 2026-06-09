@@ -17,11 +17,11 @@ func NewEvalStore(pool *pgxpool.Pool) *EvalStore {
 	return &EvalStore{pool: pool}
 }
 
-func (s *EvalStore) CreateRun(ctx context.Context, workflowID, tag string, strategy map[string]any) (string, error) {
+func (s *EvalStore) CreateRun(ctx context.Context, tag string, strategy map[string]any) (string, error) {
 	var id string
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO eval_runs (workflow_id, tag, strategy) VALUES ($1, $2, $3) RETURNING id`,
-		workflowID, tag, strategy,
+		`INSERT INTO eval_runs (tag, strategy) VALUES ($1, $2) RETURNING id`,
+		tag, strategy,
 	).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("create eval run: %w", err)

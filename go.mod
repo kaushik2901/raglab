@@ -9,9 +9,12 @@ require (
 	github.com/qdrant/go-client v1.18.2
 	github.com/riverqueue/river v0.38.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.38.0
+	github.com/riverqueue/river/rivertype v0.38.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
+	golang.org/x/time v0.15.0
+	google.golang.org/grpc v1.80.0
 )
 
 require (
@@ -22,7 +25,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/riverqueue/river/riverdriver v0.38.0 // indirect
 	github.com/riverqueue/river/rivershared v0.38.0 // indirect
-	github.com/riverqueue/river/rivertype v0.38.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
@@ -31,9 +33,7 @@ require (
 	go.uber.org/goleak v1.3.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
-	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
@@ -25,7 +24,6 @@ import (
 )
 
 type IndexArgs struct {
-	WorkflowID        string        `json:"workflow_id"`
 	Tag               string        `json:"tag"`
 	InputTag          string        `json:"input_tag"`
 	ParserStrategy    string        `json:"parser_strategy"`
@@ -43,25 +41,14 @@ func (IndexArgs) Kind() string { return "index" }
 
 type IndexWorker struct {
 	river.WorkerDefaults[IndexArgs]
-	Store  *Store
-	Client *river.Client[pgx.Tx]
-}
-
-func NewIndexWorker(store *Store, client *river.Client[pgx.Tx]) *IndexWorker {
-	return &IndexWorker{Store: store, Client: client}
 }
 
 func (w *IndexWorker) Work(ctx context.Context, job *river.Job[IndexArgs]) error {
-	logger := slog.With("workflow_id", job.Args.WorkflowID, "worker", "index")
+	logger := slog.With("job_id", job.ID, "worker", "index")
 	logger.Debug("starting index worker")
 
-	if err := w.Store.runStep(ctx, job.Args.WorkflowID, "index", func(ctx context.Context, state map[string]any) (*types.StageResult, error) {
-		return RunIndexing(ctx, job.Args)
-	}); err != nil {
-		return err
-	}
-
-	return w.Store.UpdateWorkflowStatus(ctx, job.Args.WorkflowID, "succeeded")
+	_, err := RunIndexing(ctx, job.Args)
+	return err
 }
 
 func embedAndStore(ctx context.Context, emb embedder.Embedder, qStore qstore.VectorStore, collectionName string, batch []types.Chunk) error {

@@ -46,7 +46,7 @@ func TestEvalStore_CreateRun(t *testing.T) {
 
 	t.Run("creates run with valid params", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		id, err := s.CreateRun(context.Background(), "wf-1", "eval-test-1", map[string]any{
+		id, err := s.CreateRun(context.Background(), "eval-test-1", map[string]any{
 			"index_tag": "idx-1",
 			"top_k":     5,
 		})
@@ -56,9 +56,9 @@ func TestEvalStore_CreateRun(t *testing.T) {
 
 	t.Run("creates multiple runs", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		id1, err := s.CreateRun(context.Background(), "wf-1", "eval-test-2", nil)
+		id1, err := s.CreateRun(context.Background(), "eval-test-2", nil)
 		require.NoError(t, err)
-		id2, err := s.CreateRun(context.Background(), "wf-2", "eval-test-3", nil)
+		id2, err := s.CreateRun(context.Background(), "eval-test-3", nil)
 		require.NoError(t, err)
 		assert.NotEqual(t, id1, id2)
 	})
@@ -71,7 +71,7 @@ func TestEvalStore_AddQueryResult(t *testing.T) {
 
 	t.Run("inserts query result", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "wf-1", "eval-add-q", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-add-q", nil)
 
 		err := s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
 			QuestionID:       "q1",
@@ -101,7 +101,7 @@ func TestEvalStore_AddQueryResult(t *testing.T) {
 
 	t.Run("inserts multiple results for same run", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "wf-1", "eval-multi-q", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-multi-q", nil)
 
 		require.NoError(t, s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
 			QuestionID: "q1", Question: "q1?", Hit: map[int]bool{1: true},
@@ -113,7 +113,7 @@ func TestEvalStore_AddQueryResult(t *testing.T) {
 
 	t.Run("handles empty retrieved paths", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "wf-1", "eval-empty-q", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-empty-q", nil)
 
 		err := s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
 			QuestionID: "q1",
@@ -131,7 +131,7 @@ func TestEvalStore_UpdateRunMetrics(t *testing.T) {
 
 	t.Run("updates metrics for existing run", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "wf-1", "eval-metrics", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-metrics", nil)
 
 		err := s.UpdateRunMetrics(context.Background(), runID, types.AggregateMetrics{
 			HitRate:        map[int]float64{1: 0.5, 3: 0.8, 5: 0.9},
@@ -155,7 +155,7 @@ func TestEvalStore_GetRunResults(t *testing.T) {
 
 	t.Run("returns results in insertion order", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "wf-1", "eval-get", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-get", nil)
 
 		s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
 			QuestionID: "q1", Question: "first?", Hit: map[int]bool{1: true},
@@ -173,7 +173,7 @@ func TestEvalStore_GetRunResults(t *testing.T) {
 
 	t.Run("returns empty slice for run with no results", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "wf-1", "eval-empty-get", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-empty-get", nil)
 
 		results, err := s.GetRunResults(context.Background(), runID)
 		require.NoError(t, err)
@@ -195,7 +195,7 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 	t.Run("create, add results, update metrics, and retrieve", func(t *testing.T) {
 		cleanEvalTables(t, pool)
 
-		runID, err := s.CreateRun(context.Background(), "wf-roundtrip", "eval-roundtrip", map[string]any{
+		runID, err := s.CreateRun(context.Background(), "eval-roundtrip", map[string]any{
 			"strategy": "naive-search",
 			"top_k":    5,
 		})
@@ -280,7 +280,7 @@ func TestEvalStore_ConcurrentWrites(t *testing.T) {
 
 	t.Run("concurrent AddQueryResult calls", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(ctx, "wf-concurrent", "eval-concurrent", nil)
+		runID, _ := s.CreateRun(ctx, "eval-concurrent", nil)
 
 		done := make(chan error, 10)
 		for i := 0; i < 10; i++ {

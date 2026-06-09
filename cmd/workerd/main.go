@@ -37,19 +37,14 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	store := workflow.NewStore(pool)
 	evalStore := eval.NewEvalStore(pool)
 
-	cloneWorker := &workflow.CloneWorker{Store: store}
-	preprocessWorker := &workflow.PreprocessWorker{Store: store}
-	verifyWorker := &workflow.VerifyWorker{Store: store}
-	indexWorker := &workflow.IndexWorker{Store: store}
-	evalWorker := &workflow.EvalWorker{Store: store, EvalStore: evalStore}
+	preprocessWorker := &workflow.PreprocessWorkflowWorker{}
+	indexWorker := &workflow.IndexWorker{}
+	evalWorker := workflow.NewEvalWorker(evalStore)
 
 	workers := river.NewWorkers()
-	river.AddWorker(workers, cloneWorker)
 	river.AddWorker(workers, preprocessWorker)
-	river.AddWorker(workers, verifyWorker)
 	river.AddWorker(workers, indexWorker)
 	river.AddWorker(workers, evalWorker)
 
@@ -65,10 +60,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	cloneWorker.Client = riverClient
 	preprocessWorker.Client = riverClient
-	verifyWorker.Client = riverClient
-	indexWorker.Client = riverClient
 
 	if err := riverClient.Start(ctx); err != nil {
 		pool.Close()

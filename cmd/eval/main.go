@@ -14,6 +14,7 @@ import (
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivertype"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
@@ -82,9 +83,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("relative dataset dir: %w", err)
 	}
-	// Forward-slash path for cross-platform compatibility (works locally + in Docker)
 	*datasetDir = filepath.ToSlash(relDir)
-	// Strip leading workspace/ segment — Docker mounts ./workspace at /workspace
 	*datasetDir = strings.TrimPrefix(*datasetDir, "workspace/")
 
 	entries, err := os.ReadDir(absDir)
@@ -120,8 +119,6 @@ func run() error {
 		return fmt.Errorf("db migrate: %w", err)
 	}
 
-	store := workflow.NewStore(pool)
-
 	if *embeddingProvider == "" {
 		*embeddingProvider = *llmProvider
 	}
@@ -141,39 +138,18 @@ func run() error {
 		return fmt.Errorf("river client: %w", err)
 	}
 
-	type fileWorkflow struct {
-		file string
-		tag  string
-		wfID string
+	type fileJob struct {
+		file  string
+		tag   string
+		jobID int64
 	}
 
-	var workflows []fileWorkflow
+	var jobs []fileJob
 	for _, f := range files {
 		fileTag := resolvedTagPrefix + "-" + strings.TrimSuffix(f, ".json")
-
 		datasetPath := filepath.ToSlash(filepath.Join(*datasetDir, f))
 
-		wfID, err := store.CreateWorkflow(ctx, "eval", fileTag, map[string]any{
-			"index_tag":          *indexTag,
-			"main_tag":           resolvedTagPrefix,
-			"query_strategy":     *queryStrategy,
-			"dataset_path":       datasetPath,
-			"top_k":              *topK,
-			"llm_provider":       *llmProvider,
-			"llm_model":          *llmModel,
-			"embedding_provider": *embeddingProvider,
-			"embedding_model":    *embeddingModel,
-			"judge_provider":     *judgeProvider,
-			"judge_model":        *judgeModel,
-			"concurrency":        *evalConcurrency,
-			"batch_size":         *batchSize,
-		})
-		if err != nil {
-			return fmt.Errorf("create workflow for %s: %w", f, err)
-		}
-
-		_, err = riverClient.Insert(ctx, &workflow.EvalArgs{
-			WorkflowID:        wfID,
+		result, err := riverClient.Insert(ctx, &workflow.EvalArgs{
 			Tag:               fileTag,
 			MainTag:           resolvedTagPrefix,
 			IndexTag:          *indexTag,
@@ -193,19 +169,24 @@ func run() error {
 			return fmt.Errorf("insert eval job for %s: %w", f, err)
 		}
 
-		slog.Info("submitted eval workflow", "file", f, "id", wfID, "tag", fileTag)
-		workflows = append(workflows, fileWorkflow{file: f, tag: fileTag, wfID: wfID})
+		jobID := result.Job.ID
+		slog.Info("submitted eval job", "file", f, "id", jobID, "tag", fileTag)
+		jobs = append(jobs, fileJob{file: f, tag: fileTag, jobID: jobID})
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
-	for _, wf := range workflows {
-		wf := wf
+	for _, j := range jobs {
+		j := j
 		g.Go(func() error {
-			slog.Info("waiting for eval workflow", "file", wf.file, "id", wf.wfID, "tag", wf.tag)
-			if err := workflow.PollUntilDone(ctx, store, wf.wfID, 2*time.Second); err != nil {
-				return fmt.Errorf("file %s: %w", wf.file, err)
+			slog.Info("waiting for eval job", "file", j.file, "id", j.jobID, "tag", j.tag)
+			row, err := workflow.PollUntilTerminal(ctx, riverClient, j.jobID, 2*time.Second)
+			if err != nil {
+				return fmt.Errorf("file %s: %w", j.file, err)
 			}
-			slog.Info("evaluation complete", "file", wf.file, "tag", wf.tag)
+			if row.State != rivertype.JobStateCompleted {
+				return fmt.Errorf("file %s: job %d failed: state=%s errors=%v", j.file, j.jobID, row.State, row.Errors)
+			}
+			slog.Info("evaluation complete", "file", j.file, "tag", j.tag)
 			return nil
 		})
 	}
@@ -214,7 +195,7 @@ func run() error {
 		return err
 	}
 
-	slog.Info("all evaluations complete", "count", len(workflows))
+	slog.Info("all evaluations complete", "count", len(jobs))
 	return nil
 }
 

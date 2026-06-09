@@ -8,11 +8,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivertype"
+
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
 func main() {
@@ -63,27 +65,7 @@ func run() error {
 		return fmt.Errorf("db migrate: %w", err)
 	}
 
-	store := workflow.NewStore(pool)
-
 	resolvedTag := config.ResolveTag(*tag, "idx")
-
-	wfID, err := store.CreateWorkflow(ctx, "index", resolvedTag, map[string]any{
-		"input_tag":          *inputTag,
-		"parser_strategy":    *parserStrategy,
-		"chunk_strategy":     *chunkStrategy,
-		"chunk_size":         *chunkSize,
-		"chunk_overlap":      *chunkOverlap,
-		"embedding_provider": *embeddingProvider,
-		"embedding_model":    *embeddingModel,
-		"batch_size":         *batchSize,
-		"index_concurrency":  *indexConcurrency,
-		"doc_timeout":        docTimeout.String(),
-	})
-	if err != nil {
-		return fmt.Errorf("create workflow: %w", err)
-	}
-
-	slog.Info("created workflow", "id", wfID, "tag", resolvedTag, "input_tag", *inputTag)
 
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		MaxAttempts: cfg.MaxRetries + 1,
@@ -92,8 +74,7 @@ func run() error {
 		return fmt.Errorf("river client: %w", err)
 	}
 
-	_, err = riverClient.Insert(ctx, &workflow.IndexArgs{
-		WorkflowID:        wfID,
+	result, err := riverClient.Insert(ctx, &workflow.IndexArgs{
 		Tag:               resolvedTag,
 		InputTag:          *inputTag,
 		ParserStrategy:    *parserStrategy,
@@ -107,13 +88,20 @@ func run() error {
 		DocTimeout:        *docTimeout,
 	}, nil)
 	if err != nil {
-		return fmt.Errorf("insert parse job: %w", err)
+		return fmt.Errorf("insert index job: %w", err)
 	}
 
-	slog.Info("inserted parse job, waiting for completion")
-	if err := workflow.PollUntilDone(ctx, store, wfID, 2*time.Second); err != nil {
-		return err
+	jobID := result.Job.ID
+	slog.Info("inserted index job", "id", jobID, "tag", resolvedTag, "input_tag", *inputTag)
+
+	row, err := workflow.PollUntilTerminal(ctx, riverClient, jobID, 2*time.Second)
+	if err != nil {
+		return fmt.Errorf("index job %d: %w", jobID, err)
 	}
+	if row.State != rivertype.JobStateCompleted {
+		return fmt.Errorf("index job %d failed: state=%s errors=%v", jobID, row.State, row.Errors)
+	}
+
 	slog.Info("indexing pipeline complete", "tag", resolvedTag, "input_tag", *inputTag)
 	return nil
 }

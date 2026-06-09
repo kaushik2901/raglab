@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,18 +12,26 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 )
 
+func cleanEvalTables(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `DELETE FROM eval_queries; DELETE FROM eval_runs;`)
+	require.NoError(t, err)
+}
+
+func TestEvalArgs_Kind(t *testing.T) {
+	assert.Equal(t, "eval", EvalArgs{}.Kind())
+}
+
 func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 	pool := connectOrSkip(t)
 	runMigrations(t, pool)
-	store := NewStore(pool)
 	evalStore := eval.NewEvalStore(pool)
 
-	t.Run("returns error when workflow does not exist", func(t *testing.T) {
-		cleanTables(t, pool)
-		w := NewEvalWorker(store, evalStore)
+	t.Run("returns error for nonexistent dataset", func(t *testing.T) {
+		cleanEvalTables(t, pool)
+		w := NewEvalWorker(evalStore)
 		job := &river.Job[EvalArgs]{
 			Args: EvalArgs{
-				WorkflowID:  "00000000-0000-0000-0000-000000000000",
 				Tag:         "test-eval-err",
 				IndexTag:    "test-collection",
 				DatasetPath: "/tmp/nonexistent.json",
@@ -30,41 +39,6 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 		}
 		err := w.Work(context.Background(), job)
 		require.Error(t, err)
-	})
-}
-
-func TestEvalWorker_Work_StepCreation(t *testing.T) {
-	pool := connectOrSkip(t)
-	runMigrations(t, pool)
-	store := NewStore(pool)
-	evalStore := eval.NewEvalStore(pool)
-
-	t.Run("creates step and fails on nonexistent dataset", func(t *testing.T) {
-		cleanTables(t, pool)
-		wfID, err := store.CreateWorkflow(context.Background(), "eval", "test-eval-step", map[string]any{
-			"index_tag":    "test-collection",
-			"dataset_path": "/tmp/nonexistent.json",
-		})
-		require.NoError(t, err)
-
-		w := NewEvalWorker(store, evalStore)
-		job := &river.Job[EvalArgs]{
-			Args: EvalArgs{
-				WorkflowID:  wfID,
-				Tag:         "test-eval-step",
-				IndexTag:    "test-collection",
-				DatasetPath: "/tmp/nonexistent-dataset-99999.json",
-			},
-		}
-
-		err = w.Work(context.Background(), job)
-		require.Error(t, err)
-
-		steps, err := store.GetSteps(context.Background(), wfID)
-		require.NoError(t, err)
-		require.Len(t, steps, 1)
-		assert.Equal(t, "eval", steps[0].StepName)
-		assert.Equal(t, "failed", steps[0].Status)
 	})
 }
 

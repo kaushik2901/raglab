@@ -2,19 +2,21 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
-	"path"
 	"strings"
 	"time"
+
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivertype"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
 func main() {
@@ -48,8 +50,6 @@ func run() error {
 		return fmt.Errorf("db migrate: %w", err)
 	}
 
-	store := workflow.NewStore(pool)
-
 	resolvedTag := config.ResolveTag(*tag, "pre")
 
 	var includeDirs []string
@@ -62,18 +62,6 @@ func run() error {
 		}
 	}
 
-	repoPath := path.Join("artifacts", "preprocessing", resolvedTag, "repo")
-
-	wfID, err := store.CreateWorkflow(ctx, "preprocess", resolvedTag, map[string]any{
-		"repo_url":     *repoURL,
-		"include_dirs": includeDirs,
-	})
-	if err != nil {
-		return fmt.Errorf("create workflow: %w", err)
-	}
-
-	slog.Info("created workflow", "id", wfID, "tag", resolvedTag)
-
 	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		MaxAttempts: cfg.MaxRetries + 1,
 	})
@@ -81,21 +69,28 @@ func run() error {
 		return fmt.Errorf("river client: %w", err)
 	}
 
-	_, err = riverClient.Insert(ctx, &workflow.CloneArgs{
-		WorkflowID:  wfID,
+	result, err := riverClient.Insert(ctx, &workflow.PreprocessWorkflowArgs{
 		Tag:         resolvedTag,
 		RepoURL:     *repoURL,
-		RepoPath:    repoPath,
 		IncludeDirs: includeDirs,
-	}, nil)
+	}, &river.InsertOpts{
+		Metadata: json.RawMessage("{}"),
+	})
 	if err != nil {
-		return fmt.Errorf("insert clone job: %w", err)
+		return fmt.Errorf("insert preprocess job: %w", err)
 	}
 
-	slog.Info("inserted clone job, waiting for completion")
-	if err := workflow.PollUntilDone(ctx, store, wfID, 2*time.Second); err != nil {
-		return err
+	jobID := result.Job.ID
+	slog.Info("inserted preprocess job", "id", jobID, "tag", resolvedTag)
+
+	row, err := workflow.PollUntilTerminal(ctx, riverClient, jobID, 2*time.Second)
+	if err != nil {
+		return fmt.Errorf("preprocess job %d: %w", jobID, err)
 	}
+	if row.State != rivertype.JobStateCompleted {
+		return fmt.Errorf("preprocess job %d failed: state=%s errors=%v", jobID, row.State, row.Errors)
+	}
+
 	slog.Info("preprocessing pipeline complete", "tag", resolvedTag)
 	return nil
 }
