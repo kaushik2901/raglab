@@ -179,14 +179,16 @@ func embedQuestions(ctx context.Context, emb embedder.Embedder, questionChan <-c
 	var lineNum int
 	for {
 		batch := make([]types.EvalQuestion, 0, batchSize)
-		for i := 0; i < batchSize; i++ {
+		channelOpen := true
+		for i := 0; i < batchSize && channelOpen; i++ {
 			select {
 			case q, ok := <-questionChan:
 				if !ok {
+					channelOpen = false
 					if len(batch) == 0 {
 						return nil
 					}
-					goto flush
+					break
 				}
 				batch = append(batch, q)
 			case <-ctx.Done():
@@ -194,7 +196,6 @@ func embedQuestions(ctx context.Context, emb embedder.Embedder, questionChan <-c
 			}
 		}
 
-	flush:
 		chunks := make([]types.Chunk, len(batch))
 		for i, q := range batch {
 			chunks[i] = types.Chunk{ID: q.ID, Content: q.Question}
@@ -218,7 +219,7 @@ func embedQuestions(ctx context.Context, emb embedder.Embedder, questionChan <-c
 			}
 		}
 
-		if len(batch) < batchSize {
+		if !channelOpen {
 			return nil
 		}
 	}
