@@ -6,8 +6,10 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Clean up legacy column from earlier schema
+ALTER TABLE eval_runs DROP COLUMN IF EXISTS workflow_id;
+
 CREATE INDEX IF NOT EXISTS idx_eval_runs_tag ON eval_runs(tag);
-CREATE INDEX IF NOT EXISTS idx_eval_runs_workflow ON eval_runs(workflow_id);
 
 CREATE TABLE IF NOT EXISTS eval_queries (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

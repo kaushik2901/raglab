@@ -43,6 +43,13 @@ services:
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      EMBEDDER_RATE_LIMIT_RPM: ${EMBEDDER_RATE_LIMIT_RPM:-500}
+      GENERATOR_RATE_LIMIT_RPM: ${GENERATOR_RATE_LIMIT_RPM:-30}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-20}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      RETRY_BACKOFF: ${RETRY_BACKOFF:-5s}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MAX_INDEX_FILE_SIZE: ${MAX_INDEX_FILE_SIZE:-104857600}
     volumes:
       - ./workspace:/workspace
     depends_on:

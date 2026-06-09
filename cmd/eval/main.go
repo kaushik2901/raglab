@@ -57,10 +57,6 @@ func run() error {
 		return fmt.Errorf("--dataset is required")
 	}
 
-	if _, err := os.Stat(*dataset); err != nil {
-		return fmt.Errorf("dataset file not found: %s", *dataset)
-	}
-
 	var ks []int
 	for s := range strings.SplitSeq(*ksRaw, ",") {
 		k, err := strconv.Atoi(strings.TrimSpace(s))
