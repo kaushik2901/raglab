@@ -124,31 +124,21 @@ The following is already built. See `README.md` and `AGENTS.md` for full details
 
 **Goal:** Full-featured web UI and REST API. Replace CLI interaction with a dashboard.
 
-- **API server** — new `cmd/api/` (Go, `net/http` + chi):
-  - `POST /api/v1/workflows/preprocess` — insert River job, return workflow ID
-  - `POST /api/v1/workflows/index` — insert River job, return workflow ID
-  - `POST /api/v1/workflows/eval` — insert River job, return workflow ID
-  - `GET /api/v1/workflows/:id` — poll River job state
-  - `GET /api/v1/artifacts` — list preprocessing/index outputs by tag
-  - `POST /api/v1/chat` — SSE streaming endpoint (wraps existing retriever + generator + memory)
-  - `POST /api/v1/chat/stream` — streaming variant for UI
-  - `GET /api/v1/eval/runs` — list eval runs
-  - `GET /api/v1/eval/runs/:id` — per-run results + metrics
-  - `GET /api/v1/eval/runs/:id/compare` — compare across strategies
-- **Streaming** — SSE for chat responses, optionally for workflow progress
-- **Workerd** stays as a separate process — API server and worker have different lifecycles, scaling needs, and failure domains. They communicate through Postgres (River jobs).
-- **Web UI** — new `web/` directory (React + shadcn/ui), served by **nginx** in a separate container. Nginx also proxies `/api/*` to the Go API server — same origin, no CORS:
-  - **Dashboard** — recent workflows, system health
-  - **Workflow Detail** — status, progress, logs (polled from River job state)
-  - **Chat Playground** — select tag, type questions, see retrieved chunks + answer
-  - **Evaluation** — trigger runs, browse results, compare strategies side-by-side
-  - **Artifact Browser** — browse by tag, view metadata
-- **Eval results storage** — already in Postgres (no change needed)
-- **Update docker-compose.yml** — add `api` (Go binary) and `nginx` (serves static React build + reverse-proxies `/api/*` to the API container)
+See [`docs/api-implementation-plan.md`](api-implementation-plan.md) for the detailed implementation plan with 9 sequential sub-phases, concrete Go code patterns for every endpoint, SSE streaming design, middleware stack, and testing strategy.
+
+**Phases:**
+1. Skeleton — `cmd/api/main.go`, `server.go`, graceful shutdown
+2. Middleware + response helpers — RequestID, logging, recovery, timeout, CORS, JSON envelope
+3. Health endpoint — `GET /health`, pings Postgres + Qdrant
+4. Workflow trigger endpoints — `POST /api/v1/workflows/preprocess`, `/index`, `/eval`
+5. Workflow status — `GET /api/v1/workflows/:id` (River `JobGet`)
+6. Chat (non-streaming) — `POST /api/v1/chat`, synchronous embed → retrieve → generate
+7. Chat (SSE streaming) — `GenerateStream` on generator, token-level events
+8. Eval API — `GET /api/v1/eval/runs`, detail, compare
+9. Artifact list — `GET /api/v1/artifacts`, filesystem walk
 
 **Deliverables:**
 - Full REST API replacing CLI usage for common operations
-- Web dashboard usable for triggering workflows, chatting, and evaluating
 - SSE streaming for chat
 
 ### Phase 5: Observability
