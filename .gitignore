@@ -33,5 +33,6 @@ go.work.sum
 
 # Project-specific build artifacts
 bin/
+/api
 output/
 artifacts/
