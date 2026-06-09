@@ -61,6 +61,7 @@ func run(ctx context.Context) error {
 	}
 
 	preprocessWorker.Client = riverClient
+	evalWorker.Client = riverClient
 
 	if err := riverClient.Start(ctx); err != nil {
 		pool.Close()
