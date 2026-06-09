@@ -26,6 +26,7 @@ type Server struct {
 	pool      *pgxpool.Pool
 	qdrant    qstore.VectorStore
 	workflows *WorkflowService
+	chat      *ChatService
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -63,6 +64,14 @@ func New(cfg *config.Config) (*Server, error) {
 		r.Post("/eval", s.evalHandler)
 		r.Get("/{id}", s.workflowStatusHandler)
 	})
+
+	chatSvc, err := NewChatService()
+	if err != nil {
+		slog.Warn("chat service init failed, chat endpoint unavailable", "err", err)
+	} else {
+		s.chat = chatSvc
+		r.Post("/api/v1/chat", s.chatHandler)
+	}
 
 	return s, nil
 }
