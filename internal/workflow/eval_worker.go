@@ -20,18 +20,18 @@ import (
 
 type EvalArgs struct {
 	Tag               string `json:"tag"`
-	MainTag           string `json:"main_tag"`
 	IndexTag          string `json:"index_tag"`
 	QueryStrategy     string `json:"query_strategy"`
 	DatasetPath       string `json:"dataset_path"`
 	TopK              int    `json:"top_k"`
+	Ks                []int  `json:"ks"`
 	LLMProvider       string `json:"llm_provider"`
 	LLMModel          string `json:"llm_model"`
 	EmbeddingProvider string `json:"embedding_provider"`
 	EmbeddingModel    string `json:"embedding_model"`
 	JudgeProvider     string `json:"judge_provider"`
 	JudgeModel        string `json:"judge_model"`
-	Concurrency       int    `json:"concurrency"`
+	Workers           int    `json:"workers"`
 	BatchSize         int    `json:"batch_size"`
 }
 
@@ -137,7 +137,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		Questions:   dataset.Questions,
 		TopK:        args.TopK,
 		EmbedBatch:  batchSize,
-		Concurrency: args.Concurrency,
+		Concurrency: args.Workers,
 	})
 	if err != nil {
 		return fmt.Errorf("evaluation: %w", err)
