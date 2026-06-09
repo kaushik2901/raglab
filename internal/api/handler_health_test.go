@@ -20,12 +20,14 @@ func (m *mockQdrant) Connect(ctx context.Context, dsn string) error { return nil
 func (m *mockQdrant) EnsureCollection(ctx context.Context, name string, vectorSize int, distance string) error {
 	return nil
 }
-func (m *mockQdrant) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error { return nil }
+func (m *mockQdrant) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
+	return nil
+}
 func (m *mockQdrant) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	return nil, nil
 }
 func (m *mockQdrant) HealthCheck(ctx context.Context) error { return m.healthFn(ctx) }
-func (m *mockQdrant) Close() error                         { return nil }
+func (m *mockQdrant) Close() error                          { return nil }
 
 func TestHealthHandler_NilPool(t *testing.T) {
 	w := httptest.NewRecorder()

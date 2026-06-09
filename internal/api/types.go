@@ -14,17 +14,17 @@ func (r PreprocessRequest) Validate() error {
 }
 
 type IndexRequest struct {
-	InputTag           string `json:"input_tag"`
-	Tag                string `json:"tag,omitempty"`
-	ParserStrategy     string `json:"parser_strategy,omitempty"`
-	ChunkStrategy      string `json:"chunk_strategy,omitempty"`
-	ChunkSize          int    `json:"chunk_size,omitempty"`
-	ChunkOverlap       int    `json:"chunk_overlap,omitempty"`
-	EmbeddingProvider  string `json:"embedding_provider,omitempty"`
-	EmbeddingModel     string `json:"embedding_model,omitempty"`
-	BatchSize          int    `json:"batch_size,omitempty"`
-	IndexConcurrency   int    `json:"index_concurrency,omitempty"`
-	DocTimeout         string `json:"doc_timeout,omitempty"`
+	InputTag          string `json:"input_tag"`
+	Tag               string `json:"tag,omitempty"`
+	ParserStrategy    string `json:"parser_strategy,omitempty"`
+	ChunkStrategy     string `json:"chunk_strategy,omitempty"`
+	ChunkSize         int    `json:"chunk_size,omitempty"`
+	ChunkOverlap      int    `json:"chunk_overlap,omitempty"`
+	EmbeddingProvider string `json:"embedding_provider,omitempty"`
+	EmbeddingModel    string `json:"embedding_model,omitempty"`
+	BatchSize         int    `json:"batch_size,omitempty"`
+	IndexConcurrency  int    `json:"index_concurrency,omitempty"`
+	DocTimeout        string `json:"doc_timeout,omitempty"`
 }
 
 func (r IndexRequest) Validate() error {
@@ -35,20 +35,20 @@ func (r IndexRequest) Validate() error {
 }
 
 type EvalRequest struct {
-	IndexTag          string   `json:"index_tag"`
-	Tag               string   `json:"tag,omitempty"`
-	QueryStrategy     string   `json:"query_strategy"`
-	DatasetPath       string   `json:"dataset_path"`
-	TopK              int      `json:"top_k,omitempty"`
-	Ks                []int    `json:"ks,omitempty"`
-	LLMProvider       string   `json:"llm_provider,omitempty"`
-	LLMModel          string   `json:"llm_model,omitempty"`
-	EmbeddingProvider string   `json:"embedding_provider,omitempty"`
-	EmbeddingModel    string   `json:"embedding_model,omitempty"`
-	JudgeProvider     string   `json:"judge_provider,omitempty"`
-	JudgeModel        string   `json:"judge_model,omitempty"`
-	BatchSize         int      `json:"batch_size,omitempty"`
-	Workers           int      `json:"workers,omitempty"`
+	IndexTag          string `json:"index_tag"`
+	Tag               string `json:"tag,omitempty"`
+	QueryStrategy     string `json:"query_strategy"`
+	DatasetPath       string `json:"dataset_path"`
+	TopK              int    `json:"top_k,omitempty"`
+	Ks                []int  `json:"ks,omitempty"`
+	LLMProvider       string `json:"llm_provider,omitempty"`
+	LLMModel          string `json:"llm_model,omitempty"`
+	EmbeddingProvider string `json:"embedding_provider,omitempty"`
+	EmbeddingModel    string `json:"embedding_model,omitempty"`
+	JudgeProvider     string `json:"judge_provider,omitempty"`
+	JudgeModel        string `json:"judge_model,omitempty"`
+	BatchSize         int    `json:"batch_size,omitempty"`
+	Workers           int    `json:"workers,omitempty"`
 }
 
 func (r EvalRequest) Validate() error {
@@ -87,16 +87,16 @@ type JobStatusResponse struct {
 }
 
 type ChatRequest struct {
-	Tag                string   `json:"tag"`
-	Query              string   `json:"query"`
-	ConversationID     string   `json:"conversation_id,omitempty"`
-	TopK               int      `json:"top_k,omitempty"`
-	Temperature        *float64 `json:"temperature,omitempty"`
-	MaxTokens          int      `json:"max_tokens,omitempty"`
-	LLMProvider        string   `json:"llm_provider,omitempty"`
-	LLMModel           string   `json:"llm_model,omitempty"`
-	EmbeddingProvider  string   `json:"embedding_provider,omitempty"`
-	EmbeddingModel     string   `json:"embedding_model,omitempty"`
+	Tag               string   `json:"tag"`
+	Query             string   `json:"query"`
+	ConversationID    string   `json:"conversation_id,omitempty"`
+	TopK              int      `json:"top_k,omitempty"`
+	Temperature       *float64 `json:"temperature,omitempty"`
+	MaxTokens         int      `json:"max_tokens,omitempty"`
+	LLMProvider       string   `json:"llm_provider,omitempty"`
+	LLMModel          string   `json:"llm_model,omitempty"`
+	EmbeddingProvider string   `json:"embedding_provider,omitempty"`
+	EmbeddingModel    string   `json:"embedding_model,omitempty"`
 }
 
 type ChatResponse struct {
@@ -118,12 +118,12 @@ type TokenUsage struct {
 }
 
 type RunSummary struct {
-	ID             string         `json:"id"`
-	Tag            string         `json:"tag"`
-	Strategy       map[string]any `json:"strategy"`
-	Metrics        map[string]any `json:"metrics,omitempty"`
-	QuestionCount  int            `json:"question_count"`
-	CreatedAt      string         `json:"created_at"`
+	ID            string         `json:"id"`
+	Tag           string         `json:"tag"`
+	Strategy      map[string]any `json:"strategy"`
+	Metrics       map[string]any `json:"metrics,omitempty"`
+	QuestionCount int            `json:"question_count"`
+	CreatedAt     string         `json:"created_at"`
 }
 
 type RunDetail struct {

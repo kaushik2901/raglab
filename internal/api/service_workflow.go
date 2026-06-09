@@ -13,6 +13,17 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
 )
 
+func parseDocTimeout(s string) time.Duration {
+	if s == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
 type jobInserter interface {
 	Insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error)
 	JobGet(ctx context.Context, id int64) (*rivertype.JobRow, error)
@@ -56,6 +67,7 @@ func (s *WorkflowService) InsertIndex(ctx context.Context, req IndexRequest) (*W
 		EmbeddingModel:    req.EmbeddingModel,
 		BatchSize:         req.BatchSize,
 		IndexConcurrency:  req.IndexConcurrency,
+		DocTimeout:        parseDocTimeout(req.DocTimeout),
 	}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("insert index job: %w", err)

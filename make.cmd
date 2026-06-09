@@ -6,6 +6,7 @@ if /I "%1"=="index"        goto :index
 if /I "%1"=="eval"         goto :eval
 if /I "%1"=="query"        goto :query
 if /I "%1"=="workerd"      goto :workerd
+if /I "%1"=="api"          goto :api
 if /I "%1"=="test"         goto :test
 if /I "%1"=="clean"        goto :clean
 if /I "%1"=="build"        goto :build
@@ -21,9 +22,12 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\eval.exe .\cmd\eval
 if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\workerd.exe .\cmd\workerd
+if %errorlevel% neq 0 exit /b %errorlevel%
 go build -o bin\query.exe .\cmd\query
 if %errorlevel% neq 0 exit /b %errorlevel%
-if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe, bin\index.exe, bin\eval.exe, bin\workerd.exe, bin\query.exe
+go build -o bin\api.exe .\cmd\api
+if %errorlevel% neq 0 exit /b %errorlevel%
+if %errorlevel% equ 0 echo Build succeeded: bin\preprocess.exe, bin\index.exe, bin\eval.exe, bin\workerd.exe, bin\query.exe, bin\api.exe
 goto :end
 
 :query
@@ -75,6 +79,13 @@ echo Building and starting worker daemon...
 go build -o bin\workerd.exe .\cmd\workerd
 if %errorlevel% neq 0 exit /b %errorlevel%
 bin\workerd.exe
+goto :end
+
+:api
+echo Building and starting API server...
+go build -o bin\api.exe .\cmd\api
+if %errorlevel% neq 0 exit /b %errorlevel%
+bin\api.exe
 goto :end
 
 :test
