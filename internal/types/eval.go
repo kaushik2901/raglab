@@ -14,10 +14,6 @@ type EvalQuestion struct {
 	ExpectedAnswer string              `json:"expected_answer"`
 }
 
-type EvalDataset struct {
-	Questions []EvalQuestion `json:"questions"`
-}
-
 type RetrievalResult struct {
 	QuestionID       string
 	Question         string
