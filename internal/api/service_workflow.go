@@ -98,10 +98,10 @@ func (s *WorkflowService) GetJob(ctx context.Context, id int64) (*JobStatusRespo
 		Kind:  row.Kind,
 		State: jobStateString(row.State),
 	}
-	if !row.AttemptedAt.IsZero() {
+	if row.AttemptedAt != nil && !row.AttemptedAt.IsZero() {
 		resp.AttemptedAt = row.AttemptedAt.Format(time.RFC3339)
 	}
-	if !row.FinalizedAt.IsZero() {
+	if row.FinalizedAt != nil && !row.FinalizedAt.IsZero() {
 		resp.CompletedAt = row.FinalizedAt.Format(time.RFC3339)
 	}
 	resp.Errors = formatErrors(row.Errors)

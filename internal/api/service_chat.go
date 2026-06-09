@@ -15,11 +15,16 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/memory"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
+
+type retrieverInterface interface {
+	Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error)
+}
 
 type ChatService struct {
 	embedder  embedder.Embedder
-	retriever *retriever.Retriever
+	retriever retrieverInterface
 	generator generator.Generator
 	memory    memory.Memory
 }

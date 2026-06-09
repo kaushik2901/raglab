@@ -7,7 +7,9 @@ import (
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	services := map[string]string{}
 
-	if err := s.pool.Ping(r.Context()); err != nil {
+	if s.pool == nil {
+		services["postgres"] = "disconnected: not initialized"
+	} else if err := s.pool.Ping(r.Context()); err != nil {
 		services["postgres"] = "disconnected: " + err.Error()
 	} else {
 		services["postgres"] = "connected"
