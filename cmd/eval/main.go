@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 	"golang.org/x/sync/errgroup"
 
@@ -109,15 +107,11 @@ func run() error {
 
 	ctx := context.Background()
 
-	pool, err := db.Connect(ctx)
+	rc, err := db.NewRiverClient(ctx, cfg.MaxRetries+1)
 	if err != nil {
-		return fmt.Errorf("db connect: %w", err)
+		return err
 	}
-	defer pool.Close()
-
-	if err := db.Migrate(ctx, pool); err != nil {
-		return fmt.Errorf("db migrate: %w", err)
-	}
+	defer rc.Pool.Close()
 
 	if *embeddingProvider == "" {
 		*embeddingProvider = *llmProvider
@@ -131,13 +125,6 @@ func run() error {
 
 	resolvedTagPrefix := config.ResolveTag(*tag, "eval")
 
-	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		MaxAttempts: cfg.MaxRetries + 1,
-	})
-	if err != nil {
-		return fmt.Errorf("river client: %w", err)
-	}
-
 	type fileJob struct {
 		file  string
 		tag   string
@@ -149,7 +136,7 @@ func run() error {
 		fileTag := resolvedTagPrefix + "-" + strings.TrimSuffix(f, ".json")
 		datasetPath := filepath.ToSlash(filepath.Join(*datasetDir, f))
 
-		result, err := riverClient.Insert(ctx, &workflow.EvalArgs{
+		result, err := rc.Client.Insert(ctx, &workflow.EvalArgs{
 			Tag:               fileTag,
 			MainTag:           resolvedTagPrefix,
 			IndexTag:          *indexTag,
@@ -179,7 +166,7 @@ func run() error {
 		j := j
 		g.Go(func() error {
 			slog.Info("waiting for eval job", "file", j.file, "id", j.jobID, "tag", j.tag)
-			row, err := workflow.PollUntilTerminal(ctx, riverClient, j.jobID, 2*time.Second)
+			row, err := workflow.PollUntilTerminal(ctx, rc.Client, j.jobID, 2*time.Second)
 			if err != nil {
 				return fmt.Errorf("file %s: %w", j.file, err)
 			}

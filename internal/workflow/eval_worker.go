@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/riverqueue/river"
 
@@ -154,66 +152,27 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		"avg_answer_score", fmt.Sprintf("%.3f", aggregate.AvgAnswerScore),
 	)
 
-	// 6. Persist results
-	for _, r := range results {
-		if err := w.EvalStore.AddQueryResult(ctx, evalRunID, r); err != nil {
-			return fmt.Errorf("store result for %s: %w", r.QuestionID, err)
-		}
-	}
-	if err := w.EvalStore.UpdateRunMetrics(ctx, evalRunID, aggregate); err != nil {
-		return fmt.Errorf("update metrics: %w", err)
-	}
-
-	// 7. Write JSON report
-	failedCount := 0
+	// 6. Persist results — compute latency/token aggregates first
 	var totalLatency int64
 	var totalPrompt, totalCompletion int
 	for _, r := range results {
-		if r.Failed {
-			failedCount++
-		}
 		totalLatency += r.LatencyMs
 		totalPrompt += r.PromptTokens
 		totalCompletion += r.CompletionTokens
 	}
-	avgLatency := float64(totalLatency) / float64(max(len(results), 1))
-	avgPrompt := float64(totalPrompt) / float64(max(len(results), 1))
-	avgCompletion := float64(totalCompletion) / float64(max(len(results), 1))
-
-	aggregate.AvgLatencyMs = avgLatency
+	aggregate.AvgLatencyMs = float64(totalLatency) / float64(max(len(results), 1))
 	aggregate.TotalLatencyMs = totalLatency
-	aggregate.AvgPromptTokens = avgPrompt
-	aggregate.AvgCompletionTokens = avgCompletion
+	aggregate.AvgPromptTokens = float64(totalPrompt) / float64(max(len(results), 1))
+	aggregate.AvgCompletionTokens = float64(totalCompletion) / float64(max(len(results), 1))
 	aggregate.TotalPromptTokens = totalPrompt
 	aggregate.TotalCompletionTokens = totalCompletion
 
-	report := &types.EvalReport{
-		RunID: args.Tag,
-		Strategy: types.EvalStrategyConfig{
-			Tag:               args.Tag,
-			IndexTag:          args.IndexTag,
-			QueryStrategy:     args.QueryStrategy,
-			TopK:              args.TopK,
-			LLMProvider:       args.LLMProvider,
-			LLMModel:          args.LLMModel,
-			EmbeddingProvider: args.EmbeddingProvider,
-			EmbeddingModel:    args.EmbeddingModel,
-			JudgeProvider:     args.JudgeProvider,
-			JudgeModel:        args.JudgeModel,
-		},
-		Questions:       len(results),
-		QuestionsFailed: failedCount,
-		Aggregate:       aggregate,
-		PerQuestion:     results,
+	if err := w.EvalStore.BulkAddQueryResults(ctx, evalRunID, results); err != nil {
+		return fmt.Errorf("store results: %w", err)
 	}
-
-	datasetFile := strings.TrimSuffix(filepath.Base(args.DatasetPath), ".json")
-	reportPath := filepath.Join("artifacts", "evaluation-results", args.MainTag, datasetFile+".json")
-	if err := eval.WriteJSONReport(report, reportPath); err != nil {
-		slog.Warn("failed to write report", "path", reportPath, "err", err)
+	if err := w.EvalStore.UpdateRunMetrics(ctx, evalRunID, aggregate); err != nil {
+		return fmt.Errorf("update metrics: %w", err)
 	}
-
-	eval.PrintReport(report)
 
 	logger.Info("evaluation complete",
 		"questions", len(results),

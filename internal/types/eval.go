@@ -25,19 +25,6 @@ type EvalDatasetMeta struct {
 	Description string `json:"description"`
 }
 
-type EvalStrategyConfig struct {
-	Tag               string
-	IndexTag          string
-	QueryStrategy     string
-	TopK              int
-	LLMProvider       string
-	LLMModel          string
-	EmbeddingProvider string
-	EmbeddingModel    string
-	JudgeProvider     string
-	JudgeModel        string
-}
-
 type RetrievalResult struct {
 	QuestionID       string
 	Question         string
@@ -74,21 +61,4 @@ type AggregateMetrics struct {
 	AvgCompletionTokens   float64
 	TotalPromptTokens     int
 	TotalCompletionTokens int
-}
-
-type EvalReport struct {
-	RunID           string
-	Strategy        EvalStrategyConfig
-	Questions       int
-	QuestionsFailed int
-	Aggregate       AggregateMetrics
-	PerQuestion     []RetrievalResult
-}
-
-type EvalRun struct {
-	ID         string
-	WorkflowID string
-	Tag        string
-	Strategy   map[string]any
-	Metrics    map[string]any
 }

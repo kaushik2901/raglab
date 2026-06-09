@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -29,31 +30,47 @@ func (s *EvalStore) CreateRun(ctx context.Context, tag string, strategy map[stri
 	return id, nil
 }
 
-func (s *EvalStore) AddQueryResult(ctx context.Context, runID string, r types.RetrievalResult) error {
-	hitJSON, err := json.Marshal(r.Hit)
-	if err != nil {
-		return fmt.Errorf("marshal hit: %w", err)
-	}
-	retrievedJSON, err := json.Marshal(r.RetrievedPaths)
-	if err != nil {
-		return fmt.Errorf("marshal retrieved: %w", err)
-	}
-	expectedPathsJSON, err := json.Marshal(r.ExpectedPaths)
-	if err != nil {
-		return fmt.Errorf("marshal expected paths: %w", err)
-	}
-	relevanceJSON, err := json.Marshal(r.Relevance)
-	if err != nil {
-		return fmt.Errorf("marshal relevance: %w", err)
+var evalQueriesColumns = []string{
+	"run_id", "question_id", "question", "category", "difficulty",
+	"expected_answer", "generated_answer", "ndcg_graded",
+	"expected_paths", "retrieved", "relevance", "hit",
+	"rank_first", "prompt_tokens", "completion_tokens", "latency_ms", "answer_score",
+}
+
+func (s *EvalStore) BulkAddQueryResults(ctx context.Context, runID string, results []types.RetrievalResult) error {
+	if len(results) == 0 {
+		return nil
 	}
 
-	_, err = s.pool.Exec(ctx,
-		`INSERT INTO eval_queries (run_id, question_id, question, category, difficulty, expected_answer, generated_answer, ndcg_graded, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms, answer_score)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-		runID, r.QuestionID, r.Question, r.Category, r.Difficulty, r.ExpectedAnswer, r.Answer, r.NDCGGraded, expectedPathsJSON, retrievedJSON, relevanceJSON, hitJSON, r.RankFirst, r.PromptTokens, r.CompletionTokens, r.LatencyMs, r.AnswerScore,
-	)
+	rows := make([][]any, len(results))
+	for i, r := range results {
+		hitJSON, err := json.Marshal(r.Hit)
+		if err != nil {
+			return fmt.Errorf("marshal hit for %s: %w", r.QuestionID, err)
+		}
+		retrievedJSON, err := json.Marshal(r.RetrievedPaths)
+		if err != nil {
+			return fmt.Errorf("marshal retrieved for %s: %w", r.QuestionID, err)
+		}
+		expectedPathsJSON, err := json.Marshal(r.ExpectedPaths)
+		if err != nil {
+			return fmt.Errorf("marshal expected paths for %s: %w", r.QuestionID, err)
+		}
+		relevanceJSON, err := json.Marshal(r.Relevance)
+		if err != nil {
+			return fmt.Errorf("marshal relevance for %s: %w", r.QuestionID, err)
+		}
+		rows[i] = []any{
+			runID, r.QuestionID, r.Question, r.Category, r.Difficulty,
+			r.ExpectedAnswer, r.Answer, r.NDCGGraded,
+			expectedPathsJSON, retrievedJSON, relevanceJSON, hitJSON,
+			r.RankFirst, r.PromptTokens, r.CompletionTokens, r.LatencyMs, r.AnswerScore,
+		}
+	}
+
+	_, err := s.pool.CopyFrom(ctx, pgx.Identifier{"eval_queries"}, evalQueriesColumns, pgx.CopyFromRows(rows))
 	if err != nil {
-		return fmt.Errorf("insert query result: %w", err)
+		return fmt.Errorf("bulk insert query results: %w", err)
 	}
 	return nil
 }

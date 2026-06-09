@@ -115,18 +115,6 @@ func TestEvalDatasetCreation(t *testing.T) {
 	assert.Len(t, ds.Questions, 1)
 }
 
-func TestEvalStrategyConfig(t *testing.T) {
-	cfg := EvalStrategyConfig{
-		Tag:           "eval-test",
-		IndexTag:      "idx-test",
-		QueryStrategy: "naive-search",
-		TopK:          5,
-		LLMModel:      "gpt-4o-mini",
-	}
-	assert.Equal(t, "naive-search", cfg.QueryStrategy)
-	assert.Equal(t, 5, cfg.TopK)
-}
-
 func TestRetrievalResultCreation(t *testing.T) {
 	r := RetrievalResult{
 		QuestionID:       "q1",
@@ -163,20 +151,4 @@ func TestAggregateMetricsDefaults(t *testing.T) {
 	assert.Nil(t, m.Precision)
 	assert.Nil(t, m.Recall)
 	assert.Equal(t, 0.0, m.AvgAnswerScore)
-}
-
-func TestEvalReportCreation(t *testing.T) {
-	report := EvalReport{
-		RunID:     "eval-001",
-		Questions: 3,
-		Aggregate: AggregateMetrics{MRR: 0.75},
-		PerQuestion: []RetrievalResult{
-			{QuestionID: "q1"},
-			{QuestionID: "q2"},
-		},
-	}
-	assert.Equal(t, "eval-001", report.RunID)
-	assert.Equal(t, 3, report.Questions)
-	assert.InDelta(t, 0.75, report.Aggregate.MRR, 0.001)
-	assert.Len(t, report.PerQuestion, 2)
 }

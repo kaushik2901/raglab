@@ -2,7 +2,6 @@ package eval
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -64,63 +63,46 @@ func TestEvalStore_CreateRun(t *testing.T) {
 	})
 }
 
-func TestEvalStore_AddQueryResult(t *testing.T) {
+func TestEvalStore_BulkAddQueryResults(t *testing.T) {
 	pool := connectOrSkip(t)
 	runMigrations(t, pool)
 	s := NewEvalStore(pool)
 
-	t.Run("inserts query result", func(t *testing.T) {
+	t.Run("inserts multiple results", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "eval-add-q", nil)
+		runID, _ := s.CreateRun(context.Background(), "eval-bulk", nil)
 
-		err := s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
-			QuestionID:       "q1",
-			Question:         "test question?",
-			Answer:           "test answer",
-			ExpectedPaths:    []string{"doc1.md"},
-			RetrievedPaths:   []string{"doc1.md", "doc2.md"},
-			Scores:           []float64{0.9, 0.5},
-			Hit:              map[int]bool{1: true, 3: true, 5: true},
-			RankFirst:        1,
-			PromptTokens:     10,
-			CompletionTokens: 20,
-			LatencyMs:        100,
-			AnswerScore:      0.95,
+		err := s.BulkAddQueryResults(context.Background(), runID, []types.RetrievalResult{
+			{
+				QuestionID: "q1", Question: "test question?", Answer: "test answer",
+				ExpectedPaths: []string{"doc1.md"}, RetrievedPaths: []string{"doc1.md", "doc2.md"},
+				Scores: []float64{0.9, 0.5}, Hit: map[int]bool{1: true, 3: true, 5: true},
+				RankFirst: 1, PromptTokens: 10, CompletionTokens: 20, LatencyMs: 100, AnswerScore: 0.95,
+			},
+			{
+				QuestionID: "q2", Question: "second?", Answer: "answer2",
+				ExpectedPaths: []string{"doc2.md"}, RetrievedPaths: []string{"doc2.md"},
+				Scores: []float64{0.8}, Hit: map[int]bool{1: true},
+				RankFirst: 1, PromptTokens: 5, CompletionTokens: 15, LatencyMs: 50, AnswerScore: 0.8,
+			},
 		})
+		require.NoError(t, err)
+	})
+
+	t.Run("empty slice is no-op", func(t *testing.T) {
+		cleanEvalTables(t, pool)
+		runID, _ := s.CreateRun(context.Background(), "eval-bulk-empty", nil)
+
+		err := s.BulkAddQueryResults(context.Background(), runID, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("fails for non-existent run", func(t *testing.T) {
 		cleanEvalTables(t, pool)
-		err := s.AddQueryResult(context.Background(), "00000000-0000-0000-0000-000000000000", types.RetrievalResult{
-			QuestionID: "q1",
-			Question:   "test?",
+		err := s.BulkAddQueryResults(context.Background(), "00000000-0000-0000-0000-000000000000", []types.RetrievalResult{
+			{QuestionID: "q1", Question: "test?"},
 		})
 		require.Error(t, err)
-	})
-
-	t.Run("inserts multiple results for same run", func(t *testing.T) {
-		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "eval-multi-q", nil)
-
-		require.NoError(t, s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
-			QuestionID: "q1", Question: "q1?", Hit: map[int]bool{1: true},
-		}))
-		require.NoError(t, s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
-			QuestionID: "q2", Question: "q2?", Hit: map[int]bool{3: true},
-		}))
-	})
-
-	t.Run("handles empty retrieved paths", func(t *testing.T) {
-		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(context.Background(), "eval-empty-q", nil)
-
-		err := s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
-			QuestionID: "q1",
-			Question:   "test?",
-			Hit:        map[int]bool{1: false, 3: false, 5: false},
-		})
-		require.NoError(t, err)
 	})
 }
 
@@ -157,12 +139,10 @@ func TestEvalStore_GetRunResults(t *testing.T) {
 		cleanEvalTables(t, pool)
 		runID, _ := s.CreateRun(context.Background(), "eval-get", nil)
 
-		s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
-			QuestionID: "q1", Question: "first?", Hit: map[int]bool{1: true},
-		})
-		s.AddQueryResult(context.Background(), runID, types.RetrievalResult{
-			QuestionID: "q2", Question: "second?", Hit: map[int]bool{3: false},
-		})
+		require.NoError(t, s.BulkAddQueryResults(context.Background(), runID, []types.RetrievalResult{
+			{QuestionID: "q1", Question: "first?", Hit: map[int]bool{1: true}},
+			{QuestionID: "q2", Question: "second?", Hit: map[int]bool{3: false}},
+		}))
 
 		results, err := s.GetRunResults(context.Background(), runID)
 		require.NoError(t, err)
@@ -237,9 +217,7 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 			},
 		}
 
-		for _, r := range results {
-			require.NoError(t, s.AddQueryResult(context.Background(), runID, r))
-		}
+		require.NoError(t, s.BulkAddQueryResults(context.Background(), runID, results))
 
 		metrics := types.AggregateMetrics{
 			HitRate:        map[int]float64{1: 0.5, 3: 0.5, 5: 1.0},
@@ -269,36 +247,5 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 		assert.Equal(t, 20, got[0].CompletionTokens)
 		assert.Equal(t, int64(100), got[0].LatencyMs)
 		assert.InDelta(t, 0.9, got[0].AnswerScore, 0.01)
-	})
-}
-
-func TestEvalStore_ConcurrentWrites(t *testing.T) {
-	pool := connectOrSkip(t)
-	runMigrations(t, pool)
-	s := NewEvalStore(pool)
-	ctx := context.Background()
-
-	t.Run("concurrent AddQueryResult calls", func(t *testing.T) {
-		cleanEvalTables(t, pool)
-		runID, _ := s.CreateRun(ctx, "eval-concurrent", nil)
-
-		done := make(chan error, 10)
-		for i := 0; i < 10; i++ {
-			go func(n int) {
-				done <- s.AddQueryResult(ctx, runID, types.RetrievalResult{
-					QuestionID: json.Number(string(rune('0' + n))).String(),
-					Question:   "q",
-					Hit:        map[int]bool{1: n == 0},
-				})
-			}(i)
-		}
-
-		for i := 0; i < 10; i++ {
-			require.NoError(t, <-done)
-		}
-
-		results, err := s.GetRunResults(ctx, runID)
-		require.NoError(t, err)
-		assert.Len(t, results, 10)
 	})
 }

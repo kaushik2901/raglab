@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
@@ -40,15 +39,11 @@ func run() error {
 
 	ctx := context.Background()
 
-	pool, err := db.Connect(ctx)
+	rc, err := db.NewRiverClient(ctx, cfg.MaxRetries+1)
 	if err != nil {
-		return fmt.Errorf("db connect: %w", err)
+		return err
 	}
-	defer pool.Close()
-
-	if err := db.Migrate(ctx, pool); err != nil {
-		return fmt.Errorf("db migrate: %w", err)
-	}
+	defer rc.Pool.Close()
 
 	resolvedTag := config.ResolveTag(*tag, "pre")
 
@@ -62,14 +57,7 @@ func run() error {
 		}
 	}
 
-	riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
-		MaxAttempts: cfg.MaxRetries + 1,
-	})
-	if err != nil {
-		return fmt.Errorf("river client: %w", err)
-	}
-
-	result, err := riverClient.Insert(ctx, &workflow.PreprocessWorkflowArgs{
+	result, err := rc.Client.Insert(ctx, &workflow.PreprocessWorkflowArgs{
 		Tag:         resolvedTag,
 		RepoURL:     *repoURL,
 		IncludeDirs: includeDirs,
@@ -83,7 +71,7 @@ func run() error {
 	jobID := result.Job.ID
 	slog.Info("inserted preprocess job", "id", jobID, "tag", resolvedTag)
 
-	row, err := workflow.PollUntilTerminal(ctx, riverClient, jobID, 2*time.Second)
+	row, err := workflow.PollUntilTerminal(ctx, rc.Client, jobID, 2*time.Second)
 	if err != nil {
 		return fmt.Errorf("preprocess job %d: %w", jobID, err)
 	}
