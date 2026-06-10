@@ -95,14 +95,11 @@ func TestChatStreamHandler_InvalidJSON(t *testing.T) {
 
 	srv.chatStreamHandler(rec, req)
 
-	scanner := bufio.NewScanner(rec.Body)
-	var hasError bool
-	for scanner.Scan() {
-		if strings.Contains(scanner.Text(), "INVALID_JSON") {
-			hasError = true
-		}
-	}
-	assert.True(t, hasError)
+	assert.Equal(t, 400, rec.Code)
+	var env envelope
+	jsonUnmarshal(rec.Body.Bytes(), &env)
+	assert.NotNil(t, env.Error)
+	assert.Equal(t, "INVALID_JSON", env.Error.Code)
 }
 
 func TestChatStreamHandler_MissingFields(t *testing.T) {
@@ -124,14 +121,7 @@ func TestChatStreamHandler_MissingFields(t *testing.T) {
 
 			srv.chatStreamHandler(rec, req)
 
-			scanner := bufio.NewScanner(rec.Body)
-			var events []string
-			for scanner.Scan() {
-				if strings.HasPrefix(scanner.Text(), "event: ") {
-					events = append(events, strings.TrimPrefix(scanner.Text(), "event: "))
-				}
-			}
-			assert.Contains(t, events, "error")
+			assert.Equal(t, 400, rec.Code)
 		})
 	}
 }

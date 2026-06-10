@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
@@ -19,6 +19,7 @@ func parseDocTimeout(s string) time.Duration {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
+		slog.Warn("invalid doc_timeout value, using 0 (no timeout)", "value", s, "err", err)
 		return 0
 	}
 	return d
@@ -33,11 +34,7 @@ type WorkflowService struct {
 	client jobInserter
 }
 
-func NewWorkflowService(client *river.Client[pgx.Tx]) *WorkflowService {
-	return &WorkflowService{client: client}
-}
-
-func NewWorkflowServiceWithClient(client jobInserter) *WorkflowService {
+func NewWorkflowService(client jobInserter) *WorkflowService {
 	return &WorkflowService{client: client}
 }
 

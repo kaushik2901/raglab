@@ -15,7 +15,7 @@ import (
 func connectOrSkip(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
-	pool, err := db.Connect(ctx)
+	pool, err := db.Connect(ctx, "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
 	if err != nil {
 		t.Skipf("postgres not available: %v", err)
 	}

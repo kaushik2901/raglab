@@ -258,3 +258,10 @@ func TestEvalRequest_Validate(t *testing.T) {
 	assert.Error(t, EvalRequest{IndexTag: "idx"}.Validate())
 	assert.Error(t, EvalRequest{IndexTag: "idx", QueryStrategy: "naive"}.Validate())
 }
+
+func TestChatRequest_Validate(t *testing.T) {
+	assert.NoError(t, ChatRequest{Tag: "col", Query: "hello"}.Validate())
+	assert.Error(t, ChatRequest{}.Validate())
+	assert.Error(t, ChatRequest{Tag: "col"}.Validate())
+	assert.Error(t, ChatRequest{Query: "hello"}.Validate())
+}

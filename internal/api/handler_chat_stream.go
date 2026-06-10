@@ -11,6 +11,16 @@ import (
 )
 
 func (s *Server) chatStreamHandler(w http.ResponseWriter, r *http.Request) {
+	var req ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, 400, "INVALID_JSON", "invalid request body")
+		return
+	}
+	if err := req.Validate(); err != nil {
+		respondError(w, 400, "INVALID_PARAMETER", err.Error())
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		respondError(w, 500, "INTERNAL_ERROR", "streaming not supported")
@@ -25,16 +35,6 @@ func (s *Server) chatStreamHandler(w http.ResponseWriter, r *http.Request) {
 		jsonData, _ := json.Marshal(data)
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, string(jsonData))
 		flusher.Flush()
-	}
-
-	var req ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		sendEvent("error", map[string]string{"code": "INVALID_JSON", "message": "invalid request body"})
-		return
-	}
-	if req.Query == "" || req.Tag == "" {
-		sendEvent("error", map[string]string{"code": "INVALID_PARAMETER", "message": "query and tag are required"})
-		return
 	}
 
 	start := time.Now()

@@ -11,12 +11,8 @@ func (s *Server) chatHandler(w http.ResponseWriter, r *http.Request) {
 		respondError(w, 400, "INVALID_JSON", "invalid request body")
 		return
 	}
-	if req.Query == "" {
-		respondError(w, 400, "INVALID_PARAMETER", "query is required")
-		return
-	}
-	if req.Tag == "" {
-		respondError(w, 400, "INVALID_PARAMETER", "tag is required")
+	if err := req.Validate(); err != nil {
+		respondError(w, 400, "INVALID_PARAMETER", err.Error())
 		return
 	}
 

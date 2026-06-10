@@ -31,7 +31,7 @@ type Server struct {
 }
 
 func New(cfg *config.Config) (*Server, error) {
-	pool, err := db.Connect(context.Background())
+	pool, err := db.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("connect postgres: %w", err)
 	}
@@ -47,7 +47,6 @@ func New(cfg *config.Config) (*Server, error) {
 	r.Use(StructuredLog)
 	r.Use(Recovery)
 	r.Use(Timeout(60 * time.Second))
-	r.Use(CORS)
 
 	s := &Server{
 		cfg:    cfg,
@@ -95,7 +94,7 @@ func (s *Server) newWorkflowService(pool *pgxpool.Pool) *WorkflowService {
 		slog.Warn("river client init failed, workflow endpoints unavailable", "err", err)
 		return nil
 	}
-	return NewWorkflowServiceWithClient(client)
+	return NewWorkflowService(client)
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {

@@ -85,33 +85,6 @@ func TestTimeout_Exceeded(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 }
 
-func TestCORS_Simple(t *testing.T) {
-	handler := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	}))
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-	handler.ServeHTTP(w, r)
-
-	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
-	assert.Equal(t, "GET, POST, PUT, DELETE, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
-	assert.Equal(t, "Content-Type, X-Request-ID", w.Header().Get("Access-Control-Allow-Headers"))
-	assert.Equal(t, 200, w.Code)
-}
-
-func TestCORS_Options(t *testing.T) {
-	handler := CORS(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	}))
-
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest("OPTIONS", "/", nil)
-	handler.ServeHTTP(w, r)
-
-	assert.Equal(t, 204, w.Code)
-}
-
 func jsonUnmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }

@@ -27,7 +27,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	pool, err := db.Connect(ctx)
+	pool, err := db.Connect(ctx, config.EnvOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable"))
 	if err != nil {
 		return err
 	}

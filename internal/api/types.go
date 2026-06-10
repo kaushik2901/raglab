@@ -99,6 +99,16 @@ type ChatRequest struct {
 	EmbeddingModel    string   `json:"embedding_model,omitempty"`
 }
 
+func (r ChatRequest) Validate() error {
+	if r.Tag == "" {
+		return &validationError{"tag is required"}
+	}
+	if r.Query == "" {
+		return &validationError{"query is required"}
+	}
+	return nil
+}
+
 type ChatResponse struct {
 	Answer          string      `json:"answer"`
 	SourceDocuments []SourceDoc `json:"source_documents"`
