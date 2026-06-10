@@ -6,7 +6,6 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/joho/godotenv v1.5.1
 	github.com/openai/openai-go v1.12.0
 	github.com/qdrant/go-client v1.18.2
 	github.com/riverqueue/river v0.38.0
