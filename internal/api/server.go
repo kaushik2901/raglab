@@ -46,7 +46,7 @@ func New(cfg *config.Config) (*Server, error) {
 	r.Use(RequestID)
 	r.Use(StructuredLog)
 	r.Use(Recovery)
-	r.Use(Timeout(60 * time.Second))
+	r.Use(Timeout(cfg.APIRequestTimeout))
 
 	s := &Server{
 		cfg:    cfg,
@@ -74,7 +74,7 @@ func New(cfg *config.Config) (*Server, error) {
 		r.Get("/{id}", s.workflowStatusHandler)
 	})
 
-	chatSvc, err := NewChatService()
+	chatSvc, err := NewChatService(cfg, s.qdrant)
 	if err != nil {
 		slog.Warn("chat service init failed, chat endpoint unavailable", "err", err)
 	} else {

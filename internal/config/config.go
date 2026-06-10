@@ -28,6 +28,10 @@ type Config struct {
 	LLMApiKey    string
 	QdrantURL    string
 	QdrantAPIKey string
+
+	APIRequestTimeout time.Duration
+	ChatMemorySize    int
+	ArtifactsDir      string
 }
 
 func Load() (*Config, error) {
@@ -45,6 +49,10 @@ func Load() (*Config, error) {
 	cfg.LLMBaseURL = EnvOrDefault("LLM_BASE_URL", "https://api.openai.com")
 	cfg.QdrantURL = EnvOrDefault("QDRANT_URL", "http://localhost:6334")
 	cfg.DatabaseURL = EnvOrDefault("DATABASE_URL", "postgres://rag:rag@localhost:5432/rag?sslmode=disable")
+
+	cfg.APIRequestTimeout = DurationEnvOrDefault("API_REQUEST_TIMEOUT", 60*time.Second)
+	cfg.ChatMemorySize = IntEnvOrDefault("CHAT_MEMORY_SIZE", 10)
+	cfg.ArtifactsDir = EnvOrDefault("ARTIFACTS_DIR", "artifacts")
 
 	return cfg, cfg.Validate()
 }

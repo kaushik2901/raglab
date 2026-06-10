@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -29,37 +28,28 @@ type ChatService struct {
 	memory    memory.Memory
 }
 
-func NewChatService() (*ChatService, error) {
+func NewChatService(cfg *config.Config, vs qstore.VectorStore) (*ChatService, error) {
 	llmProvider := config.Provider(config.EnvOrDefault("LLM_PROVIDER", "openai"))
 	embeddingProvider := config.Provider(config.EnvOrDefault("EMBEDDING_PROVIDER", string(llmProvider)))
 	llmModel := config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini")
 	embeddingModel := config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small")
-	qdrantURL := config.EnvOrDefault("QDRANT_URL", "http://localhost:6334")
-	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
 
 	emb, err := embedder.New(embeddingProvider, embeddingModel, 1)
 	if err != nil {
 		return nil, fmt.Errorf("create embedder: %w", err)
 	}
 
-	qs := qstore.NewQdrantStore(qdrantAPIKey)
-	if err := qs.Connect(context.Background(), qdrantURL); err != nil {
-		return nil, fmt.Errorf("connect qdrant: %w", err)
-	}
-
-	ret, err := retriever.New(emb, qs, "naive-search")
+	ret, err := retriever.New(emb, vs, "naive-search")
 	if err != nil {
-		qs.Close()
 		return nil, fmt.Errorf("create retriever: %w", err)
 	}
 
 	gen, err := generator.New(llmProvider, llmModel)
 	if err != nil {
-		qs.Close()
 		return nil, fmt.Errorf("create generator: %w", err)
 	}
 
-	mem := memory.NewRingBuffer(10)
+	mem := memory.NewRingBuffer(cfg.ChatMemorySize)
 	return &ChatService{embedder: emb, retriever: ret, generator: gen, memory: mem}, nil
 }
 
