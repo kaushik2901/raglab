@@ -27,6 +27,8 @@ type Server struct {
 	qdrant qstore.VectorStore
 }
 
+// New creates a Server by connecting to Postgres and Qdrant.
+// This is the convenience entry point for cmd/api/main.go.
 func New(cfg *config.Config) (*Server, error) {
 	pool, err := db.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -39,6 +41,12 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("connect qdrant: %w", err)
 	}
 
+	return NewWithDeps(cfg, pool, qdrantStore), nil
+}
+
+// NewWithDeps creates a Server with explicitly provided connections.
+// This is the testable version — no infrastructure creation.
+func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorStore) *Server {
 	r := chi.NewRouter()
 	r.Use(RequestID)
 	r.Use(StructuredLog)
@@ -50,10 +58,10 @@ func New(cfg *config.Config) (*Server, error) {
 		cfg:    cfg,
 		router: r,
 		pool:   pool,
-		qdrant: qdrantStore,
+		qdrant: qdrant,
 	}
 
-	NewHealthRouter(pool, qdrantStore).Register(r)
+	NewHealthRouter(pool, qdrant).Register(r)
 	NewArtifactRouter(cfg.ArtifactsDir).Register(r)
 
 	evalSvc := NewEvalService(pool)
@@ -68,16 +76,12 @@ func New(cfg *config.Config) (*Server, error) {
 		})
 	}
 
-	chatSvc, err := NewChatService(cfg, qdrantStore)
-	if err != nil {
-		slog.Warn("chat service init failed, chat endpoint unavailable", "err", err)
-	} else {
-		r.Route("/api/v1/chat", func(r chi.Router) {
-			NewChatRouter(chatSvc).Register(r)
-		})
-	}
+	chatSvc, _ := NewChatService(cfg, qdrant)
+	r.Route("/api/v1/chat", func(r chi.Router) {
+		NewChatRouter(chatSvc).Register(r)
+	})
 
-	return s, nil
+	return s
 }
 
 func (s *Server) newWorkflowService(pool *pgxpool.Pool) *WorkflowService {
