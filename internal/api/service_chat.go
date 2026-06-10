@@ -22,44 +22,42 @@ type retrieverInterface interface {
 }
 
 type ChatService struct {
-	embedder  embedder.Embedder
-	retriever retrieverInterface
-	generator generator.Generator
-	memory    memory.Memory
+	vs     qstore.VectorStore
+	cfg    *config.Config
+	memory memory.Memory
+
+	// Injectable factories for testing
+	newEmbedderFn func(req ChatRequest) (embedder.Embedder, error)
+	newRetrieverFn func(emb embedder.Embedder) (retrieverInterface, error)
+	newGeneratorFn func(req ChatRequest) (generator.Generator, error)
 }
 
 func NewChatService(cfg *config.Config, vs qstore.VectorStore) (*ChatService, error) {
-	llmProvider := config.Provider(config.EnvOrDefault("LLM_PROVIDER", "openai"))
-	embeddingProvider := config.Provider(config.EnvOrDefault("EMBEDDING_PROVIDER", string(llmProvider)))
-	llmModel := config.EnvOrDefault("LLM_MODEL", "gpt-4o-mini")
-	embeddingModel := config.EnvOrDefault("EMBEDDING_MODEL", "text-embedding-3-small")
-
-	emb, err := embedder.New(embeddingProvider, embeddingModel, 1)
-	if err != nil {
-		return nil, fmt.Errorf("create embedder: %w", err)
-	}
-
-	ret, err := retriever.New(emb, vs, "naive-search")
-	if err != nil {
-		return nil, fmt.Errorf("create retriever: %w", err)
-	}
-
-	gen, err := generator.New(llmProvider, llmModel)
-	if err != nil {
-		return nil, fmt.Errorf("create generator: %w", err)
-	}
-
 	mem := memory.NewRingBuffer(cfg.ChatMemorySize)
-	return &ChatService{embedder: emb, retriever: ret, generator: gen, memory: mem}, nil
+	s := &ChatService{cfg: cfg, vs: vs, memory: mem}
+	s.newEmbedderFn = func(req ChatRequest) (embedder.Embedder, error) {
+		return embedder.New(config.Provider(req.EmbeddingProvider), req.EmbeddingModel, 1)
+	}
+	s.newRetrieverFn = func(emb embedder.Embedder) (retrieverInterface, error) {
+		return retriever.New(emb, s.vs, retriever.StrategyNaiveSearch)
+	}
+	s.newGeneratorFn = func(req ChatRequest) (generator.Generator, error) {
+		return generator.New(config.Provider(req.LLMProvider), req.LLMModel)
+	}
+	return s, nil
 }
 
 func (s *ChatService) retrieveSources(ctx context.Context, req ChatRequest) ([]types.SearchResult, []SourceDoc, error) {
-	topK := req.TopK
-	if topK <= 0 {
-		topK = 5
+	emb, err := s.newEmbedderFn(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create embedder: %w", err)
+	}
+	ret, err := s.newRetrieverFn(emb)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create retriever: %w", err)
 	}
 
-	results, err := s.retriever.Retrieve(ctx, req.Tag, req.Query, topK)
+	results, err := ret.Retrieve(ctx, req.Tag, req.Query, req.TopK)
 	if err != nil {
 		return nil, nil, fmt.Errorf("retrieve: %w", err)
 	}
@@ -93,18 +91,44 @@ func (s *ChatService) buildMessages(req ChatRequest, results []types.SearchResul
 	return messages
 }
 
-func resolveMaxTokens(req ChatRequest) int {
-	if req.MaxTokens <= 0 {
-		return 1024
-	}
-	return req.MaxTokens
-}
+func (s *ChatService) ChatStream(ctx context.Context, req ChatRequest, results []types.SearchResult, sources []SourceDoc, onToken func(token string) error) (*ChatResponse, error) {
+	start := time.Now()
 
-func resolveTemperature(req ChatRequest) float64 {
-	if req.Temperature != nil {
-		return *req.Temperature
+	messages := s.buildMessages(req, results)
+
+	gen, err := s.newGeneratorFn(req)
+	if err != nil {
+		return nil, fmt.Errorf("create generator: %w", err)
 	}
-	return 0.3
+
+	completion, err := gen.GenerateStream(ctx, openai.ChatCompletionNewParams{
+		Messages:    messages,
+		MaxTokens:   openai.Int(int64(req.MaxTokens)),
+		Temperature: openai.Float(*req.Temperature),
+	}, onToken)
+	if err != nil {
+		return nil, fmt.Errorf("generate: %w", err)
+	}
+
+	if len(completion.Choices) == 0 {
+		return nil, fmt.Errorf("no completion choices returned")
+	}
+
+	answer := completion.Choices[0].Message.Content
+	if req.ConversationID != "" {
+		s.memory.Add(req.ConversationID, req.Query, answer)
+	}
+
+	return &ChatResponse{
+		Answer:          answer,
+		SourceDocuments: sources,
+		TokenUsage: TokenUsage{
+			Prompt:     int(completion.Usage.PromptTokens),
+			Completion: int(completion.Usage.CompletionTokens),
+			Total:      int(completion.Usage.TotalTokens),
+		},
+		LatencyMs: time.Since(start).Milliseconds(),
+	}, nil
 }
 
 func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
@@ -117,10 +141,15 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 
 	messages := s.buildMessages(req, results)
 
-	completion, err := s.generator.Generate(ctx, openai.ChatCompletionNewParams{
+	gen, err := s.newGeneratorFn(req)
+	if err != nil {
+		return nil, fmt.Errorf("create generator: %w", err)
+	}
+
+	completion, err := gen.Generate(ctx, openai.ChatCompletionNewParams{
 		Messages:    messages,
-		MaxTokens:   openai.Int(int64(resolveMaxTokens(req))),
-		Temperature: openai.Float(resolveTemperature(req)),
+		MaxTokens:   openai.Int(int64(req.MaxTokens)),
+		Temperature: openai.Float(*req.Temperature),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("generate: %w", err)

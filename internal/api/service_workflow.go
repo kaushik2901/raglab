@@ -9,7 +9,6 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
 )
 
@@ -39,22 +38,20 @@ func NewWorkflowService(client jobInserter) *WorkflowService {
 }
 
 func (s *WorkflowService) InsertPreprocess(ctx context.Context, req PreprocessRequest) (*WorkflowResponse, error) {
-	tag := config.ResolveTag(req.Tag, "pre")
 	result, err := s.client.Insert(ctx, &workflow.PreprocessArgs{
-		Tag:         tag,
+		Tag:         req.Tag,
 		RepoURL:     req.RepoURL,
 		IncludeDirs: req.IncludeDirs,
 	}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("insert preprocess job: %w", err)
 	}
-	return jobToResponse(result.Job, tag), nil
+	return jobToResponse(result.Job, req.Tag), nil
 }
 
 func (s *WorkflowService) InsertIndex(ctx context.Context, req IndexRequest) (*WorkflowResponse, error) {
-	tag := config.ResolveTag(req.Tag, "idx")
 	result, err := s.client.Insert(ctx, &workflow.IndexArgs{
-		Tag:               tag,
+		Tag:               req.Tag,
 		InputTag:          req.InputTag,
 		ParserStrategy:    req.ParserStrategy,
 		ChunkStrategy:     req.ChunkStrategy,
@@ -69,13 +66,12 @@ func (s *WorkflowService) InsertIndex(ctx context.Context, req IndexRequest) (*W
 	if err != nil {
 		return nil, fmt.Errorf("insert index job: %w", err)
 	}
-	return jobToResponse(result.Job, tag), nil
+	return jobToResponse(result.Job, req.Tag), nil
 }
 
 func (s *WorkflowService) InsertEval(ctx context.Context, req EvalRequest) (*WorkflowResponse, error) {
-	tag := config.ResolveTag(req.Tag, "eval")
 	result, err := s.client.Insert(ctx, &workflow.EvalArgs{
-		Tag:               tag,
+		Tag:               req.Tag,
 		IndexTag:          req.IndexTag,
 		QueryStrategy:     req.QueryStrategy,
 		DatasetPath:       req.DatasetPath,
@@ -93,7 +89,7 @@ func (s *WorkflowService) InsertEval(ctx context.Context, req EvalRequest) (*Wor
 	if err != nil {
 		return nil, fmt.Errorf("insert eval job: %w", err)
 	}
-	return jobToResponse(result.Job, tag), nil
+	return jobToResponse(result.Job, req.Tag), nil
 }
 
 func (s *WorkflowService) GetJob(ctx context.Context, id int64) (*JobStatusResponse, error) {

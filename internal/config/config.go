@@ -150,10 +150,3 @@ func FloatEnvOrDefault(key string, defaultVal float64) float64 {
 	}
 	return defaultVal
 }
-
-func ResolveTag(tag, prefix string) string {
-	if tag != "" {
-		return tag
-	}
-	return fmt.Sprintf("%s-%s", prefix, time.Now().Format("20060102-150405"))
-}

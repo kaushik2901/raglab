@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/openai/openai-go"
 )
 
 type ChatRouter struct {
@@ -78,15 +77,8 @@ func (r *ChatRouter) chatStreamHandler(w http.ResponseWriter, req *http.Request)
 	}
 	sendEvent("retrieval", map[string]any{"results": sources})
 
-	messages := r.svc.buildMessages(body, results)
-
-	var answer string
-	completion, err := r.svc.generator.GenerateStream(req.Context(), openai.ChatCompletionNewParams{
-		Messages:  messages,
-		MaxTokens: openai.Int(int64(resolveMaxTokens(body))),
-	}, func(token string) error {
+	resp, err := r.svc.ChatStream(req.Context(), body, results, sources, func(token string) error {
 		sendEvent("token", map[string]string{"token": token})
-		answer += token
 		return nil
 	})
 	if err != nil {
@@ -94,17 +86,9 @@ func (r *ChatRouter) chatStreamHandler(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	if body.ConversationID != "" {
-		r.svc.memory.Add(body.ConversationID, body.Query, answer)
-	}
-
 	sendEvent("done", map[string]any{
-		"source_documents": sources,
-		"tokens": TokenUsage{
-			Prompt:     int(completion.Usage.PromptTokens),
-			Completion: int(completion.Usage.CompletionTokens),
-			Total:      int(completion.Usage.TotalTokens),
-		},
-		"latency_ms": time.Since(start).Milliseconds(),
+		"source_documents": resp.SourceDocuments,
+		"tokens":           resp.TokenUsage,
+		"latency_ms":       time.Since(start).Milliseconds(),
 	})
 }
