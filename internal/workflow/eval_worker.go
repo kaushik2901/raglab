@@ -52,12 +52,12 @@ type evalCheckpoint struct {
 
 type EvalWorker struct {
 	river.WorkerDefaults[EvalArgs]
-	EvalStore *eval.EvalStore
-	Client    *river.Client[pgx.Tx]
+	EvalDB eval.EvalDB
+	Client *river.Client[pgx.Tx]
 }
 
-func NewEvalWorker(evalStore *eval.EvalStore) *EvalWorker {
-	return &EvalWorker{EvalStore: evalStore}
+func NewEvalWorker(evalDB eval.EvalDB) *EvalWorker {
+	return &EvalWorker{EvalDB: evalDB}
 }
 
 func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
@@ -72,12 +72,12 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 
 	// On retry, clean up the previous run's results before creating a new one
 	if cp.QuestionsProcessed > 0 && cp.RunID != "" {
-		if err := w.EvalStore.DeleteRunResults(ctx, cp.RunID); err != nil {
+		if err := w.EvalDB.DeleteRunResults(ctx, cp.RunID); err != nil {
 			return fmt.Errorf("delete previous results: %w", err)
 		}
 	}
 
-	evalRunID, err := w.EvalStore.CreateRun(ctx, args.Tag, map[string]any{
+	evalRunID, err := w.EvalDB.CreateRun(ctx, args.Tag, map[string]any{
 		"index_tag":      args.IndexTag,
 		"query_strategy": args.QueryStrategy,
 		"top_k":          args.TopK,
@@ -141,7 +141,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 
 	// Collector: gathers results, stores to DB, aggregates at end
 	g.Go(func() error {
-		return collectResults(ctx, args, w.EvalStore, w.Client, job, evalRunID, resultChan, &allResults, batchSize)
+		return collectResults(ctx, args, w.EvalDB, w.Client, job, evalRunID, resultChan, &allResults, batchSize)
 	})
 
 	return g.Wait()
@@ -261,7 +261,7 @@ func evaluateQuestions(ctx context.Context, args EvalArgs, qStore eval.VectorSea
 func collectResults(
 	ctx context.Context,
 	args EvalArgs,
-	evalStore *eval.EvalStore,
+	evalDB eval.EvalDB,
 	client *river.Client[pgx.Tx],
 	job *river.Job[EvalArgs],
 	evalRunID string,
@@ -278,7 +278,7 @@ func collectResults(
 			if !ok {
 				// Final flush + aggregate
 				if len(results) > 0 {
-					if err := evalStore.BulkAddQueryResults(ctx, evalRunID, results); err != nil {
+					if err := evalDB.BulkAddQueryResults(ctx, evalRunID, results); err != nil {
 						return fmt.Errorf("store final batch: %w", err)
 					}
 					*allResults = append(*allResults, results...)
@@ -299,7 +299,7 @@ func collectResults(
 				aggregate.TotalPromptTokens = totalPrompt
 				aggregate.TotalCompletionTokens = totalCompletion
 
-				if err := evalStore.UpdateRunMetrics(ctx, evalRunID, aggregate); err != nil {
+				if err := evalDB.UpdateRunMetrics(ctx, evalRunID, aggregate); err != nil {
 					return fmt.Errorf("update metrics: %w", err)
 				}
 
@@ -314,7 +314,7 @@ func collectResults(
 
 			results = append(results, r)
 			if len(results) >= batchSize {
-				if err := evalStore.BulkAddQueryResults(ctx, evalRunID, results); err != nil {
+				if err := evalDB.BulkAddQueryResults(ctx, evalRunID, results); err != nil {
 					return fmt.Errorf("store batch: %w", err)
 				}
 				*allResults = append(*allResults, results...)

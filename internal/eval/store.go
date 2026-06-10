@@ -10,15 +10,24 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-type EvalStore struct {
+// EvalDB is the interface for eval run storage, enabling mock-based unit tests.
+type EvalDB interface {
+	CreateRun(ctx context.Context, tag string, strategy map[string]any) (string, error)
+	BulkAddQueryResults(ctx context.Context, runID string, results []types.RetrievalResult) error
+	UpdateRunMetrics(ctx context.Context, runID string, metrics types.AggregateMetrics) error
+	DeleteRunResults(ctx context.Context, runID string) error
+	GetRunResults(ctx context.Context, runID string) ([]types.RetrievalResult, error)
+}
+
+type PgEvalStore struct {
 	pool *pgxpool.Pool
 }
 
-func NewEvalStore(pool *pgxpool.Pool) *EvalStore {
-	return &EvalStore{pool: pool}
+func NewEvalStore(pool *pgxpool.Pool) EvalDB {
+	return &PgEvalStore{pool: pool}
 }
 
-func (s *EvalStore) CreateRun(ctx context.Context, tag string, strategy map[string]any) (string, error) {
+func (s *PgEvalStore) CreateRun(ctx context.Context, tag string, strategy map[string]any) (string, error) {
 	if strategy == nil {
 		strategy = make(map[string]any)
 	}
@@ -40,7 +49,7 @@ var evalQueriesColumns = []string{
 	"rank_first", "prompt_tokens", "completion_tokens", "latency_ms", "answer_score",
 }
 
-func (s *EvalStore) BulkAddQueryResults(ctx context.Context, runID string, results []types.RetrievalResult) error {
+func (s *PgEvalStore) BulkAddQueryResults(ctx context.Context, runID string, results []types.RetrievalResult) error {
 	if len(results) == 0 {
 		return nil
 	}
@@ -78,7 +87,7 @@ func (s *EvalStore) BulkAddQueryResults(ctx context.Context, runID string, resul
 	return nil
 }
 
-func (s *EvalStore) UpdateRunMetrics(ctx context.Context, runID string, metrics types.AggregateMetrics) error {
+func (s *PgEvalStore) UpdateRunMetrics(ctx context.Context, runID string, metrics types.AggregateMetrics) error {
 	metricsJSON, err := json.Marshal(metrics)
 	if err != nil {
 		return fmt.Errorf("marshal metrics: %w", err)
@@ -93,7 +102,7 @@ func (s *EvalStore) UpdateRunMetrics(ctx context.Context, runID string, metrics 
 	return nil
 }
 
-func (s *EvalStore) DeleteRunResults(ctx context.Context, runID string) error {
+func (s *PgEvalStore) DeleteRunResults(ctx context.Context, runID string) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM eval_queries WHERE run_id = $1`, runID)
 	if err != nil {
 		return fmt.Errorf("delete run results: %w", err)
@@ -101,7 +110,7 @@ func (s *EvalStore) DeleteRunResults(ctx context.Context, runID string) error {
 	return nil
 }
 
-func (s *EvalStore) GetRunResults(ctx context.Context, runID string) ([]types.RetrievalResult, error) {
+func (s *PgEvalStore) GetRunResults(ctx context.Context, runID string) ([]types.RetrievalResult, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT question_id, question, category, difficulty, expected_answer, generated_answer, ndcg_graded, expected_paths, retrieved, relevance, hit, rank_first, prompt_tokens, completion_tokens, latency_ms, answer_score
 		 FROM eval_queries WHERE run_id = $1 ORDER BY created_at ASC`,
