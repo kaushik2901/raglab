@@ -53,9 +53,7 @@ func NewChatService(cfg *config.Config, vs qstore.VectorStore) (*ChatService, er
 	return &ChatService{embedder: emb, retriever: ret, generator: gen, memory: mem}, nil
 }
 
-func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
-	start := time.Now()
-
+func (s *ChatService) retrieveSources(ctx context.Context, req ChatRequest) ([]types.SearchResult, []SourceDoc, error) {
 	topK := req.TopK
 	if topK <= 0 {
 		topK = 5
@@ -63,9 +61,17 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 
 	results, err := s.retriever.Retrieve(ctx, req.Tag, req.Query, topK)
 	if err != nil {
-		return nil, fmt.Errorf("retrieve: %w", err)
+		return nil, nil, fmt.Errorf("retrieve: %w", err)
 	}
 
+	sources := make([]SourceDoc, len(results))
+	for i, r := range results {
+		sources[i] = SourceDoc{DocumentPath: r.DocumentPath, Score: r.Score}
+	}
+	return results, sources, nil
+}
+
+func (s *ChatService) buildMessages(req ChatRequest, results []types.SearchResult) []openai.ChatCompletionMessageParamUnion {
 	messages := []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage("You are a helpful assistant that answers questions based on the provided context. If the context does not contain enough information to answer, say so."),
 	}
@@ -84,20 +90,37 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 	userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", strings.Join(contextParts, "\n\n"), req.Query)
 	messages = append(messages, openai.UserMessage(userPrompt))
 
-	maxTokens := req.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = 1024
+	return messages
+}
+
+func resolveMaxTokens(req ChatRequest) int {
+	if req.MaxTokens <= 0 {
+		return 1024
+	}
+	return req.MaxTokens
+}
+
+func resolveTemperature(req ChatRequest) float64 {
+	if req.Temperature != nil {
+		return *req.Temperature
+	}
+	return 0.3
+}
+
+func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	start := time.Now()
+
+	results, sources, err := s.retrieveSources(ctx, req)
+	if err != nil {
+		return nil, err
 	}
 
-	temperature := 0.3
-	if req.Temperature != nil {
-		temperature = *req.Temperature
-	}
+	messages := s.buildMessages(req, results)
 
 	completion, err := s.generator.Generate(ctx, openai.ChatCompletionNewParams{
 		Messages:    messages,
-		MaxTokens:   openai.Int(int64(maxTokens)),
-		Temperature: openai.Float(temperature),
+		MaxTokens:   openai.Int(int64(resolveMaxTokens(req))),
+		Temperature: openai.Float(resolveTemperature(req)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("generate: %w", err)
@@ -110,11 +133,6 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 	answer := completion.Choices[0].Message.Content
 	if req.ConversationID != "" {
 		s.memory.Add(req.ConversationID, req.Query, answer)
-	}
-
-	sources := make([]SourceDoc, len(results))
-	for i, r := range results {
-		sources[i] = SourceDoc{DocumentPath: r.DocumentPath, Score: r.Score}
 	}
 
 	return &ChatResponse{

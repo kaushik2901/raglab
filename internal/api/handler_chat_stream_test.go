@@ -37,8 +37,8 @@ func (m *mockGenForStream) GenerateStream(ctx context.Context, params openai.Cha
 func (m *mockGenForStream) ModelName() string { return "mock" }
 
 func TestChatStreamHandler_Success(t *testing.T) {
-	srv := &Server{
-		chat: &ChatService{
+	cr := &ChatRouter{
+		svc: &ChatService{
 			retriever: &mockRetrieverForStream{
 				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
 					return []types.SearchResult{
@@ -68,7 +68,7 @@ func TestChatStreamHandler_Success(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	srv.chatStreamHandler(rec, req)
+	cr.chatStreamHandler(rec, req)
 
 	assert.Equal(t, 200, rec.Code)
 	assert.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
@@ -86,14 +86,14 @@ func TestChatStreamHandler_Success(t *testing.T) {
 }
 
 func TestChatStreamHandler_InvalidJSON(t *testing.T) {
-	srv := &Server{}
+	cr := &ChatRouter{}
 
 	body := `{bad json`
 	req := httptest.NewRequest("POST", "/api/v1/chat/stream", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	srv.chatStreamHandler(rec, req)
+	cr.chatStreamHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
 	var p ProblemDetail
@@ -102,7 +102,7 @@ func TestChatStreamHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestChatStreamHandler_MissingFields(t *testing.T) {
-	srv := &Server{}
+	cr := &ChatRouter{}
 
 	tests := []struct {
 		name string
@@ -118,7 +118,7 @@ func TestChatStreamHandler_MissingFields(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 
-			srv.chatStreamHandler(rec, req)
+			cr.chatStreamHandler(rec, req)
 
 			assert.Equal(t, 400, rec.Code)
 		})
@@ -126,8 +126,8 @@ func TestChatStreamHandler_MissingFields(t *testing.T) {
 }
 
 func TestChatStreamHandler_RetrievalError(t *testing.T) {
-	srv := &Server{
-		chat: &ChatService{
+	cr := &ChatRouter{
+		svc: &ChatService{
 			retriever: &mockRetrieverForStream{
 				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
 					return nil, fmt.Errorf("qdrant error")
@@ -141,7 +141,7 @@ func TestChatStreamHandler_RetrievalError(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	srv.chatStreamHandler(rec, req)
+	cr.chatStreamHandler(rec, req)
 
 	scanner := bufio.NewScanner(rec.Body)
 	var hasError bool
@@ -157,8 +157,8 @@ func TestChatStreamHandler_WithMemory(t *testing.T) {
 	mem := memory.NewRingBuffer(10)
 	mem.Add("conv-1", "previous question", "previous answer")
 
-	srv := &Server{
-		chat: &ChatService{
+	cr := &ChatRouter{
+		svc: &ChatService{
 			retriever: &mockRetrieverForStream{
 				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
 					return []types.SearchResult{{DocumentPath: "doc1.md", Content: "content", Score: 0.95}}, nil
@@ -184,7 +184,7 @@ func TestChatStreamHandler_WithMemory(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	srv.chatStreamHandler(rec, req)
+	cr.chatStreamHandler(rec, req)
 
 	turns := mem.Get("conv-1")
 	assert.Len(t, turns, 2)

@@ -20,14 +20,11 @@ import (
 const version = "0.1.0"
 
 type Server struct {
-	cfg       *config.Config
-	router    *chi.Mux
-	http      *http.Server
-	pool      *pgxpool.Pool
-	qdrant    qstore.VectorStore
-	workflows *WorkflowService
-	chat      *ChatService
-	evalSvc   *EvalService
+	cfg    *config.Config
+	router *chi.Mux
+	http   *http.Server
+	pool   *pgxpool.Pool
+	qdrant qstore.VectorStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -46,7 +43,7 @@ func New(cfg *config.Config) (*Server, error) {
 	r.Use(RequestID)
 	r.Use(StructuredLog)
 	r.Use(Recovery)
-	r.Use(MaxBodySize(10 << 20)) // 10 MB
+	r.Use(MaxBodySize(10 << 20))
 	r.Use(Timeout(cfg.APIRequestTimeout))
 
 	s := &Server{
@@ -56,32 +53,28 @@ func New(cfg *config.Config) (*Server, error) {
 		qdrant: qdrantStore,
 	}
 
-	r.Get("/health", s.healthHandler)
-	r.Get("/api/v1/artifacts", s.artifactListHandler)
+	NewHealthRouter(pool, qdrantStore).Register(r)
+	NewArtifactRouter(cfg.ArtifactsDir).Register(r)
 
-	s.workflows = s.newWorkflowService(pool)
-	s.evalSvc = NewEvalService(pool)
-
+	evalSvc := NewEvalService(pool)
 	r.Route("/api/v1/eval", func(r chi.Router) {
-		r.Get("/runs", s.evalListHandler)
-		r.Get("/runs/{id}", s.evalDetailHandler)
-		r.Get("/runs/{id}/compare", s.evalCompareHandler)
+		NewEvalRouter(evalSvc).Register(r)
 	})
 
-	r.Route("/api/v1/workflows", func(r chi.Router) {
-		r.Post("/preprocess", s.preprocessHandler)
-		r.Post("/index", s.indexHandler)
-		r.Post("/eval", s.evalHandler)
-		r.Get("/{id}", s.workflowStatusHandler)
-	})
+	workflowSvc := s.newWorkflowService(pool)
+	if workflowSvc != nil {
+		r.Route("/api/v1/workflows", func(r chi.Router) {
+			NewWorkflowRouter(workflowSvc).Register(r)
+		})
+	}
 
-	chatSvc, err := NewChatService(cfg, s.qdrant)
+	chatSvc, err := NewChatService(cfg, qdrantStore)
 	if err != nil {
 		slog.Warn("chat service init failed, chat endpoint unavailable", "err", err)
 	} else {
-		s.chat = chatSvc
-		r.Post("/api/v1/chat", s.chatHandler)
-		r.Post("/api/v1/chat/stream", s.chatStreamHandler)
+		r.Route("/api/v1/chat", func(r chi.Router) {
+			NewChatRouter(chatSvc).Register(r)
+		})
 	}
 
 	return s, nil

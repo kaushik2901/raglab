@@ -20,8 +20,8 @@ func TestPreprocessHandler_ValidRequest(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	s := &Server{
-		workflows: &WorkflowService{
+	r := &WorkflowRouter{
+		svc: &WorkflowService{
 			client: &mockJobClient{
 				insertFn: func(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 					return &rivertype.JobInsertResult{
@@ -34,8 +34,7 @@ func TestPreprocessHandler_ValidRequest(t *testing.T) {
 			},
 		},
 	}
-
-	s.preprocessHandler(rec, req)
+	r.preprocessHandler(rec, req)
 
 	assert.Equal(t, 202, rec.Code)
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
@@ -54,8 +53,8 @@ func TestPreprocessHandler_MissingRepoURL(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	s := &Server{
-		workflows: &WorkflowService{
+	r := &WorkflowRouter{
+		svc: &WorkflowService{
 			client: &mockJobClient{
 				insertFn: func(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 					return nil, fmt.Errorf("repo_url is required")
@@ -63,8 +62,7 @@ func TestPreprocessHandler_MissingRepoURL(t *testing.T) {
 			},
 		},
 	}
-
-	s.preprocessHandler(rec, req)
+	r.preprocessHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
 	var p ProblemDetail
@@ -78,8 +76,8 @@ func TestPreprocessHandler_InvalidJSON(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	s := &Server{}
-	s.preprocessHandler(rec, req)
+	r := &WorkflowRouter{}
+	r.preprocessHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
 }
@@ -90,8 +88,8 @@ func TestIndexHandler_ValidRequest(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	s := &Server{
-		workflows: &WorkflowService{
+	r := &WorkflowRouter{
+		svc: &WorkflowService{
 			client: &mockJobClient{
 				insertFn: func(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 					return &rivertype.JobInsertResult{
@@ -104,8 +102,7 @@ func TestIndexHandler_ValidRequest(t *testing.T) {
 			},
 		},
 	}
-
-	s.indexHandler(rec, req)
+	r.indexHandler(rec, req)
 
 	assert.Equal(t, 202, rec.Code)
 }
@@ -116,8 +113,8 @@ func TestIndexHandler_MissingInputTag(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	s := &Server{}
-	s.indexHandler(rec, req)
+	r := &WorkflowRouter{}
+	r.indexHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
 }
@@ -128,8 +125,8 @@ func TestEvalHandler_ValidRequest(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
-	s := &Server{
-		workflows: &WorkflowService{
+	r := &WorkflowRouter{
+		svc: &WorkflowService{
 			client: &mockJobClient{
 				insertFn: func(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 					return &rivertype.JobInsertResult{
@@ -142,8 +139,7 @@ func TestEvalHandler_ValidRequest(t *testing.T) {
 			},
 		},
 	}
-
-	s.evalHandler(rec, req)
+	r.evalHandler(rec, req)
 
 	assert.Equal(t, 202, rec.Code)
 }
@@ -164,8 +160,8 @@ func TestEvalHandler_MissingFields(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 
-			s := &Server{}
-			s.evalHandler(rec, req)
+			r := &WorkflowRouter{}
+			r.evalHandler(rec, req)
 
 			assert.Equal(t, 400, rec.Code)
 		})
@@ -176,8 +172,8 @@ func TestWorkflowStatusHandler_Found(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/workflows/42", nil)
 	rec := httptest.NewRecorder()
 
-	s := &Server{
-		workflows: &WorkflowService{
+	r := &WorkflowRouter{
+		svc: &WorkflowService{
 			client: &mockJobClient{
 				jobGetFn: func(ctx context.Context, id int64) (*rivertype.JobRow, error) {
 					return &rivertype.JobRow{
@@ -193,7 +189,7 @@ func TestWorkflowStatusHandler_Found(t *testing.T) {
 	chiCtx.URLParams.Add("id", "42")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 
-	s.workflowStatusHandler(rec, req)
+	r.workflowStatusHandler(rec, req)
 
 	assert.Equal(t, 200, rec.Code)
 }
@@ -202,8 +198,8 @@ func TestWorkflowStatusHandler_NotFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/workflows/999", nil)
 	rec := httptest.NewRecorder()
 
-	s := &Server{
-		workflows: &WorkflowService{
+	r := &WorkflowRouter{
+		svc: &WorkflowService{
 			client: &mockJobClient{
 				jobGetFn: func(ctx context.Context, id int64) (*rivertype.JobRow, error) {
 					return nil, river.ErrNotFound
@@ -216,7 +212,7 @@ func TestWorkflowStatusHandler_NotFound(t *testing.T) {
 	chiCtx.URLParams.Add("id", "999")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 
-	s.workflowStatusHandler(rec, req)
+	r.workflowStatusHandler(rec, req)
 
 	assert.Equal(t, 404, rec.Code)
 }
@@ -225,13 +221,13 @@ func TestWorkflowStatusHandler_InvalidID(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/workflows/abc", nil)
 	rec := httptest.NewRecorder()
 
-	s := &Server{}
+	r := &WorkflowRouter{}
 
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("id", "abc")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
 
-	s.workflowStatusHandler(rec, req)
+	r.workflowStatusHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
 }

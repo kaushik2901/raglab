@@ -2,20 +2,37 @@ package api
 
 import (
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 )
 
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
+type HealthRouter struct {
+	pool   *pgxpool.Pool
+	qdrant qstore.VectorStore
+}
+
+func NewHealthRouter(pool *pgxpool.Pool, qdrant qstore.VectorStore) *HealthRouter {
+	return &HealthRouter{pool: pool, qdrant: qdrant}
+}
+
+func (r *HealthRouter) Register(mux chi.Router) {
+	mux.Get("/health", r.healthHandler)
+}
+
+func (r *HealthRouter) healthHandler(w http.ResponseWriter, req *http.Request) {
 	services := map[string]string{}
 
-	if s.pool == nil {
+	if r.pool == nil {
 		services["postgres"] = "disconnected: not initialized"
-	} else if err := s.pool.Ping(r.Context()); err != nil {
+	} else if err := r.pool.Ping(req.Context()); err != nil {
 		services["postgres"] = "disconnected: " + err.Error()
 	} else {
 		services["postgres"] = "connected"
 	}
 
-	if err := s.qdrant.HealthCheck(r.Context()); err != nil {
+	if err := r.qdrant.HealthCheck(req.Context()); err != nil {
 		services["qdrant"] = "disconnected: " + err.Error()
 	} else {
 		services["qdrant"] = "connected"

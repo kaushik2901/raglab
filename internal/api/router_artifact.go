@@ -5,16 +5,31 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
-func (s *Server) artifactListHandler(w http.ResponseWriter, r *http.Request) {
-	artifactType := r.URL.Query().Get("type")
-	tag := r.URL.Query().Get("tag")
+type ArtifactRouter struct {
+	artifactsDir string
+}
 
-	baseDir := "artifacts"
-	if s.cfg != nil && s.cfg.ArtifactsDir != "" {
-		baseDir = s.cfg.ArtifactsDir
+func NewArtifactRouter(artifactsDir string) *ArtifactRouter {
+	return &ArtifactRouter{artifactsDir: artifactsDir}
+}
+
+func (r *ArtifactRouter) Register(mux chi.Router) {
+	mux.Get("/artifacts", r.listHandler)
+}
+
+func (r *ArtifactRouter) listHandler(w http.ResponseWriter, req *http.Request) {
+	artifactType := req.URL.Query().Get("type")
+	tag := req.URL.Query().Get("tag")
+
+	baseDir := r.artifactsDir
+	if baseDir == "" {
+		baseDir = "artifacts"
 	}
+
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		respondProblem(w, 500, "Internal Server Error", "cannot list artifacts")

@@ -33,14 +33,13 @@ func TestHealthHandler_NilPool(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/health", nil)
 
-	s := &Server{
+	rh := &HealthRouter{
 		pool: nil,
 		qdrant: &mockQdrant{
 			healthFn: func(ctx context.Context) error { return errors.New("connection refused") },
 		},
 	}
-
-	s.healthHandler(w, r)
+	rh.healthHandler(w, r)
 
 	assert.Equal(t, 503, w.Code)
 
@@ -57,14 +56,13 @@ func TestHealthHandler_BothDown(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/health", nil)
 
-	s := &Server{
+	rh := &HealthRouter{
 		pool: nil,
 		qdrant: &mockQdrant{
 			healthFn: func(ctx context.Context) error { return errors.New("down") },
 		},
 	}
-
-	s.healthHandler(w, r)
+	rh.healthHandler(w, r)
 
 	assert.Equal(t, 503, w.Code)
 
@@ -78,14 +76,13 @@ func TestHealthHandler_QdrantOK(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/health", nil)
 
-	s := &Server{
+	rh := &HealthRouter{
 		pool: nil,
 		qdrant: &mockQdrant{
 			healthFn: func(ctx context.Context) error { return nil },
 		},
 	}
-
-	s.healthHandler(w, r)
+	rh.healthHandler(w, r)
 
 	assert.Equal(t, 503, w.Code)
 

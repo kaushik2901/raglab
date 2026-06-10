@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestArtifactListHandler_Empty(t *testing.T) {
@@ -17,15 +16,14 @@ func TestArtifactListHandler_Empty(t *testing.T) {
 	os.Rename(origDir, backup)
 	defer os.Rename(backup, origDir)
 
-	// Create empty artifacts dir
 	os.MkdirAll(origDir, 0755)
 	defer os.RemoveAll(origDir)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/artifacts", nil)
 
-	s := &Server{}
-	s.artifactListHandler(w, r)
+	ar := &ArtifactRouter{artifactsDir: origDir}
+	ar.listHandler(w, r)
 
 	assert.Equal(t, 200, w.Code)
 
@@ -38,29 +36,19 @@ func TestArtifactListHandler_Empty(t *testing.T) {
 
 func TestArtifactListHandler_WithFiles(t *testing.T) {
 	dir := t.TempDir()
-	origDir := "artifacts"
-	backup := "_artifacts_backup2"
-	os.Rename(origDir, backup)
-	defer os.Rename(backup, origDir)
 
-	// Symlink temp dir
-	err := os.Symlink(dir, origDir)
-	require.NoError(t, err)
-	defer os.Remove(origDir)
+	ar := &ArtifactRouter{artifactsDir: dir}
 
-	// Create structure: artifacts/preprocessing/tag1/output/file.md
 	os.MkdirAll(filepath.Join(dir, "preprocessing", "tag1", "output"), 0755)
 	os.WriteFile(filepath.Join(dir, "preprocessing", "tag1", "output", "test.md"), []byte("hello"), 0644)
 	os.WriteFile(filepath.Join(dir, "preprocessing", "tag1", "output", "other.txt"), []byte("world"), 0644)
 
-	// indexing/tag2 (no output dir)
 	os.MkdirAll(filepath.Join(dir, "indexing", "tag2"), 0755)
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/artifacts", nil)
 
-	s := &Server{}
-	s.artifactListHandler(w, r)
+	ar.listHandler(w, r)
 
 	assert.Equal(t, 200, w.Code)
 
@@ -91,13 +79,8 @@ func TestArtifactListHandler_WithFiles(t *testing.T) {
 
 func TestArtifactListHandler_FilterByType(t *testing.T) {
 	dir := t.TempDir()
-	origDir := "artifacts"
-	backup := "_artifacts_backup3"
-	os.Rename(origDir, backup)
-	defer os.Rename(backup, origDir)
 
-	os.Symlink(dir, origDir)
-	defer os.Remove(origDir)
+	ar := &ArtifactRouter{artifactsDir: dir}
 
 	os.MkdirAll(filepath.Join(dir, "preprocessing", "tag1", "output"), 0755)
 	os.MkdirAll(filepath.Join(dir, "indexing", "tag2"), 0755)
@@ -106,8 +89,7 @@ func TestArtifactListHandler_FilterByType(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/api/v1/artifacts?type=preprocessing", nil)
 
-	s := &Server{}
-	s.artifactListHandler(w, r)
+	ar.listHandler(w, r)
 
 	var resp map[string]any
 	json.NewDecoder(w.Body).Decode(&resp)
