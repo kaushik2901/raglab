@@ -3,11 +3,8 @@
 ## Commands
 
 ```powershell
-go build -o bin\preprocess.exe .\cmd\preprocess   # build preprocess CLI
-go build -o bin\index.exe .\cmd\index             # build index CLI
-go build -o bin\query.exe .\cmd\query             # build query CLI
-go build -o bin\eval.exe .\cmd\eval               # build eval CLI
 go build -o bin\workerd.exe .\cmd\workerd         # build worker daemon
+go build -o bin\api.exe .\cmd\api                 # build API server
 go test ./...                                      # all tests
 Remove-Item -Recurse -Force bin,output,.journal    # clean
 ```
@@ -25,15 +22,13 @@ External Go dependencies managed via `go.mod` / `go.sum`. No `vendor/` dir.
 | 2     | `preprocess` | `clone`             | Reads `{repo}/content/`, writes cleaned markdown to `--output`                       |
 | 3     | `verify`     | `clone, preprocess` | Writes `_verification_report.json` to output dir                                     |
 
-Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to resume.
-
 ## Quirks
 
 - Package `internal/stage/` is named `stage` (formerly `stageimport`).
 - `handbook/` is the default clone target, NOT tracked in git (but not gitignored either).
 - Journal caching lives in `.journal/` (gob files per stage). Delete it to force re-run.
 - `config.Config` is system-level only: `MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`.
-- Pipeline inputs (repo URL, chunk params, etc.) are parsed inline by each `cmd/*/main.go`, not in config. Stage functions accept explicit parameters instead of `*config.Config` — see per-stage signatures.
+- Pipeline inputs (repo URL, chunk params, etc.) are accepted via the REST API (`POST /api/v1/workflows/*`). Stage functions accept explicit parameters instead of `*config.Config` — see per-stage signatures.
 - `go mod tidy` is only needed if adding external deps (currently none beyond existing go.mod).
 - Pipeline retries use exponential backoff + jitter. `MaxRetries=0` means no retries. `RetryBackoff` must be > 0.
 
@@ -52,7 +47,7 @@ Stages are defined in `cmd/preprocess/main.go:69-72`. Use `--from <stage>` to re
 
 ## Indexing Pipeline
 
-The indexing pipeline (`cmd/index/`) builds on the preprocessing output. A single `IndexWorker` processes documents one at a time in a streaming fashion — no document content, chunks, or embeddings are stored in Postgres:
+The indexing pipeline builds on the preprocessing output. A single `IndexWorker` processes documents one at a time in a streaming fashion — no document content, chunks, or embeddings are stored in Postgres:
 
 ```
 IndexWorker walks artifacts/preprocessing/<input_tag>/output/
@@ -64,7 +59,7 @@ IndexWorker walks artifacts/preprocessing/<input_tag>/output/
 ```
 
 - **Types:** `internal/types/indexing.go` — `Chunk`, `Embedding`, `DocumentChunk`
-- **Config:** system-level only (`MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`); indexing params are parsed inline in `cmd/index/main.go`
+- **Config:** system-level only (`MAX_RETRIES`, `RETRY_BACKOFF`, `LOG_LEVEL`, `DATABASE_URL`, `LLM_BASE_URL`, `LLM_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`); indexing params are accepted via the REST API
 - **Parser:** `internal/parser/parser.go` — reads a single `.md` file into `types.Document`
 - **Fixed chunker:** `internal/chunker/` — word-window splitting with configurable size/overlap
 - **Embedder:** `internal/embedder/` — interface + OpenAI-compatible HTTP embedder with batching and rate-limit retry
@@ -97,34 +92,6 @@ All four providers use **OpenAI-compatible API format** under the hood. The `--l
 | `openrouter` | `OPENROUTER_API_KEY`   | `OPENROUTER_BASE_URL`             | `https://openrouter.ai/api/v1`                                |
 | `lmstudio`   | *(none)*               | `LMSTUDIO_BASE_URL`               | `http://localhost:1234/v1`                                    |
 
-### CLI flags
-
-| Flag                     | Env                     | Default      | Applies to                        |
-|--------------------------|-------------------------|--------------|-----------------------------------|
-| `--llm-provider`         | `LLM_PROVIDER`          | `openai`     | All CLIs (index, eval, query)     |
-| `--embedding-provider`   | `EMBEDDING_PROVIDER`    | → `--llm-provider` | index, eval, query          |
-| `--judge-provider`       | `JUDGE_PROVIDER`        | → `--llm-provider` | eval only                   |
-| `--batch-size`           | `BATCH_SIZE`            | `20`          | index, eval                      |
-| `--eval-concurrency`     | `EVAL_CONCURRENCY`      | `5`           | eval only                        |
-
-### Usage examples
-
-```powershell
-# OpenAI (default, backward-compatible)
-.\bin\query.exe --llm-provider openai --llm-model gpt-4o --tag my-collection --query "..."
-
-# OpenRouter
-$env:OPENROUTER_API_KEY = "sk-or-..."
-.\bin\index.exe --llm-provider openrouter --embedding-model "openai/text-embedding-3-small" --input-tag pre-20260603
-
-# LM Studio (local, no key)
-.\bin\query.exe --llm-provider lmstudio --llm-model "local-model" --tag my-collection --query "..."
-
-# Google Gemini via OpenAI-compatible endpoint
-$env:GEMINI_API_KEY = "AIza..."
-.\bin\eval.exe --llm-provider gemini --llm-model "gemini-2.0-flash" --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/...
-```
-
 ### Embedder + Generator factories
 
 - `embedder.New(provider, model, batchSize)` — resolves env vars, returns `embedder.Embedder`
@@ -147,7 +114,7 @@ There is currently no `--force-recreate` flag — the safe workaround is to use 
 
 ## Important: Rebuild workerd after provider changes
 
-CLI changes (flags, env vars) take effect immediately via `make.cmd <cmd>`, but **River workers** (`workerd.exe`) must be rebuilt and restarted separately to pick up changes to worker logic.
+**River workers** (`workerd.exe`) must be rebuilt and restarted separately to pick up changes to worker logic.
 
 ```powershell
 go build -o bin\workerd.exe .\cmd\workerd  # rebuild worker daemon
@@ -170,7 +137,6 @@ Phases 2-4 run **sequentially per question** — no parallelism within each phas
 
 | File | Role |
 |------|------|
-| `cmd/eval/main.go` | Thin CLI — reads `.json` dataset files, inserts River jobs, polls workflows |
 | `internal/workflow/eval_worker.go` | River worker — creates embedder/generator/judge, calls pipeline |
 | `internal/eval/pipeline.go` | **NEW** — phase-based `Evaluate()` (batch embed → sequential loop) |
 | `internal/eval/retrieval.go` | Legacy per-question evaluator (kept for tests) |
@@ -178,6 +144,4 @@ Phases 2-4 run **sequentially per question** — no parallelism within each phas
 | `internal/eval/judge.go` | `JudgeAnswer` — calls LLM to score answer correctness |
 | `internal/eval/store.go` | `EvalStore` — `eval_runs` / `eval_queries` CRUD |
 
-- Usage: `.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset-dir artifacts/preprocessing/pre-20260603-141651/eval-dataset`
-- Run `.\bin\eval.exe --help` for all flags
 - Relevance judgments use `document_path` (e.g. `handbook/travel-policy.md`)

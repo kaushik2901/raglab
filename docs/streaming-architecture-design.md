@@ -195,13 +195,16 @@ func streamFile(ctx context.Context, fp, relPath string, chunkr Chunker, emb Emb
 
 **Memory per goroutine:** `batchSize` chunks (~6 MB) + chunker window (~`Size` words).
 
-## CLI Flag Semantics
+## Strategy Selection
 
-All strategies are selected via CLI flags, validated against a registry:
+All strategies are selected via explicit API payload fields, validated against a registry:
 
-```powershell
-.\bin\index.exe --parser markdown --chunker semantic --tag my-collection
-.\bin\query.exe --retriever hybrid --llm-provider openai --tag my-collection --query "..."
+```json
+{
+  "parser_strategy": "markdown",
+  "chunk_strategy": "semantic",
+  "tag": "my-collection"
+}
 ```
 
 Every strategy is a registered name in a map:

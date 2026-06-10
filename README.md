@@ -8,10 +8,8 @@ Uses **River** (`github.com/riverqueue/river`) as the job engine — a lightweig
 
 ```mermaid
 flowchart LR
-    subgraph CLIs["CLI Layer (River job inserters)"]
-        PP[cmd/preprocess]
-        IDX[cmd/index]
-        EV[cmd/eval]
+    subgraph API["API Layer"]
+        API_SERVER[cmd/api<br/>REST API]
     end
 
     subgraph PG["Postgres (River + State)"]
@@ -21,32 +19,26 @@ flowchart LR
     end
 
     subgraph WORKER["workerd Process (River Workers)"]
-        PREW[Clone → Preprocess → Verify<br/>3 workers]
+        PREW[Clone → Preprocess → Verify<br/>1 worker]
         INDW[Parse → Chunk → Embed → Store<br/>1 worker, parallel files]
         EVALW[Retrieve → Generate → Judge<br/>1 worker, sequential questions]
-    end
-
-    subgraph QUERY["Synchronous CLI"]
-        Q[cmd/query<br/>Embed → Search → Generate]
     end
 
     subgraph STORE["Vector Store"]
         QDRANT[(Qdrant<br/>gRPC)]
     end
 
-    PP --> PG
-    IDX --> PG
-    EV --> PG
+    API_SERVER --> PG
     PG --> PREW
     PG --> INDW
     PG --> EVALW
     INDW --> QDRANT
     PREW -.->|cleaned markdown<br/>on disk| INDW
     EVALW --> QDRANT
-    Q --> QDRANT
+    API_SERVER --> QDRANT
 ```
 
-Three pipelines share a single `workerd` process. The preprocessing pipeline writes cleaned markdown to disk; the indexing pipeline reads it back and stores vectors in Qdrant; the eval pipeline measures retrieval quality. The query CLI runs synchronously (not a River workflow).
+Workflows are triggered via the REST API and executed by River workers in the `workerd` process. The preprocessing pipeline writes cleaned markdown to disk; the indexing pipeline reads it back and stores vectors in Qdrant; the eval pipeline measures retrieval quality.
 
 ### Pipeline Stage Flow
 
@@ -77,20 +69,22 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    participant CLI as cmd/eval
+    participant API as API Server
+    participant WK as workerd (eval worker)
     participant Q as Qdrant
     participant LLM as LLM API
 
-    CLI->>CLI: Batch embed all N queries
+    API->>WK: Insert eval River job
+    WK->>WK: Batch embed all N queries
     loop For each question (1..N)
-        CLI->>Q: Search (query vector)
-        Q-->>CLI: top-K results
-        CLI->>LLM: Generate answer (context + question)
-        LLM-->>CLI: answer + tokens
-        CLI->>LLM: Judge (question + expected + answer)
-        LLM-->>CLI: correctness score (0-1)
+        WK->>Q: Search (query vector)
+        Q-->>WK: top-K results
+        WK->>LLM: Generate answer (context + question)
+        LLM-->>WK: answer + tokens
+        WK->>LLM: Judge (question + expected + answer)
+        LLM-->>WK: correctness score (0-1)
     end
-    CLI->>CLI: Compute aggregate metrics
+    WK->>WK: Compute aggregate metrics
 ```
 
 ## Prerequisites
@@ -113,31 +107,13 @@ Transforms Hugo markdown into clean markdown suitable for LLM ingestion.
    - Resolves `{{< ref >}}` / `{{< relref >}}` to markdown links
 3. **verify** — validates output quality (file count, directory structure, no stray shortcodes/HTML, minimum content size, total size sanity)
 
-### Usage
-
-```bash
-go build -o bin\preprocess.exe .\cmd\preprocess
-go build -o bin\workerd.exe .\cmd\workerd
-.\bin\workerd.exe
-
-.\bin\preprocess.exe
-```
-
 Artifacts are stored at `artifacts/preprocessing/<tag>/repo/` and `artifacts/preprocessing/<tag>/output/`.
 
-### CLI Flags
-
-| Flag             | Env Var        | Default                                                | Description                                      |
-| ---------------- | -------------- | ------------------------------------------------------ | ------------------------------------------------ |
-| `--repo-url`     | `REPO_URL`     | `https://gitlab.com/gitlab-com/content-sites/handbook.git` | Handbook repository URL                          |
-| `--tag`          | `TAG`          | `pre-<timestamp>`                                      | Workflow tag                                     |
-| `--include-dirs` | `INCLUDE_DIRS` | `""`                                                   | Comma-separated subdirs to process (empty = all) |
-
-The preprocess worker runs clone → preprocess → verify as a single River job with checkpointing (resumes from the last completed step on crash).
+The preprocess worker runs clone → preprocess → verify as a single River job with checkpointing (resumes from the last completed step on crash). Trigger via `POST /api/v1/workflows/preprocess`.
 
 ## Indexing Pipeline
 
-Builds on the preprocessing output. Reads cleaned markdown, chunks documents, generates embeddings, and stores vectors in Qdrant. **Files are processed concurrently** (configurable via `--index-concurrency`).
+Builds on the preprocessing output. Reads cleaned markdown, chunks documents, generates embeddings, and stores vectors in Qdrant. **Files are processed concurrently** (configurable via `index_concurrency` in the request payload).
 
 ### Stages
 
@@ -146,31 +122,7 @@ Builds on the preprocessing output. Reads cleaned markdown, chunks documents, ge
 3. **embed** — sends chunks to any OpenAI-compatible embedding API (OpenAI, OpenRouter, LM Studio, Ollama)
 4. **store** — upserts document chunks with embeddings into Qdrant via gRPC
 
-### Usage
-
-```bash
-go build -o bin\index.exe .\cmd\index
-.\bin\workerd.exe
-
-.\bin\index.exe --input-tag pre-20260603-141651
-```
-
-### CLI Flags
-
-| Flag                   | Env Var              | Default                    | Description                                                 |
-| ---------------------- | -------------------- | -------------------------- | ----------------------------------------------------------- |
-| `--input-tag`          | `INPUT_TAG`          | —                          | **Required.** Preprocessed output tag to index              |
-| `--tag`                | `TAG`                | `idx-<timestamp>`          | Workflow tag                                                |
-| `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`) |
-| `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider                                          |
-| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model name                                        |
-| `--parser`             | `PARSER`             | `markdown`                 | Parser strategy (`markdown`)                                |
-| `--chunk-strategy`     | `CHUNK_STRATEGY`     | `fixed`                    | Chunking strategy (`fixed`, `semantic`, `recursive`)        |
-| `--chunk-size`         | `CHUNK_SIZE`         | `512`                      | Target token count per chunk                                |
-| `--chunk-overlap`      | `CHUNK_OVERLAP`      | `64`                       | Token overlap between chunks                                |
-| `--batch-size`         | `BATCH_SIZE`         | `20`                       | Embedding API batch size                                    |
-| `--index-concurrency`  | `INDEX_CONCURRENCY`  | `5`                        | Number of files to index concurrently                       |
-| `--doc-timeout`        | `DOC_TIMEOUT`        | `30m`                      | Timeout per document (parse+chunk+embed+store)              |
+Trigger via `POST /api/v1/workflows/index` with all parameters in the request payload.
 
 ## Evaluation Pipeline
 
@@ -188,71 +140,20 @@ Relevance judgments use `document_path` (the relative path within the preprocess
 - **Precision@K** — proportion of retrieved documents that are relevant
 - **Recall@K** — proportion of relevant documents that are retrieved
 
-### Usage
+Trigger via `POST /api/v1/workflows/eval` with all parameters in the request payload. Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
 
-```bash
-go build -o bin\eval.exe .\cmd\eval
-.\bin\workerd.exe
+## Chat API
 
-.\bin\eval.exe --index-tag idx-fixed-512 --query-strategy naive-search --dataset artifacts/preprocessing/pre-20260603-141651/eval-dataset/dataset.jsonl
-```
-
-### CLI Flags
-
-| Flag                   | Env Var              | Default                    | Description                                                         |
-| ---------------------- | -------------------- | -------------------------- | ------------------------------------------------------------------- |
-| `--index-tag`          | —                    | —                          | **Required.** Existing Qdrant collection name to evaluate           |
-| `--query-strategy`     | —                    | —                          | **Required.** Query strategy (`naive-search`)                       |
-| `--dataset`            | —                    | —                          | **Required.** Path to `.jsonl` dataset file                         |
-| `--top-k`              | —                    | `5`                        | Top-K retrieval                                                     |
-| `--ks`                 | —                    | `1,3,5,10`                 | Comma-separated K values for metrics                                |
-| `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`)         |
-| `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider for query embedding                              |
-| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model for query vectorization                             |
-| `--judge-provider`     | `JUDGE_PROVIDER`     | (same as `--llm-provider`) | Judge provider for answer scoring                                   |
-| `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                                     |
-| `--judge-model`        | `JUDGE_MODEL`        | (same as `--llm-model`)    | LLM model for answer correctness scoring                            |
-| `--workers`            | `WORKERS`            | `5`                        | Number of concurrent evaluator goroutines                           |
-| `--batch-size`         | `BATCH_SIZE`         | `20`                       | Embedding API batch size                                            |
-| `--tag`                | `TAG`                | `eval-<timestamp>`         | Eval run tag prefix                                                 |
-
-Dataset files follow the `EvalDataset` format (a `meta` object + `questions` array) with `document_path` in relevance judgments.
-
-## Query CLI
-
-Interactive or one-shot semantic search against an indexed collection. Runs synchronously — no River workflow.
-
-```bash
-go build -o bin\query.exe .\cmd\query
-.\bin\query.exe --tag idx-fixed-512 --query "How do I set up SSH?"
-```
-
-### CLI Flags
-
-| Flag                   | Env Var              | Default                    | Description                                                 |
-| ---------------------- | -------------------- | -------------------------- | ----------------------------------------------------------- |
-| `--tag`                | —                    | —                          | **Required.** Qdrant collection name                        |
-| `--query`              | —                    | —                          | One-shot query (omit for interactive mode)                  |
-| `--top-k`              | —                    | `5`                        | Number of results to retrieve                               |
-| `--query-strategy`     | —                    | `naive-search`             | Retrieval strategy                                          |
-| `--llm-provider`       | `LLM_PROVIDER`       | `openai`                   | LLM provider (`openai`, `gemini`, `openrouter`, `lmstudio`) |
-| `--embedding-provider` | `EMBEDDING_PROVIDER` | (same as `--llm-provider`) | Embedding provider                                          |
-| `--embedding-model`    | `EMBEDDING_MODEL`    | `text-embedding-3-small`   | Embedding model for query                                   |
-| `--llm-model`          | `LLM_MODEL`          | `gpt-4o-mini`              | LLM model for answer generation                             |
-| `--temperature`        | —                    | `0.3`                      | LLM temperature                                             |
-| `--max-tokens`         | —                    | `1024`                     | Max answer tokens                                           |
-| `--conversation-id`    | —                    | `""`                       | Conversation ID for multi-turn memory                       |
+Semantic search with RAG-based answer generation is available via `POST /api/v1/chat/chat` (non-streaming) and `POST /api/v1/chat/chat/stream` (SSE streaming). All parameters are explicit in the request payload.
 
 ## Environment Variables
 
-Secrets and connection strings are read from environment variables (not CLI flags). The `--llm-provider` flag selects which set of vars to use:
+Secrets and connection strings are read from environment variables:
 
 | Env Var               | Default                                                      | Description                            |
 | --------------------- | ------------------------------------------------------------ | -------------------------------------- |
-| `LLM_PROVIDER`        | `openai`                                                     | LLM provider name                     |
 | `LLM_API_KEY`         | `""`                                                         | LLM API key (overridable per-provider) |
 | `LLM_BASE_URL`        | `https://api.openai.com`                                     | LLM API base URL (overridable per-provider) |
-| `LLM_MODEL`           | `gpt-4o-mini`                                                | Default LLM model for generation      |
 | `OPENAI_API_KEY`      | (falls back to `LLM_API_KEY`)                                | OpenAI API key                        |
 | `OPENAI_BASE_URL`     | (falls back to `LLM_BASE_URL`) → `https://api.openai.com`    | OpenAI API base URL                   |
 | `GEMINI_API_KEY`      | `""`                                                         | Google Gemini API key                 |
@@ -261,15 +162,6 @@ Secrets and connection strings are read from environment variables (not CLI flag
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1`                               | OpenRouter API base URL               |
 | `LMSTUDIO_BASE_URL`   | `http://localhost:1234/v1`                                   | LM Studio base URL (no key)           |
 | `WORKER_CONCURRENCY`  | `20`                                                         | River worker pool concurrency         |
-| `WORKERS`             | `5`                                                          | Eval concurrent goroutines            |
-| `BATCH_SIZE`          | `20`                                                         | Embedding API batch size              |
-| `INDEX_CONCURRENCY`   | `5`                                                          | Index file processing concurrency     |
-| `EMBEDDING_MODEL`     | `text-embedding-3-small`                                     | Embedding model name                  |
-| `DOC_TIMEOUT`         | `30m`                                                        | Per-document timeout for indexing     |
-| `PARSER`              | `markdown`                                                   | Parser strategy                       |
-| `CHUNK_STRATEGY`      | `fixed`                                                      | Chunking strategy                     |
-| `CHUNK_SIZE`          | `512`                                                        | Target tokens per chunk               |
-| `CHUNK_OVERLAP`       | `64`                                                         | Token overlap between chunks          |
 | `QDRANT_URL`          | `http://localhost:6334`                                      | Qdrant gRPC endpoint                  |
 | `QDRANT_API_KEY`      | `""`                                                         | Qdrant API key (optional)             |
 | `DATABASE_URL`        | `postgres://rag:rag@localhost:5432/rag?sslmode=disable`      | Postgres connection string            |
@@ -290,7 +182,7 @@ Secrets and connection strings are read from environment variables (not CLI flag
 
 Each pipeline stage is executed as a River job, providing built-in:
 
-- **Automatic retries** (configurable via `--max-retries` / `MAX_RETRIES`)
+- **Automatic retries** (configurable via `MAX_RETRIES`)
 - **Exponential backoff** with jitter
 - **At-least-once execution** — workers are retried on failure
 - **Durable state** — workflow and step progress is persisted in Postgres
@@ -314,10 +206,7 @@ The indexer uses `golang.org/x/sync/errgroup` with a bounded semaphore to proces
 
 ```
 cmd/
-  preprocess/main.go     — Preprocessing CLI (River job trigger)
-  index/main.go          — Indexing CLI (River job trigger)
-  eval/main.go           — Evaluation CLI (River job trigger)
-  query/main.go          — Interactive/one-shot query CLI (sync)
+  api/main.go            — HTTP API server
   workerd/main.go        — River worker daemon (all workers)
 
 internal/
