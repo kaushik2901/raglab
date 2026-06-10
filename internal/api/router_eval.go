@@ -56,16 +56,26 @@ func (r *EvalRouter) detailHandler(w http.ResponseWriter, req *http.Request) {
 func (r *EvalRouter) compareHandler(w http.ResponseWriter, req *http.Request) {
 	id := chi.URLParam(req, "id")
 	compareIDs := req.URL.Query()["compare_to"]
+
+	const maxCompare = 5
+	if len(compareIDs) > maxCompare {
+		respondProblem(w, 400, "Invalid Parameter", fmt.Sprintf("too many compare_to values, max %d", maxCompare))
+		return
+	}
+
 	allIDs := append([]string{id}, compareIDs...)
 
-	runs := make(map[string]RunSummary)
+	runs, err := r.svc.GetRuns(req.Context(), allIDs)
+	if err != nil {
+		respondProblem(w, 500, "Internal Server Error", err.Error())
+		return
+	}
+
 	for _, rid := range allIDs {
-		detail, err := r.svc.GetRun(req.Context(), rid, 0, 0)
-		if err != nil {
+		if _, found := runs[rid]; !found {
 			respondProblem(w, 404, "Not Found", fmt.Sprintf("run %s not found", rid))
 			return
 		}
-		runs[rid] = detail.RunSummary
 	}
 	respondJSON(w, 200, map[string]any{"runs": runs})
 }

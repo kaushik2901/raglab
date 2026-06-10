@@ -53,6 +53,62 @@ func (s *EvalService) ListRuns(ctx context.Context, limit, offset int) ([]RunSum
 	return runs, total, rows.Err()
 }
 
+func (s *EvalService) GetRunSummary(ctx context.Context, id string) (*RunSummary, error) {
+	var r RunSummary
+	var strategyJSON, metricsJSON []byte
+	var createdAt time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, tag, strategy, metrics, created_at
+		FROM eval_runs WHERE id = $1`, id).Scan(&r.ID, &r.Tag, &strategyJSON, &metricsJSON, &createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("get run summary %s: %w", id, err)
+	}
+	if err := json.Unmarshal(strategyJSON, &r.Strategy); err != nil {
+		r.Strategy = map[string]any{}
+	}
+	if metricsJSON != nil {
+		json.Unmarshal(metricsJSON, &r.Metrics)
+	}
+	r.CreatedAt = createdAt.Format(time.RFC3339)
+	return &r, nil
+}
+
+func (s *EvalService) GetRuns(ctx context.Context, ids []string) (map[string]RunSummary, error) {
+	if len(ids) == 0 {
+		return map[string]RunSummary{}, nil
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, tag, strategy, metrics, created_at
+		FROM eval_runs WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("query runs by ids: %w", err)
+	}
+	defer rows.Close()
+
+	runs := make(map[string]RunSummary, len(ids))
+	for rows.Next() {
+		var r RunSummary
+		var strategyJSON, metricsJSON []byte
+		var createdAt time.Time
+		if err := rows.Scan(&r.ID, &r.Tag, &strategyJSON, &metricsJSON, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		if err := json.Unmarshal(strategyJSON, &r.Strategy); err != nil {
+			r.Strategy = map[string]any{}
+		}
+		if metricsJSON != nil {
+			json.Unmarshal(metricsJSON, &r.Metrics)
+		}
+		r.CreatedAt = createdAt.Format(time.RFC3339)
+		runs[r.ID] = r
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return runs, nil
+}
+
 func (s *EvalService) GetRun(ctx context.Context, id string, limit, offset int) (*RunDetail, error) {
 	var r RunDetail
 	var strategyJSON, metricsJSON []byte
