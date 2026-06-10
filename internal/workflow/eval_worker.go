@@ -50,14 +50,41 @@ type evalCheckpoint struct {
 	QuestionsProcessed int    `json:"questions_processed"`
 }
 
+// EvalWorkerDeps holds all dependencies for the eval worker.
+type EvalWorkerDeps struct {
+	EvalDB    eval.EvalDB
+	Client    *river.Client[pgx.Tx]
+	QStore    eval.VectorSearcher
+	Embedder  embedder.Embedder
+	Generator generator.Generator
+	JudgeGen  generator.Generator
+}
+
 type EvalWorker struct {
 	river.WorkerDefaults[EvalArgs]
-	EvalDB eval.EvalDB
-	Client *river.Client[pgx.Tx]
+	EvalDB    eval.EvalDB
+	Client    *river.Client[pgx.Tx]
+	QStore    eval.VectorSearcher
+	Embedder  embedder.Embedder
+	Generator generator.Generator
+	JudgeGen  generator.Generator
 }
 
 func NewEvalWorker(evalDB eval.EvalDB) *EvalWorker {
 	return &EvalWorker{EvalDB: evalDB}
+}
+
+// NewEvalWorkerWithDeps creates a fully-initialized EvalWorker with all
+// dependencies injected, enabling unit testing without real infrastructure.
+func NewEvalWorkerWithDeps(deps EvalWorkerDeps) *EvalWorker {
+	return &EvalWorker{
+		EvalDB:    deps.EvalDB,
+		Client:    deps.Client,
+		QStore:    deps.QStore,
+		Embedder:  deps.Embedder,
+		Generator: deps.Generator,
+		JudgeGen:  deps.JudgeGen,
+	}
 }
 
 func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
@@ -90,12 +117,21 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		return fmt.Errorf("create eval run: %w", err)
 	}
 
-	// Create dependencies
-	emb, qStore, gen, judgeGen, err := createEvalDeps(ctx, args)
-	if err != nil {
-		return err
+	// Resolve dependencies: prefer injected, fall back to real creation
+	emb := w.Embedder
+	vs := w.QStore
+	gen := w.Generator
+	judgeGen := w.JudgeGen
+	var qStore *qstore.QdrantStore
+	if emb == nil || vs == nil || gen == nil {
+		var cerr error
+		emb, qStore, gen, judgeGen, cerr = createEvalDeps(ctx, args)
+		if cerr != nil {
+			return cerr
+		}
+		defer qStore.Close()
+		vs = qStore
 	}
-	defer qStore.Close()
 
 	file, err := os.Open(args.DatasetPath)
 	if err != nil {
@@ -128,7 +164,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		workerWg.Add(1)
 		g.Go(func() error {
 			defer workerWg.Done()
-			return evaluateQuestions(ctx, args, qStore, gen, judgeGen, workChan, resultChan)
+			return evaluateQuestions(ctx, args, vs, gen, judgeGen, workChan, resultChan)
 		})
 	}
 
