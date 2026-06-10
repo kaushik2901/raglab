@@ -96,10 +96,9 @@ func TestChatStreamHandler_InvalidJSON(t *testing.T) {
 	srv.chatStreamHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
-	var env envelope
-	jsonUnmarshal(rec.Body.Bytes(), &env)
-	assert.NotNil(t, env.Error)
-	assert.Equal(t, "INVALID_JSON", env.Error.Code)
+	var p ProblemDetail
+	jsonUnmarshal(rec.Body.Bytes(), &p)
+	assert.Equal(t, "Invalid Request Body", p.Title)
 }
 
 func TestChatStreamHandler_MissingFields(t *testing.T) {

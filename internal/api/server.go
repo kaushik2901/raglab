@@ -46,6 +46,7 @@ func New(cfg *config.Config) (*Server, error) {
 	r.Use(RequestID)
 	r.Use(StructuredLog)
 	r.Use(Recovery)
+	r.Use(MaxBodySize(10 << 20)) // 10 MB
 	r.Use(Timeout(cfg.APIRequestTimeout))
 
 	s := &Server{

@@ -12,7 +12,6 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPreprocessHandler_ValidRequest(t *testing.T) {
@@ -68,10 +67,9 @@ func TestPreprocessHandler_MissingRepoURL(t *testing.T) {
 	s.preprocessHandler(rec, req)
 
 	assert.Equal(t, 400, rec.Code)
-	var env envelope
-	json.NewDecoder(rec.Body).Decode(&env)
-	require.NotNil(t, env.Error)
-	assert.Equal(t, "INVALID_PARAMETER", env.Error.Code)
+	var p ProblemDetail
+	json.NewDecoder(rec.Body).Decode(&p)
+	assert.Equal(t, "Invalid Parameter", p.Title)
 }
 
 func TestPreprocessHandler_InvalidJSON(t *testing.T) {

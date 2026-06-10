@@ -17,7 +17,7 @@ func (s *Server) evalListHandler(w http.ResponseWriter, r *http.Request) {
 
 	runs, total, err := s.evalSvc.ListRuns(r.Context(), limit, offset)
 	if err != nil {
-		respondError(w, 500, "INTERNAL_ERROR", err.Error())
+		respondProblem(w, 500, "Internal Server Error", err.Error())
 		return
 	}
 	respondJSON(w, 200, map[string]any{"runs": runs, "total": total})
@@ -33,7 +33,7 @@ func (s *Server) evalDetailHandler(w http.ResponseWriter, r *http.Request) {
 
 	run, err := s.evalSvc.GetRun(r.Context(), id, limit, offset)
 	if err != nil {
-		respondError(w, 404, "NOT_FOUND", "eval run not found")
+		respondProblem(w, 404, "Not Found", "eval run not found")
 		return
 	}
 	respondJSON(w, 200, run)
@@ -48,7 +48,7 @@ func (s *Server) evalCompareHandler(w http.ResponseWriter, r *http.Request) {
 	for _, rid := range allIDs {
 		detail, err := s.evalSvc.GetRun(r.Context(), rid, 0, 0)
 		if err != nil {
-			respondError(w, 404, "NOT_FOUND", fmt.Sprintf("run %s not found", rid))
+			respondProblem(w, 404, "Not Found", fmt.Sprintf("run %s not found", rid))
 			return
 		}
 		runs[rid] = detail.RunSummary

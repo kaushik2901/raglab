@@ -11,10 +11,13 @@ func (s *Server) artifactListHandler(w http.ResponseWriter, r *http.Request) {
 	artifactType := r.URL.Query().Get("type")
 	tag := r.URL.Query().Get("tag")
 
-	baseDir := s.cfg.ArtifactsDir
+	baseDir := "artifacts"
+	if s.cfg != nil && s.cfg.ArtifactsDir != "" {
+		baseDir = s.cfg.ArtifactsDir
+	}
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		respondError(w, 500, "INTERNAL_ERROR", "cannot list artifacts")
+		respondProblem(w, 500, "Internal Server Error", "cannot list artifacts")
 		return
 	}
 

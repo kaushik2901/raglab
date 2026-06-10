@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,10 +52,10 @@ func TestRecovery_Panic(t *testing.T) {
 
 	assert.Equal(t, 500, w.Code)
 
-	var env envelope
-	assert.NoError(t, jsonUnmarshal(w.Body.Bytes(), &env))
-	assert.NotNil(t, env.Error)
-	assert.Equal(t, "INTERNAL_ERROR", env.Error.Code)
+	var p ProblemDetail
+	assert.NoError(t, jsonUnmarshal(w.Body.Bytes(), &p))
+	assert.Equal(t, 500, p.Status)
+	assert.Equal(t, "Internal Server Error", p.Title)
 }
 
 func TestRecovery_NoPanic(t *testing.T) {
@@ -74,15 +75,37 @@ func TestRecovery_NoPanic(t *testing.T) {
 func TestTimeout_Exceeded(t *testing.T) {
 	handler := Timeout(10 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
-		w.WriteHeader(200)
+		// Do NOT write header — the timeout middleware will write 503
 	}))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 	handler.ServeHTTP(w, r)
 
-	// Context deadline exceeded should be returned by the server
-	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, 503, w.Code)
+
+	var p ProblemDetail
+	assert.NoError(t, jsonUnmarshal(w.Body.Bytes(), &p))
+	assert.Equal(t, "/errors/request-timeout", p.Type)
+}
+
+func TestMaxBodySize_Exceeded(t *testing.T) {
+	handler := MaxBodySize(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 100)
+		_, err := r.Body.Read(buf)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(200)
+	}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/", strings.NewReader("this body is too long"))
+	r.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(w, r)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 }
 
 func jsonUnmarshal(data []byte, v any) error {

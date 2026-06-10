@@ -13,17 +13,17 @@ import (
 func (s *Server) chatStreamHandler(w http.ResponseWriter, r *http.Request) {
 	var req ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, 400, "INVALID_JSON", "invalid request body")
+		respondProblem(w, 400, "Invalid Request Body", "invalid request body")
 		return
 	}
 	if err := req.Validate(); err != nil {
-		respondError(w, 400, "INVALID_PARAMETER", err.Error())
+		respondProblem(w, 400, "Invalid Parameter", err.Error())
 		return
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		respondError(w, 500, "INTERNAL_ERROR", "streaming not supported")
+		respondProblem(w, 500, "Internal Server Error", "streaming not supported")
 		return
 	}
 

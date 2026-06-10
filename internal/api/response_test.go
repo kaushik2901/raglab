@@ -17,11 +17,10 @@ func TestRespondJSON(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-	var env envelope
-	err := json.NewDecoder(w.Body).Decode(&env)
+	var body map[string]any
+	err := json.NewDecoder(w.Body).Decode(&body)
 	require.NoError(t, err)
-	assert.Nil(t, env.Error)
-	assert.Equal(t, map[string]any{"key": "value"}, env.Data)
+	assert.Equal(t, map[string]any{"key": "value"}, body["data"])
 }
 
 func TestRespondJSON_NilData(t *testing.T) {
@@ -30,49 +29,47 @@ func TestRespondJSON_NilData(t *testing.T) {
 
 	assert.Equal(t, 204, w.Code)
 
-	var env envelope
-	err := json.NewDecoder(w.Body).Decode(&env)
+	var body map[string]any
+	err := json.NewDecoder(w.Body).Decode(&body)
 	require.NoError(t, err)
-	assert.Nil(t, env.Error)
-	assert.Nil(t, env.Data)
+	assert.Nil(t, body["data"])
 }
 
 func TestRespondJSON_Array(t *testing.T) {
 	w := httptest.NewRecorder()
 	respondJSON(w, 200, []string{"a", "b"})
 
-	var env envelope
-	json.NewDecoder(w.Body).Decode(&env)
-	arr, ok := env.Data.([]any)
+	var body map[string]any
+	json.NewDecoder(w.Body).Decode(&body)
+	arr, ok := body["data"].([]any)
 	assert.True(t, ok)
 	assert.Len(t, arr, 2)
 }
 
-func TestRespondError(t *testing.T) {
+func TestRespondProblem(t *testing.T) {
 	w := httptest.NewRecorder()
-	respondError(w, 400, "INVALID_JSON", "bad request")
+	respondProblem(w, 400, "Bad Request", "invalid request body")
 
 	assert.Equal(t, 400, w.Code)
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	assert.Equal(t, "application/problem+json", w.Header().Get("Content-Type"))
 
-	var env envelope
-	err := json.NewDecoder(w.Body).Decode(&env)
+	var p ProblemDetail
+	err := json.NewDecoder(w.Body).Decode(&p)
 	require.NoError(t, err)
-	assert.Nil(t, env.Data)
-	require.NotNil(t, env.Error)
-	assert.Equal(t, "INVALID_JSON", env.Error.Code)
-	assert.Equal(t, "bad request", env.Error.Message)
+	assert.Equal(t, "/errors/bad-request", p.Type)
+	assert.Equal(t, "Bad Request", p.Title)
+	assert.Equal(t, 400, p.Status)
+	assert.Equal(t, "invalid request body", p.Detail)
 }
 
-func TestRespondError_500(t *testing.T) {
+func TestRespondProblem_500(t *testing.T) {
 	w := httptest.NewRecorder()
-	respondError(w, 500, "INTERNAL_ERROR", "server error")
+	respondProblem(w, 500, "Internal Server Error", "server error")
 
-	var env envelope
-	json.NewDecoder(w.Body).Decode(&env)
-	require.NotNil(t, env.Error)
-	assert.Equal(t, "INTERNAL_ERROR", env.Error.Code)
-	assert.Equal(t, "server error", env.Error.Message)
+	var p ProblemDetail
+	json.NewDecoder(w.Body).Decode(&p)
+	assert.Equal(t, 500, p.Status)
+	assert.Equal(t, "/errors/internal-server-error", p.Type)
 }
 
 func TestRespondNoContent(t *testing.T) {
