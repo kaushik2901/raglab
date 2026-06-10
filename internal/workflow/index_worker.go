@@ -118,18 +118,14 @@ func processFile(ctx context.Context, fp, relPath, collectionName string,
 	}
 }
 
+const maxIndexFileSize = 100 * 1024 * 1024
+
 func RunIndexing(ctx context.Context, args IndexArgs) error {
 	concurrency := args.IndexConcurrency
-	if concurrency <= 0 {
-		concurrency = 5
-	}
 
 	inputDir := path.Join("artifacts", "preprocessing", args.InputTag, "output")
 
 	embeddingProvider := config.Provider(args.EmbeddingProvider)
-	if embeddingProvider == "" {
-		embeddingProvider = config.ProviderOpenAI
-	}
 
 	emb, err := embedder.New(embeddingProvider, args.EmbeddingModel, args.BatchSize)
 	if err != nil {
@@ -141,20 +137,12 @@ func RunIndexing(ctx context.Context, args IndexArgs) error {
 		qdrantURL = "http://localhost:6334"
 	}
 	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
-	parserStrategy := args.ParserStrategy
-	if parserStrategy == "" {
-		parserStrategy = "markdown"
-	}
-	parsr, err := parser.New(parserStrategy)
+	parsr, err := parser.New(args.ParserStrategy)
 	if err != nil {
 		return fmt.Errorf("create parser: %w", err)
 	}
 
-	chunkStrategy := args.ChunkStrategy
-	if chunkStrategy == "" {
-		chunkStrategy = "fixed"
-	}
-	chunkr, err := chunker.New(chunkStrategy, args.ChunkSize, args.ChunkOverlap)
+	chunkr, err := chunker.New(args.ChunkStrategy, args.ChunkSize, args.ChunkOverlap)
 	if err != nil {
 		return fmt.Errorf("create chunker: %w", err)
 	}
@@ -215,11 +203,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) error {
 	for _, filePath := range mdFiles {
 		fp := filePath
 		g.Go(func() error {
-			docTimeout := args.DocTimeout
-			if docTimeout <= 0 {
-				docTimeout = 30 * time.Minute
-			}
-			docCtx, cancel := context.WithTimeout(ctx, docTimeout)
+			docCtx, cancel := context.WithTimeout(ctx, args.DocTimeout)
 			defer cancel()
 
 			relPath, err := filepath.Rel(inputDir, fp)
@@ -235,7 +219,7 @@ func RunIndexing(ctx context.Context, args IndexArgs) error {
 				mu.Unlock()
 				return nil
 			}
-			maxSize := config.IntEnvOrDefault("MAX_INDEX_FILE_SIZE", 100*1024*1024)
+			maxSize := maxIndexFileSize
 			if fi.Size() > int64(maxSize) {
 				mu.Lock()
 				skipErrors = append(skipErrors, relPath+": file too large ("+strconv.FormatInt(fi.Size(), 10)+" bytes, max "+strconv.Itoa(maxSize)+")")

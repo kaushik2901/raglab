@@ -34,9 +34,19 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 		job := &river.Job[EvalArgs]{
 			JobRow: &rivertype.JobRow{},
 			Args: EvalArgs{
-				Tag:         "test-eval-err",
-				IndexTag:    "test-collection",
-				DatasetPath: "/tmp/nonexistent.json",
+				Tag:               "test-eval-err",
+				IndexTag:          "test-collection",
+				DatasetPath:       "/tmp/nonexistent.json",
+				TopK:              5,
+				Ks:                []int{1, 3, 5},
+				LLMProvider:       "openai",
+				LLMModel:          "gpt-4o-mini",
+				EmbeddingProvider: "openai",
+				EmbeddingModel:    "text-embedding-3-small",
+				JudgeProvider:     "openai",
+				JudgeModel:        "gpt-4o-mini",
+				BatchSize:         20,
+				Workers:           5,
 			},
 		}
 		err := w.Work(context.Background(), job)
@@ -44,13 +54,4 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 	})
 }
 
-func TestEvalWorker_EvalArgs_Defaults(t *testing.T) {
-	t.Run("default batch size falls back to 20", func(t *testing.T) {
-		args := EvalArgs{}
-		batchSize := args.BatchSize
-		if batchSize <= 0 {
-			batchSize = 20
-		}
-		assert.Equal(t, 20, batchSize)
-	})
-}
+

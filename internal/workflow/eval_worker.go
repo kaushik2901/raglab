@@ -68,13 +68,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 	cp := readEvalCheckpoint(job)
 
 	workers := args.Workers
-	if workers <= 0 {
-		workers = 5
-	}
 	batchSize := args.BatchSize
-	if batchSize <= 0 {
-		batchSize = 20
-	}
 
 	// On retry, clean up the previous run's results before creating a new one
 	if cp.QuestionsProcessed > 0 && cp.RunID != "" {
@@ -277,9 +271,6 @@ func collectResults(
 ) error {
 	var results []types.RetrievalResult
 	ks := args.Ks
-	if len(ks) == 0 {
-		ks = []int{1, 3, 5, 10}
-	}
 
 	for {
 		select {
@@ -350,22 +341,10 @@ func createEvalDeps(ctx context.Context, args EvalArgs) (embedder.Embedder, *qst
 	qdrantAPIKey := os.Getenv("QDRANT_API_KEY")
 
 	llmProvider := config.Provider(args.LLMProvider)
-	if llmProvider == "" {
-		llmProvider = config.ProviderOpenAI
-	}
 	embeddingProvider := config.Provider(args.EmbeddingProvider)
-	if embeddingProvider == "" {
-		embeddingProvider = config.ProviderOpenAI
-	}
 	judgeProvider := config.Provider(args.JudgeProvider)
-	if judgeProvider == "" {
-		judgeProvider = llmProvider
-	}
 
 	embeddingModel := args.EmbeddingModel
-	if embeddingModel == "" {
-		embeddingModel = "text-embedding-3-small"
-	}
 
 	emb, err := embedder.New(embeddingProvider, embeddingModel, args.BatchSize)
 	if err != nil {
