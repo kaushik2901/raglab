@@ -57,7 +57,13 @@ func Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				slog.Error("panic", "err", rec, "stack", string(debug.Stack()))
+				slog.Error("panic",
+					"err", rec,
+					"stack", string(debug.Stack()),
+					"method", r.Method,
+					"path", r.URL.Path,
+					"request_id", r.Context().Value(ctxKeyRequestID),
+				)
 				respondProblem(w, 500, "Internal Server Error", "internal server error")
 			}
 		}()
