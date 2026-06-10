@@ -43,7 +43,7 @@ func (m *mockEmbedder) ModelName() string {
 }
 
 type mockGen struct {
-	generateFn      func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
+	generateFn       func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
 	generateStreamFn func(ctx context.Context, params openai.ChatCompletionNewParams, cb generator.StreamCallback) (*openai.ChatCompletion, error)
 }
 
@@ -84,9 +84,9 @@ func TestChatService_BuildMessages(t *testing.T) {
 	}
 
 	req := ChatRequest{
-		Tag:     "col",
-		Query:   "test question",
-		TopK:    3,
+		Tag:       "col",
+		Query:     "test question",
+		TopK:      3,
 		MaxTokens: 1024,
 	}
 

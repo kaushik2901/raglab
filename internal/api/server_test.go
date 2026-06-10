@@ -15,11 +15,17 @@ import (
 type mockVectorStore struct{}
 
 func (m *mockVectorStore) Connect(ctx context.Context, dsn string) error { return nil }
-func (m *mockVectorStore) EnsureCollection(ctx context.Context, name string, vectorSize int, distance string) error { return nil }
-func (m *mockVectorStore) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error { return nil }
-func (m *mockVectorStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) { return nil, nil }
+func (m *mockVectorStore) EnsureCollection(ctx context.Context, name string, vectorSize int, distance string) error {
+	return nil
+}
+func (m *mockVectorStore) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
+	return nil
+}
+func (m *mockVectorStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
+	return nil, nil
+}
 func (m *mockVectorStore) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockVectorStore) Close() error { return nil }
+func (m *mockVectorStore) Close() error                          { return nil }
 
 func TestNewWithDeps_ServerInitialized(t *testing.T) {
 	t.Parallel()

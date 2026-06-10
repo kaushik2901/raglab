@@ -22,9 +22,9 @@ func (m *mockVectorSearcher) Search(ctx context.Context, collection string, quer
 }
 
 type mockGen struct {
-	generateFn      func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
+	generateFn       func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
 	generateStreamFn func(ctx context.Context, params openai.ChatCompletionNewParams, cb generator.StreamCallback) (*openai.ChatCompletion, error)
-	modelNameFn     func() string
+	modelNameFn      func() string
 }
 
 func (m *mockGen) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {

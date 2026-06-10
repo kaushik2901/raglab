@@ -53,5 +53,3 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 		require.Error(t, err)
 	})
 }
-
-

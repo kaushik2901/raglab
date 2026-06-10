@@ -27,7 +27,7 @@ type ChatService struct {
 	memory memory.Memory
 
 	// Injectable factories for testing
-	newEmbedderFn func(req ChatRequest) (embedder.Embedder, error)
+	newEmbedderFn  func(req ChatRequest) (embedder.Embedder, error)
 	newRetrieverFn func(emb embedder.Embedder) (retrieverInterface, error)
 	newGeneratorFn func(req ChatRequest) (generator.Generator, error)
 }

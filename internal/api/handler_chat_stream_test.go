@@ -30,7 +30,7 @@ type mockEmbedderForStream struct{}
 func (m *mockEmbedderForStream) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
 	return make([]types.Embedding, len(chunks)), nil
 }
-func (m *mockEmbedderForStream) Dimensions() int { return 768 }
+func (m *mockEmbedderForStream) Dimensions() int   { return 768 }
 func (m *mockEmbedderForStream) ModelName() string { return "mock" }
 
 type mockGenForStream struct {
