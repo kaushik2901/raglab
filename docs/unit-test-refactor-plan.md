@@ -5,18 +5,34 @@
 
 ---
 
+## API-First Plan Impact Summary
+
+The [API-first architecture plan](implementation-plan-api-first.md) has already been partially implemented and significantly affects this refactor:
+
+| Done | Change | Impact on this plan |
+|------|--------|---------------------|
+| ✅ | `cmd/preprocess/main.go`, `cmd/index/main.go`, `cmd/query/main.go`, `cmd/eval/main.go` deleted | Removed 4 files from the "untested" list — no refactor needed |
+| ✅ | `service_workflow.go` — `ResolveTag` calls removed | Simplifies Phase 0.2 (no need to refactor `ResolveTag` in service code) |
+| ✅ | `service_chat.go` — Refactored with injectable factory functions | **Phase 4.2 is already done** — just need to add tests |
+| ✅ | `types.go` — All fields required, comprehensive `Validate()` methods | Adds new P1 test target (validation logic) |
+| ✅ | `index_worker.go` — Fallback defaults removed, `maxIndexFileSize` const | Simplifies Phase 3.2 (fewer code paths) |
+| ✅ | `eval_worker.go` — Fallback defaults removed | Simplifies Phase 3.1 (fewer code paths) |
+| ❌ | `config.go` — `ResolveTag`, `FloatEnvOrDefault` still present (dead code) | Add simple clean-up to Phase 0 |
+
+---
+
 ## Overview
 
 | Phase | Theme | Est. Effort | Rationale |
 |-------|-------|-------------|-----------|
-| 0 | Foundation: DI wiring + env abstraction | **3 days** | Everything downstream depends on this. Must be first. |
+| 0 | Foundation: DI wiring + env abstraction | **2 days** | Everything downstream depends on this. Must be first. |
 | 1 | Postgres interface extraction | **2 days** | Second most pervasive blocker — used in 3 packages |
-| 2 | Pure-function tests (no refactor needed) | **1 day** | Low-hanging fruit, can be done in parallel with P1 |
-| 3 | Worker dependency refactors | **3 days** | Eval, index, preprocess workers need interface injection |
-| 4 | API layer refactors | **2 days** | Server, ChatService, EvalService constructors |
+| 2 | Pure-function tests (no refactor needed) | **1.5 days** | Low-hanging fruit; includes new validation & refactored ChatService |
+| 3 | Worker dependency refactors | **2.5 days** | Eval, index, preprocess workers need interface injection |
+| 4 | API layer refactors | **1.5 days** | Server + EvalService constructors (ChatService already done) |
 | 5 | Existing test cleanup | **2 days** | Fix integration tests, add t.Parallel(), remove skips |
 | 6 | Structural improvements (backoff, git, fs) | **2 days** | Injectable backoff, GitRunner, FileSystem interfaces |
-| **Total** | | **~15 days** | |
+| **Total** | | **~13.5 days** | ~1.5 days saved vs original plan due to API-first work |
 
 ---
 
@@ -30,46 +46,38 @@
 
 **Problem:** `flag.IntVar(...)`, `flag.Parse()` use the global `FlagSet`. Any test calling `config.Load()` poisons global flag state for other tests.
 
+| Current code | Issue |
+|-------------|-------|
+| `flag.IntVar(&cfg.MaxRetries, ...)` | Uses global `flag.CommandLine` |
+| `flag.Parse()` | Parses `os.Args[1:]`, contaminates all tests |
+
 **Change:**
 ```go
-// BEFORE
-func Load() (*Config, error) {
-    flag.IntVar(&cfg.MaxRetries, "max-retries", ...)
-    flag.Parse()
-    ...
-}
-
-// AFTER
 type EnvLookup func(key string) string
 
 func LoadWithEnv(flagSet *flag.FlagSet, lookup EnvLookup) (*Config, error) {
-    flagSet.IntVar(&cfg.MaxRetries, "max-retries", ...)
-    ...
+    flagSet.IntVar(&cfg.MaxRetries, "max-retries", IntEnvOrDefaultWith(lookup, "MAX_RETRIES", 3), ...)
+    flagSet.DurationVar(&cfg.RetryBackoff, "retry-backoff", DurationEnvOrDefaultWith(lookup, "RETRY_BACKOFF", 5*time.Second), ...)
+    flagSet.StringVar(&cfg.LogLevel, "log-level", EnvOrDefaultWith(lookup, "LOG_LEVEL", "info"), ...)
     flagSet.Parse(os.Args[1:])  // explicit FlagSet, no side effects
     ...
 }
 
-// Backward-compat wrapper for cmd/*
+// Backward-compat wrapper for cmd/*/main.go
 func Load() (*Config, error) {
     return LoadWithEnv(flag.NewFlagSet(os.Args[0], flag.ExitOnError), os.Getenv)
 }
 ```
 
-### 0.2 Thread `EnvLookup` through downstream packages
+### 0.2 Thread `EnvLookup` through config functions
 
-**Files:** `internal/config/config.go`, `internal/config/normalize.go`
+**Files:** `internal/config/config.go`
 
-**Problem:** `EnvOrDefault`, `ResolveProviderConfig`, `ResolveTag` all read `os.Getenv` directly.
+**Problem:** `EnvOrDefault`, `IntEnvOrDefault`, `DurationEnvOrDefault`, `FloatEnvOrDefault`, `ResolveProviderConfig` all read `os.Getenv` directly.
 
 **Change:**
 ```go
-// BEFORE: os.Getenv() hard-coded
-func EnvOrDefault(key, defaultVal string) string {
-    if v := os.Getenv(key); v != "" { return v }
-    return defaultVal
-}
-
-// AFTER: Accept lookup function
+// EnvOrDefaultWith — injectable env lookup
 func EnvOrDefaultWith(lookup EnvLookup, key, defaultVal string) string {
     if v := lookup(key); v != "" { return v }
     return defaultVal
@@ -81,35 +89,18 @@ func EnvOrDefault(key, defaultVal string) string {
 }
 ```
 
-Do the same for `IntEnvOrDefault`, `DurationEnvOrDefault`, `FloatEnvOrDefault`, `ResolveProviderConfig`, `ResolveTag`.
+Do the same for `IntEnvOrDefault`, `DurationEnvOrDefault`, `FloatEnvOrDefault`, `ResolveProviderConfig`.
 
-### 0.3 Extract `EmbedderFactory` and `GeneratorFactory`
+**Also:** Remove dead code as flagged by the API-first plan:
+- Delete `ResolveTag` function (unused since `service_workflow.go` no longer calls it)
+- Delete `FloatEnvOrDefault` function (unused after CLI binary deletion)
 
-**Files:** `internal/embedder/embedder.go`, `internal/generator/generator.go`
-
-**Problem:** `embedder.New()` and `generator.New()` read env vars internally.
-
-**Change:**
-```go
-type EmbedderFactory func(provider config.Provider, model string, batchSize int) (Embedder, error)
-
-func NewWithLookup(lookup config.EnvLookup, provider config.Provider, ...) (Embedder, error) {
-    baseURL, apiKey := config.ResolveProviderConfigWith(lookup, provider)
-    ...
-}
-
-// cmd/* use os.Getenv, tests inject fake lookup
-var embedderNew = embedder.New  // ← overridable in tests
-```
-
-### 0.4 Add tests for everything in Phase 0
+### 0.3 Add tests for Phase 0 changes
 
 | File | Tests to add |
 |------|-------------|
-| `internal/config/config_test.go` | `LoadWithEnv` with custom flag + env, `ResolveTag` with injected time, parallel-safe |
-| `internal/config/normalize_test.go` | `NormalizeBaseURL`, `ParseRetryAfter`, `WarnOnInsecure` (NEW file) |
-| `internal/embedder/factory_test.go` | `NewWithLookup` with fake env |
-| `internal/generator/factory_test.go` | Same |
+| `internal/config/config_test.go` | `LoadWithEnv` with custom flag + env, parallel-safe, `Config.Validate()` edge cases |
+| `internal/config/normalize_test.go` | NEW file: `NormalizeBaseURL`, `ParseRetryAfter`, `WarnOnInsecure` |
 
 ---
 
@@ -123,8 +114,7 @@ var embedderNew = embedder.New  // ← overridable in tests
 
 **Change:**
 ```go
-// internal/eval/store.go
-
+// EvalDB is the interface for eval run storage (enables mocking)
 type EvalDB interface {
     CreateRun(ctx context.Context, tag string, strategy map[string]any) (string, error)
     BulkAddQueryResults(ctx context.Context, runID string, results []types.RetrievalResult) error
@@ -134,11 +124,9 @@ type EvalDB interface {
 }
 
 // Rename existing struct to indicate it's the Postgres impl
-type PgEvalStore struct {
-    pool *pgxpool.Pool
-}
+type PgEvalStore struct { pool *pgxpool.Pool }
 
-// Constructor now returns EvalDB, not *EvalStore
+// NewEvalStore returns an EvalDB backed by Postgres
 func NewEvalStore(pool *pgxpool.Pool) EvalDB {
     return &PgEvalStore{pool: pool}
 }
@@ -152,37 +140,47 @@ func NewEvalStore(pool *pgxpool.Pool) EvalDB {
 ```go
 // BEFORE
 type EvalService struct { pool *pgxpool.Pool }
-func NewEvalService(pool *pgxpool.Pool) *EvalService { ... }
 
 // AFTER
 type EvalService struct { store eval.EvalDB }
-func NewEvalService(store eval.EvalDB) *EvalService { ... }
 ```
 
-### 1.3 Add mock-based tests
+### 1.3 Update `EvalWorker` to use `EvalDB`
+
+**Files:** `internal/workflow/eval_worker.go`
+
+**Change:**
+```go
+// BEFORE
+type EvalWorker struct {
+    river.WorkerDefaults[EvalArgs]
+    EvalStore *eval.EvalStore               // concrete type
+    Client    *river.Client[pgx.Tx]
+}
+
+// AFTER
+type EvalWorker struct {
+    river.WorkerDefaults[EvalArgs]
+    EvalDB  eval.EvalDB                      // interface
+    Client  *river.Client[pgx.Tx]
+}
+```
+
+### 1.4 Add mock-based unit tests
 
 | File | Tests to add |
 |------|-------------|
-| `internal/eval/store_test.go` | Keep integration tests but add `_test.go` unit tests with `mockEvalDB` — test `EvalService.ListRuns`, `GetRunSummary`, etc. via mocked store |
-| `internal/api/service_eval_test.go` | NEW file: test `EvalService` with `mockEvalDB` |
+| `internal/eval/store_test.go` | Keep integration tests but add unit tests with `mockEvalDB` |
+| `internal/api/service_eval_test.go` | NEW file: test `EvalService.ListRuns`, `GetRunSummary`, `GetRun`, `GetRuns` with mock store |
 
-### 1.4 Create `_integration_test.go` pattern
+### 1.5 Create `_integration_test.go` pattern
 
-Move existing integration tests to `store_integration_test.go` with `//go:build integration` build tag:
+Move existing integration tests behind `//go:build integration`:
 
 ```
-internal/eval/store_integration_test.go  // needs postgres
+internal/eval/store_integration_test.go    // needs postgres
 internal/workflow/test_helpers_integration_test.go  // needs postgres
 internal/store/qdrant_integration_test.go  // needs qdrant
-```
-
-Add to `make.cmd`:
-```makefile
-test-unit:
-    go test -count=1 -tags=unit ./...
-
-test-integration:
-    go test -count=1 -tags=integration ./...
 ```
 
 ---
@@ -195,17 +193,15 @@ test-integration:
 
 **Functions to test:**
 
-| Function | Input | Output | Test cases |
-|----------|-------|--------|------------|
-| `toFloat32` | `[]float64` | `[]float32` | empty, normal, rounding |
-| `fillRetrievalResult` | `EvalQuestion` + search results + topK | populated `RetrievalResult` | hit at rank 1, hit at rank 3, miss, empty results, multiple expected paths, NDCG computation |
-| `buildContextText` | search results | formatted string | single doc, multiple docs, empty |
-| `generateForQuestion` | context + generator | answer + tokens | success, API error, empty choices |
-| `EvaluateQuestion` | full eval pipeline step | `RetrievalResult` | hit, miss, gen error, judge error |
+| Function | Test cases |
+|----------|------------|
+| `toFloat32` | empty, normal, rounding |
+| `fillRetrievalResult` | hit at rank 1/3, miss, empty results, multiple expected paths, NDCG computation |
+| `buildContextText` | single doc, multiple docs, empty |
+| `generateForQuestion` | success, API error, empty choices |
+| `EvaluateQuestion` | hit, miss, gen error, judge error |
 
 **Pattern:** Use mock `generator.Generator` and `VectorSearcher` (exactly like `retrieval_test.go` does).
-
-**Estimated tests:** ~20 table-driven tests.
 
 ### 2.2 `internal/config/normalize.go`
 
@@ -215,29 +211,43 @@ test-integration:
 | `ParseRetryAfter` | seconds string, RFC1123 date, empty, invalid |
 | `WarnOnInsecure` | http + key, https + key, http no key |
 
-### 2.3 `internal/workflow/poll_job.go`
+### 2.3 `internal/api/types.go` — Validation methods
+
+**NEW — added by API-first plan.** All 4 request types have extensive `Validate()` logic that is currently only tested via handler integration tests.
+
+| Struct | Test cases |
+|--------|------------|
+| `PreprocessRequest.Validate()` | missing repo_url, missing tag, valid |
+| `IndexRequest.Validate()` | missing each field (11 checks), valid |
+| `EvalRequest.Validate()` | missing each field (13 checks), valid |
+| `ChatRequest.Validate()` | missing each field (9 checks), valid |
+
+### 2.4 `internal/api/service_chat.go` — Refactored by API-first plan
+
+**NOTE:** The API-first plan already refactored `ChatService` with injectable factory functions (`newEmbedderFn`, `newRetrieverFn`, `newGeneratorFn`). No structural refactor needed — just add tests.
+
+| Function | Test cases |
+|----------|------------|
+| `Chat()` | success with full payload, retriever error, generator error, with memory/conversation |
+| `ChatStream()` | success streaming, retriever error, generator error, with memory |
+| `buildMessages()` | system prompt, context formatting, memory injection, no memory |
+| `retrieveSources()` | successful retrieval, retriever error |
+
+**Pattern:** Use mock factories — override `newEmbedderFn`, `newRetrieverFn`, `newGeneratorFn` to return mock implementations.
+
+### 2.5 `internal/workflow/poll_job.go`
 
 | Function | Test cases |
 |----------|------------|
 | `PollUntilTerminal` | completes immediately, cancelled, discarded, context timeout, exponential backoff clamping |
 
-**Need:** Mock `*river.Client[pgx.Tx]` via the `JobGet` method. Define a small interface:
-
+**Need:** Mock `JobGetter` interface:
 ```go
 type JobGetter interface {
     JobGet(ctx context.Context, id int64) (*rivertype.JobRow, error)
 }
 ```
-
 Change `PollUntilTerminal` to accept `JobGetter` instead of `*river.Client[...]`.
-
-### 2.4 `internal/types/` (remaining structs)
-
-Add creation tests for:
-- `Document` — zero value, populated
-- `EvalQuestion` — JSON round-trip (uses json tags)
-- `RelevanceJudgment` — JSON round-trip
-- `AggregateMetrics` — zero value
 
 ---
 
@@ -247,168 +257,104 @@ Add creation tests for:
 
 ### 3.1 `internal/workflow/eval_worker.go`
 
-**Problem:** `EvalWorker.Work()` calls `createEvalDeps()` which:
-1. Reads `os.Getenv("QDRANT_URL")`, `os.Getenv("QDRANT_API_KEY")`
-2. Creates real `embedder.New(...)`, `qstore.NewQdrantStore(...).Connect(...)`, `generator.New(...)` × 2
+**Problem:** `EvalWorker.Work()` calls `createEvalDeps()` which connects to real Qdrant and creates real embedder/generator.
 
 **Change — Inject dependencies:**
-
 ```go
 type EvalWorkerDeps struct {
-    EvalStore eval.EvalDB
+    EvalDB    eval.EvalDB
     Client    *river.Client[pgx.Tx]
     QStore    eval.VectorSearcher
     Embedder  embedder.Embedder
     Generator generator.Generator
     JudgeGen  generator.Generator
 }
-
-type EvalWorker struct {
-    river.WorkerDefaults[EvalArgs]
-    Deps EvalWorkerDeps
-}
 ```
 
-Create a `NewEvalWorker` that takes the deps struct. The `Work()` method no longer calls `createEvalDeps()`.
-
 **Tests:**
-- `EvalWorker` with mock embedder, mock Qdrant, mock generators, mock `EvalDB`
-- Test the pipeline: JSONL → embed → search → generate → judge → store
-- Test checkpoint reloading (delete previous results, skip processed questions)
-- Test error paths: embed error, search error, generate error
+- Full pipeline with mock deps: JSONL → embed → search → generate → judge → store
+- Checkpoint reloading (delete previous results, skip processed questions)
+- Error paths: embed error, search error, generate error
 
 ### 3.2 `internal/workflow/index_worker.go`
 
 **Problem:** `RunIndexing()` creates real parser, chunker, embedder, Qdrant connection.
 
 **Change — Accept factory interfaces:**
-
 ```go
 type IndexDeps struct {
-    Parser  parser.Parser
-    Chunker chunker.Chunker
-    Embedder embedder.Embedder
-    Store   store.VectorStore
+    Parser    parser.Parser
+    Chunker   chunker.Chunker
+    Embedder  embedder.Embedder
+    Store     store.VectorStore
 }
 
 func RunIndexing(ctx context.Context, args IndexArgs, deps IndexDeps) error { ... }
 ```
 
 **Tests:**
-- `processFile` with mock parser emitting known elements, mock chunker, mock embedder, mock store
+- `processFile` with mock parser/chunker/embedder/store
 - `embedAndStore` in isolation
-- `RunIndexing` — walk a temp dir with test `.md` files, verify store receives correct chunks
+- `RunIndexing` — walk a temp dir with test `.md` files
 
 ### 3.3 `internal/workflow/preprocess_worker.go`
 
-**Problem:** `cloneRepo` calls `exec.Command("git", ...)`, verify functions call `os.ReadFile`, `filepath.Walk`.
+**Problem:** `cloneRepo` calls `exec.Command("git", ...)`, verify functions use `os.*` directly.
 
-**Change — Split into two parts:**
-
-**Part A: Git abstraction**
+**Change:**
 ```go
 type GitRunner interface {
     Clone(ctx context.Context, url, path string) error
-    Fetch(ctx context.Context, path string) error
+    FetchAll(ctx context.Context, path string) error
     Checkout(ctx context.Context, path, branch string) error
-    Pull(ctx context.Context, path string) error
+    PullFFOnly(ctx context.Context, path string) error
 }
-```
 
-**Part B: File system abstraction**
-```go
 type FileSystem interface {
     ReadFile(path string) ([]byte, error)
-    WriteFile(path string, data []byte) error
+    WriteFile(path string, data []byte, perm os.FileMode) error
     Walk(root string, fn filepath.WalkFunc) error
     Stat(path string) (os.FileInfo, error)
-    MkdirAll(path string) error
-}
-```
-
-**Change constructor:**
-```go
-type PreprocessWorker struct {
-    river.WorkerDefaults[PreprocessArgs]
-    Client *river.Client[pgx.Tx]
-    Git    GitRunner
-    FS     FileSystem
+    MkdirAll(path string, perm os.FileMode) error
 }
 ```
 
 **Tests:**
 - `verifyOutput` with in-memory filesystem
 - `cloneRepo` with mock `GitRunner`
-- `checkFileCountMatch`, `checkDirectoryStructure`, `checkNoShortcodes`, `checkNoRawHTML`, `checkMinimumContent`, `checkTotalSize` — all testable with fake `FileSystem`
+- `checkFileCountMatch`, `checkDirectoryStructure`, `checkNoShortcodes`, `checkNoRawHTML`, `checkMinimumContent`, `checkTotalSize`
 
 ---
 
 ## Phase 4: API Layer Refactors
 
-**Goal:** `Server.New()`, `ChatService.NewChatService()`, `EvalService` testable without infrastructure.
+**Goal:** `Server.New()` and `EvalService` testable without infrastructure.
 
 ### 4.1 `internal/api/server.go`
 
 **Change — Accept connections instead of creating them:**
-
 ```go
-func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorStore) *Server { ... }
-
-// Old New() kept for backward compat in cmd/api/main.go
-func New(cfg *config.Config) (*Server, error) {
-    pool, err := db.Connect(context.Background(), cfg.DatabaseURL)
-    ...
-    qdrant := qstore.NewQdrantStore(cfg.QdrantAPIKey)
-    qdrant.Connect(context.Background(), cfg.QdrantURL)
-    return NewWithDeps(cfg, pool, qdrant), nil
-}
+func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorStore,
+    evalDB eval.EvalDB, chatSvc *ChatService) *Server { ... }
 ```
 
 **Tests:**
 - `NewWithDeps` with mock Qdrant, nil pool → verify routes registered
 - `ListenAndServe` — start on random port, send request, verify response
 
-### 4.2 `internal/api/service_chat.go`
+### 4.2 `internal/api/service_eval.go`
 
-**Change — Accept ready-made dependencies:**
+Already covered by Phase 1.2 (uses `EvalDB` interface).
 
-```go
-type ChatServiceDeps struct {
-    Embedder  embedder.Embedder
-    Retriever retrieverInterface
-    Generator generator.Generator
-    Memory    memory.Memory
-}
-
-func NewChatServiceWithDeps(deps ChatServiceDeps) *ChatService { ... }
-
-// Old NewChatService rewritten to use factory
-func NewChatService(cfg *config.Config, vs qstore.VectorStore) (*ChatService, error) {
-    emb, _ := embedder.New(...)
-    ret, _ := retriever.New(emb, vs, "naive-search")
-    gen, _ := generator.New(...)
-    return NewChatServiceWithDeps(ChatServiceDeps{
-        Embedder: emb, Retriever: ret, Generator: gen,
-        Memory: memory.NewRingBuffer(cfg.ChatMemorySize),
-    }), nil
-}
-```
-
-**Tests:**
-- `Chat` with mock retriever + mock generator → verify answer, sources, token usage
-- `Chat` with conversation ID → verify memory stores turns
-- `Chat` with retriever error → verify error propagation
-- `retrieveSources` with mock retriever
-- `buildMessages` — verify system prompt, context formatting, memory injection
-- `resolveMaxTokens`, `resolveTemperature` — edge cases
-
-### 4.3 `internal/api/service_eval.go`
-
-Already covered in Phase 1 (uses `EvalDB` interface). Add tests for:
-- `ListRuns` — pagination, empty results, parsing strategy/metrics JSON
+**Additional tests:**
+- `ListRuns` — pagination, empty results, strategy/metrics JSON parsing
 - `GetRunSummary` — found, not found, malformed JSON
 - `GetRun` — with questions, without questions, pagination
-- `GetRuns` — multiple IDs, missing IDs
+- `GetRuns` — multiple IDs, some missing
+
+### 4.3 `internal/api/service_chat.go`
+
+**Already refactored by API-first plan.** No structural changes needed. See Phase 2.4 for test targets.
 
 ---
 
@@ -418,42 +364,35 @@ Already covered in Phase 1 (uses `EvalDB` interface). Add tests for:
 
 ### 5.1 Add `t.Parallel()` everywhere
 
-After Phase 0 removes global `flag` and `os.Getenv` dependencies, add:
-
-```go
-func TestSomething(t *testing.T) {
-    t.Parallel()
-    ...
-}
-```
-
-**Files:**
-- All `internal/*_test.go` files (41 files)
-- Both `cmd/*/main_test.go` files
-
-**Exceptions:** Tests that use shared resources (e.g., same temp dir pattern) must be reviewed.
+After Phase 0 removes global `flag` and `os.Getenv` dependencies, add `t.Parallel()` to all test functions in:
+- All `internal/*_test.go` files (~39 files)
+- `cmd/api/main_test.go` (if exists)
+- `cmd/workerd/main_test.go` (if exists)
 
 ### 5.2 Fix `internal/eval/store_test.go`
 
-**Changes:**
 - Rename to `store_integration_test.go` with `//go:build integration`
-- Create pure `store_test.go` with mock-based tests for `EvalDB` interface behavior
+- Create pure `store_test.go` with mock-based `EvalDB` tests
+- Delete `test_helpers_test.go` helpers (moved to integration file)
 
 ### 5.3 Fix `internal/workflow/*_test.go`
 
-**Changes:**
-- `eval_worker_test.go` — Replace `connectOrSkip` + real dataset path with mock-based tests
-- `index_worker_test.go` — Replace temp dir + error assertion with mock parser/chunker/embedder/store
+- `eval_worker_test.go` — Replace `connectOrSkip` + real dataset path with mock deps
+- `index_worker_test.go` — Replace non-existent dir test with mock `IndexDeps` tests
 - `preprocess_worker_test.go` — Replace with mock Git + FileSystem tests
 - `test_helpers_test.go` — Move to `test_helpers_integration_test.go`
 
 ### 5.4 Fix `internal/store/qdrant_test.go`
 
-**Changes:**
-- Rename integration tests to `qdrant_integration_test.go` with build tags
-- Keep unit-testable tests: `ToPoint_*`, `ChunkIDToUUID_*`, `isConnError`, `parseDistance`, `storeOnce/searcheOnce/ensureCollectionOnce_notConnected`, `reconnect_NoDSN`, `retry_*`
+- Rename 6 `t.Skip("requires Qdrant server")` tests to `qdrant_integration_test.go`
+- Keep unit-testable: `ToPoint_*`, `ChunkIDToUUID_*`, `isConnError`, `parseDistance`, `storeOnce/searcheOnce/ensureCollectionOnce_notConnected`, `reconnect_NoDSN`, `retry_*`
 - Add `t.Parallel()` to all kept tests
-- Add tests for `Connect` DSN parsing (host, port, TLS)
+- Add DSN parsing tests for `Connect`
+
+### 5.5 Fix handler tests for API-first validation
+
+- `internal/api/handler_workflow_test.go` — Update JSON payloads to include all required fields (Tag, ParserStrategy, TopK, etc.)
+- `internal/api/handler_chat_stream_test.go` — Update JSON payloads to include all required fields (Temperature, MaxTokens, LLMProvider, etc.)
 
 ---
 
@@ -465,7 +404,6 @@ func TestSomething(t *testing.T) {
 
 **Files:** `internal/embedder/openai.go`, `internal/generator/generator.go`
 
-**Change:**
 ```go
 type BackoffStrategy func(attempt int) time.Duration
 
@@ -482,46 +420,31 @@ func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int, backoff Bac
 }
 ```
 
-Default implementation uses `time.Sleep`. Tests inject:
+Tests inject:
 ```go
 backoff: func(attempt int) time.Duration { return 0 }  // no sleep
 ```
 
-### 6.2 HttpClient abstraction for embedder/generator
+### 6.2 GitRunner interface
 
-**Alternative to 6.1:** Since both already use `openai.Client` (which is configurable via `option.WithHTTPClient`), tests can inject a custom transport. This is already done via `httptest.NewServer` in tests. The real issue is that the factory (`embedder.New`, `generator.New`) creates a real client pointing to real servers.
-
-**Refined approach:** Keep 6.1 (backoff injection) and ensure tests can inject a mock http round-tripper.
-
-### 6.3 GitRunner interface
-
-**Files:** `internal/workflow/preprocess_worker.go`
-
-**Change:** (Already described in Phase 3.3)
-
-Add `internal/git/git.go`:
+Move `internal/workflow/preprocess_worker.go` git helpers to `internal/git/git.go`:
 ```go
 package git
 
 type Runner interface {
-    Clone(ctx context.Context, url, path string, opts ...string) error
+    Clone(ctx context.Context, url, path string) error
     FetchAll(ctx context.Context, path string) error
     Checkout(ctx context.Context, path, branch string) error
     PullFFOnly(ctx context.Context, path string) error
 }
 
 type OSGit struct{}
-
-func (OSGit) Clone(ctx context.Context, url, path string, opts ...string) error {
-    return exec.CommandContext(ctx, "git", append([]string{"clone", "--depth", "1", url, path}, opts...)...).Run()
-}
+// ... wraps exec.CommandContext
 ```
 
-### 6.4 FileSystem interface
+### 6.3 FileSystem interface
 
-**Files:** `internal/workflow/preprocess_worker.go` (verify helpers)
-
-Create `internal/fs/fs.go`:
+Move verify helpers' filesystem operations behind an interface:
 ```go
 package fs
 
@@ -532,11 +455,6 @@ type Interface interface {
     Stat(path string) (os.FileInfo, error)
     MkdirAll(path string, perm os.FileMode) error
 }
-
-type OS struct{}
-
-func (OS) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
-// ...
 ```
 
 ---
@@ -544,20 +462,20 @@ func (OS) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
 ## Dependency Graph (Execution Order)
 
 ```
-Phase 0: config.LoadWithEnv, EnvLookup
+Phase 0: config.LoadWithEnv, EnvLookup (2 days)
   ↓
-Phase 1: EvalDB interface ←──────┐
-  ↓                                │
-Phase 3: Worker dep refactors     │  Phase 2: Pure-function tests
-  (depend on EvalDB, embedder/    │  (independent — can run in
-   generator interfaces)           │   parallel with Phase 1)
-  ↓                                │
-Phase 4: API layer refactors ──────┤  Phase 5: Test cleanup
-  (depends on EvalDB, embedder/    │  (depends on Phase 0 for
-   generator, VectorStore)         │   t.Parallel safety)
-  ↓                                │
-Phase 6: Structural improvements ──┘  Phase 6: Backoff, Git, FS
-  (independent)                        (independent)
+Phase 1: EvalDB interface (2 days) ←──────────┐
+  ↓                                             │
+Phase 3: Worker dep refactors (2.5 days)       │  Phase 2: Pure-function tests (1.5 days)
+  (depends on EvalDB, embedder/                │  (independent — can run in
+   generator interfaces)                       │   parallel with Phase 1)
+  ↓                                             │
+Phase 4: API layer refactors (1.5 days) ───────┤
+  ↓                                             │
+Phase 5: Test cleanup (2 days) ─────────────────┤  (depends on Phase 0 for
+  ↓                                             │   t.Parallel safety)
+Phase 6: Structural improvements (2 days) ──────┘
+  (independent)
 ```
 
 ---
@@ -566,8 +484,8 @@ Phase 6: Structural improvements ──┘  Phase 6: Backoff, Git, FS
 
 | Phase | Coverage (approx) | Running `go test -parallel=8 ./...` |
 |-------|-------------------|-------------------------------------|
-| Start | ~45% of packages | Fails — needs Postgres/Qdrant |
-| 0     | 45% | Still fails — global flag fixed but infra deps remain |
+| Start | ~45% | Fails — needs Postgres/Qdrant |
+| 0     | 45% | Fails — infura deps remain |
 | 1     | 55% | **Passes** `./internal/eval/...` without Postgres |
 | 2     | 65% | Passes most internal packages |
 | 3     | 75% | Workers testable without infra |
@@ -580,7 +498,7 @@ Phase 6: Structural improvements ──┘  Phase 6: Backoff, Git, FS
 ## Key Design Principles
 
 1. **Backward compatibility:** All `cmd/*/main.go` files continue working unchanged. New constructors/loaders coexist with old ones.
-2. **No external dependencies in tests:** Mock interfaces define exactly the contract needed. No testify mocks forced — use them where appropriate.
+2. **No external dependencies in tests:** Mock interfaces define exactly the contract needed.
 3. **Table-driven tests:** Follow the existing good patterns in `internal/chunker/fixed_test.go` and `internal/eval/metrics_test.go`.
 4. **One change per PR:** Each phase is independently reviewable and mergable.
 5. **Build tags for integration:** `//go:build integration` prevents accidental execution in CI unit test runs.
