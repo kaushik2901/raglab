@@ -83,7 +83,7 @@ func TestPreprocessHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestIndexHandler_ValidRequest(t *testing.T) {
-	body := `{"input_tag": "pre-tag-123", "tag": "idx-fixed"}`
+	body := `{"input_tag": "pre-tag-123", "tag": "idx-fixed", "parser_strategy": "markdown", "chunk_strategy": "fixed", "chunk_size": 512, "chunk_overlap": 64, "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "batch_size": 20, "index_concurrency": 5, "doc_timeout": "30m"}`
 	req := httptest.NewRequest("POST", "/api/v1/workflows/index", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -120,7 +120,7 @@ func TestIndexHandler_MissingInputTag(t *testing.T) {
 }
 
 func TestEvalHandler_ValidRequest(t *testing.T) {
-	body := `{"index_tag": "idx-fixed", "query_strategy": "naive-search", "dataset_path": "/data/dataset.json"}`
+	body := `{"index_tag": "idx-fixed", "tag": "eval-run", "query_strategy": "naive-search", "dataset_path": "/data/dataset.json", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`
 	req := httptest.NewRequest("POST", "/api/v1/workflows/eval", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -149,9 +149,9 @@ func TestEvalHandler_MissingFields(t *testing.T) {
 		name string
 		body string
 	}{
-		{"missing index_tag", `{"query_strategy": "naive", "dataset_path": "/d"}`},
-		{"missing query_strategy", `{"index_tag": "idx", "dataset_path": "/d"}`},
-		{"missing dataset_path", `{"index_tag": "idx", "query_strategy": "naive"}`},
+		{"missing index_tag", `{"tag": "eval-run", "query_strategy": "naive", "dataset_path": "/d", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
+		{"missing query_strategy", `{"index_tag": "idx", "tag": "eval-run", "dataset_path": "/d", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
+		{"missing dataset_path", `{"index_tag": "idx", "tag": "eval-run", "query_strategy": "naive", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
 	}
 
 	for _, tt := range tests {
@@ -233,28 +233,64 @@ func TestWorkflowStatusHandler_InvalidID(t *testing.T) {
 }
 
 func TestPreprocessRequest_Validate(t *testing.T) {
-	assert.NoError(t, PreprocessRequest{RepoURL: "https://example.com"}.Validate())
+	assert.NoError(t, PreprocessRequest{RepoURL: "https://example.com", Tag: "my-tag"}.Validate())
 	assert.Error(t, PreprocessRequest{}.Validate())
+	assert.Error(t, PreprocessRequest{RepoURL: "https://example.com"}.Validate())
 }
 
 func TestIndexRequest_Validate(t *testing.T) {
-	assert.NoError(t, IndexRequest{InputTag: "pre-tag"}.Validate())
+	valid := IndexRequest{
+		InputTag:          "pre-tag",
+		Tag:               "idx-tag",
+		ParserStrategy:    "markdown",
+		ChunkStrategy:     "fixed",
+		ChunkSize:         512,
+		ChunkOverlap:      64,
+		EmbeddingProvider: "openai",
+		EmbeddingModel:    "text-embedding-3-small",
+		BatchSize:         20,
+		IndexConcurrency:  5,
+		DocTimeout:        "30m",
+	}
+	assert.NoError(t, valid.Validate())
 	assert.Error(t, IndexRequest{}.Validate())
+	assert.Error(t, IndexRequest{InputTag: "pre-tag"}.Validate())
 }
 
 func TestEvalRequest_Validate(t *testing.T) {
-	assert.NoError(t, EvalRequest{
-		IndexTag:      "idx",
-		QueryStrategy: "naive",
-		DatasetPath:   "/path",
-	}.Validate())
+	valid := EvalRequest{
+		IndexTag:          "idx",
+		Tag:               "eval-run",
+		QueryStrategy:     "naive",
+		DatasetPath:       "/path",
+		TopK:              5,
+		Ks:                []int{1, 3, 5},
+		LLMProvider:       "openai",
+		LLMModel:          "gpt-4o-mini",
+		EmbeddingProvider: "openai",
+		EmbeddingModel:    "text-embedding-3-small",
+		JudgeProvider:     "openai",
+		JudgeModel:        "gpt-4o-mini",
+		BatchSize:         20,
+		Workers:           5,
+	}
+	assert.NoError(t, valid.Validate())
 	assert.Error(t, EvalRequest{}.Validate())
-	assert.Error(t, EvalRequest{IndexTag: "idx"}.Validate())
-	assert.Error(t, EvalRequest{IndexTag: "idx", QueryStrategy: "naive"}.Validate())
 }
 
 func TestChatRequest_Validate(t *testing.T) {
-	assert.NoError(t, ChatRequest{Tag: "col", Query: "hello"}.Validate())
+	valid := ChatRequest{
+		Tag:               "col",
+		Query:             "hello",
+		TopK:              5,
+		Temperature:       0.3,
+		MaxTokens:         1024,
+		LLMProvider:       "openai",
+		LLMModel:          "gpt-4o-mini",
+		EmbeddingProvider: "openai",
+		EmbeddingModel:    "text-embedding-3-small",
+	}
+	assert.NoError(t, valid.Validate())
 	assert.Error(t, ChatRequest{}.Validate())
 	assert.Error(t, ChatRequest{Tag: "col"}.Validate())
 	assert.Error(t, ChatRequest{Query: "hello"}.Validate())

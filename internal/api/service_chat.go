@@ -104,7 +104,7 @@ func (s *ChatService) ChatStream(ctx context.Context, req ChatRequest, results [
 	completion, err := gen.GenerateStream(ctx, openai.ChatCompletionNewParams{
 		Messages:    messages,
 		MaxTokens:   openai.Int(int64(req.MaxTokens)),
-		Temperature: openai.Float(*req.Temperature),
+		Temperature: openai.Float(req.Temperature),
 	}, onToken)
 	if err != nil {
 		return nil, fmt.Errorf("generate: %w", err)
@@ -149,7 +149,7 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 	completion, err := gen.Generate(ctx, openai.ChatCompletionNewParams{
 		Messages:    messages,
 		MaxTokens:   openai.Int(int64(req.MaxTokens)),
-		Temperature: openai.Float(*req.Temperature),
+		Temperature: openai.Float(req.Temperature),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("generate: %w", err)
