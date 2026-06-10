@@ -425,12 +425,21 @@ func countMarkdownFilesInDirs(srcDir string, includeDirs []string) (int, error) 
 func collectMarkdownPathsInDirs(srcDir string, includeDirs []string) (map[string]bool, error) {
 	allPaths := make(map[string]bool)
 	for _, d := range resolveWalkDirs(srcDir, includeDirs) {
-		paths, err := collectMarkdownPaths(d)
+		err := filepath.Walk(d, func(path string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if fi.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(fi.Name(), ".md") || strings.HasSuffix(fi.Name(), ".markdown") {
+				rel, _ := filepath.Rel(srcDir, path)
+				allPaths[rel] = true
+			}
+			return nil
+		})
 		if err != nil {
 			return nil, err
-		}
-		for k := range paths {
-			allPaths[k] = true
 		}
 	}
 	return allPaths, nil
