@@ -8,11 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/preprocess ./cmd/preprocess && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/index      ./cmd/index      && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/eval        ./cmd/eval        && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/query       ./cmd/query       && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/workerd     ./cmd/workerd     && \
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/workerd     ./cmd/workerd     && \
     CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/api         ./cmd/api
 
 FROM alpine:3.21

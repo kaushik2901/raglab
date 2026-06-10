@@ -81,6 +81,8 @@ func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorSto
 		NewChatRouter(chatSvc).Register(r)
 	})
 
+	r.Get("/", indexHandler)
+
 	return s
 }
 
