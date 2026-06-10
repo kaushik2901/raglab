@@ -120,7 +120,7 @@ func TestIndexHandler_MissingInputTag(t *testing.T) {
 }
 
 func TestEvalHandler_ValidRequest(t *testing.T) {
-	body := `{"index_tag": "idx-fixed", "tag": "eval-run", "query_strategy": "naive-search", "dataset_path": "/data/dataset.json", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`
+	body := `{"index_tag": "idx-fixed", "tag": "eval-run", "query_strategy": "naive-search", "dataset_path": "/data/dataset.json", "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`
 	req := httptest.NewRequest("POST", "/api/v1/workflows/eval", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -149,9 +149,9 @@ func TestEvalHandler_MissingFields(t *testing.T) {
 		name string
 		body string
 	}{
-		{"missing index_tag", `{"tag": "eval-run", "query_strategy": "naive", "dataset_path": "/d", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
-		{"missing query_strategy", `{"index_tag": "idx", "tag": "eval-run", "dataset_path": "/d", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
-		{"missing dataset_path", `{"index_tag": "idx", "tag": "eval-run", "query_strategy": "naive", "top_k": 5, "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
+		{"missing index_tag", `{"tag": "eval-run", "query_strategy": "naive", "dataset_path": "/d", "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
+		{"missing query_strategy", `{"index_tag": "idx", "tag": "eval-run", "dataset_path": "/d", "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
+		{"missing dataset_path", `{"index_tag": "idx", "tag": "eval-run", "query_strategy": "naive", "ks": [1,3,5], "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "judge_provider": "openai", "judge_model": "gpt-4o-mini", "batch_size": 20, "workers": 5}`},
 	}
 
 	for _, tt := range tests {
@@ -263,7 +263,6 @@ func TestEvalRequest_Validate(t *testing.T) {
 		Tag:               "eval-run",
 		QueryStrategy:     "naive",
 		DatasetPath:       "/path",
-		TopK:              5,
 		Ks:                []int{1, 3, 5},
 		LLMProvider:       "openai",
 		LLMModel:          "gpt-4o-mini",

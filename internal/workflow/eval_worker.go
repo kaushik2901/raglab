@@ -26,7 +26,6 @@ type EvalArgs struct {
 	IndexTag          string `json:"index_tag"`
 	QueryStrategy     string `json:"query_strategy"`
 	DatasetPath       string `json:"dataset_path"`
-	TopK              int    `json:"top_k"`
 	Ks                []int  `json:"ks"`
 	LLMProvider       string `json:"llm_provider"`
 	LLMModel          string `json:"llm_model"`
@@ -96,6 +95,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 
 	workers := args.Workers
 	batchSize := args.BatchSize
+	topK := maxIntSlice(args.Ks)
 
 	// On retry, clean up the previous run's results before creating a new one
 	if cp.QuestionsProcessed > 0 && cp.RunID != "" {
@@ -107,7 +107,6 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 	evalRunID, err := w.EvalDB.CreateRun(ctx, args.Tag, map[string]any{
 		"index_tag":      args.IndexTag,
 		"query_strategy": args.QueryStrategy,
-		"top_k":          args.TopK,
 		"llm_provider":   args.LLMProvider,
 		"llm_model":      args.LLMModel,
 		"judge_provider": args.JudgeProvider,
@@ -164,7 +163,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		workerWg.Add(1)
 		g.Go(func() error {
 			defer workerWg.Done()
-			return evaluateQuestions(ctx, args, vs, gen, judgeGen, workChan, resultChan)
+			return evaluateQuestions(ctx, args, topK, vs, gen, judgeGen, workChan, resultChan)
 		})
 	}
 
@@ -267,14 +266,14 @@ func embedQuestions(ctx context.Context, emb embedder.Embedder, questionChan <-c
 	}
 }
 
-func evaluateQuestions(ctx context.Context, args EvalArgs, qStore eval.VectorSearcher, gen generator.Generator, judgeGen generator.Generator, workChan <-chan workUnit, resultChan chan<- types.RetrievalResult) error {
+func evaluateQuestions(ctx context.Context, args EvalArgs, topK int, qStore eval.VectorSearcher, gen generator.Generator, judgeGen generator.Generator, workChan <-chan workUnit, resultChan chan<- types.RetrievalResult) error {
 	for {
 		select {
 		case wu, ok := <-workChan:
 			if !ok {
 				return nil
 			}
-			result, err := eval.EvaluateQuestion(ctx, wu.Question, wu.Embedding, qStore, gen, judgeGen, args.IndexTag, args.TopK)
+			result, err := eval.EvaluateQuestion(ctx, wu.Question, wu.Embedding, qStore, gen, judgeGen, args.IndexTag, topK)
 			if err != nil {
 				slog.Warn("evaluate question failed", "question_id", wu.Question.ID, "err", err)
 				result = types.RetrievalResult{
@@ -424,4 +423,14 @@ func saveEvalCheckpoint(ctx context.Context, client *river.Client[pgx.Tx], job *
 		Output: evalCheckpoint{RunID: runID, QuestionsProcessed: questionsProcessed},
 	})
 	return err
+}
+
+func maxIntSlice(vals []int) int {
+	m := vals[0]
+	for _, v := range vals[1:] {
+		if v > m {
+			m = v
+		}
+	}
+	return m
 }

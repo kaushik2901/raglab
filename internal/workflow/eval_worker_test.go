@@ -37,7 +37,6 @@ func TestEvalWorker_Work_ErrorPropagation(t *testing.T) {
 				Tag:               "test-eval-err",
 				IndexTag:          "test-collection",
 				DatasetPath:       "/tmp/nonexistent.json",
-				TopK:              5,
 				Ks:                []int{1, 3, 5},
 				LLMProvider:       "openai",
 				LLMModel:          "gpt-4o-mini",

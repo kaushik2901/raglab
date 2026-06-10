@@ -75,7 +75,6 @@ func (s *WorkflowService) InsertEval(ctx context.Context, req EvalRequest) (*Wor
 		IndexTag:          req.IndexTag,
 		QueryStrategy:     req.QueryStrategy,
 		DatasetPath:       req.DatasetPath,
-		TopK:              req.TopK,
 		Ks:                req.Ks,
 		LLMProvider:       req.LLMProvider,
 		LLMModel:          req.LLMModel,

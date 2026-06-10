@@ -183,7 +183,6 @@
       <div class="field"><label for="eval_wf_dataset">dataset_path *</label><input id="eval_wf_dataset" value="/data/dataset.json" style="width:200px" data-storage="eval_wf_dataset"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label for="eval_wf_topk">top_k *</label><input id="eval_wf_topk" value="5" style="width:80px" data-storage="eval_wf_topk"></div>
       <div class="field"><label for="eval_wf_ks">ks * (JSON array)</label><input id="eval_wf_ks" value="[1,3,5]" style="width:120px" data-storage="eval_wf_ks"></div>
       <div class="field"><label for="eval_wf_llm_provider">llm_provider *</label><input id="eval_wf_llm_provider" value="openai" data-storage="eval_wf_llm_provider"></div>
       <div class="field"><label for="eval_wf_llm_model">llm_model *</label><input id="eval_wf_llm_model" value="gpt-4o-mini" data-storage="eval_wf_llm_model"></div>
@@ -345,7 +344,7 @@ async function callEndpoint(name) {
         break;
       case 'eval-wf':
         method = 'POST';
-        body = { index_tag: getVal('eval_wf_index_tag'), tag: getVal('eval_wf_tag'), query_strategy: getVal('eval_wf_strategy'), dataset_path: getVal('eval_wf_dataset'), top_k: parseInt(getVal('eval_wf_topk')), ks: JSON.parse(getVal('eval_wf_ks')), llm_provider: getVal('eval_wf_llm_provider'), llm_model: getVal('eval_wf_llm_model'), embedding_provider: getVal('eval_wf_embed_provider'), embedding_model: getVal('eval_wf_embed_model'), judge_provider: getVal('eval_wf_judge_provider'), judge_model: getVal('eval_wf_judge_model'), batch_size: parseInt(getVal('eval_wf_batch_size')), workers: parseInt(getVal('eval_wf_workers')) };
+        body = { index_tag: getVal('eval_wf_index_tag'), tag: getVal('eval_wf_tag'), query_strategy: getVal('eval_wf_strategy'), dataset_path: getVal('eval_wf_dataset'), ks: JSON.parse(getVal('eval_wf_ks')), llm_provider: getVal('eval_wf_llm_provider'), llm_model: getVal('eval_wf_llm_model'), embedding_provider: getVal('eval_wf_embed_provider'), embedding_model: getVal('eval_wf_embed_model'), judge_provider: getVal('eval_wf_judge_provider'), judge_model: getVal('eval_wf_judge_model'), batch_size: parseInt(getVal('eval_wf_batch_size')), workers: parseInt(getVal('eval_wf_workers')) };
         url = '/api/v1/workflows/eval';
         break;
       case 'wf-status':

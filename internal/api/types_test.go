@@ -103,7 +103,6 @@ func TestEvalRequest_Validate_Valid(t *testing.T) {
 		Tag:               "eval-tag",
 		QueryStrategy:     "naive-search",
 		DatasetPath:       "/data/dataset.jsonl",
-		TopK:              10,
 		Ks:                []int{1, 3, 5},
 		LLMProvider:       "openai",
 		LLMModel:          "gpt-4o-mini",
@@ -124,13 +123,12 @@ func TestEvalRequest_Validate_MissingFields(t *testing.T) {
 		req   EvalRequest
 		field string
 	}{
-		{"missing index_tag", EvalRequest{Tag: "t", QueryStrategy: "q", DatasetPath: "/d", TopK: 1, Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "index_tag"},
-		{"missing tag", EvalRequest{IndexTag: "i", QueryStrategy: "q", DatasetPath: "/d", TopK: 1, Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "tag"},
-		{"missing query_strategy", EvalRequest{IndexTag: "i", Tag: "t", DatasetPath: "/d", TopK: 1, Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "query_strategy"},
-		{"missing dataset_path", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", TopK: 1, Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "dataset_path"},
-		{"missing top_k", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", DatasetPath: "/d", Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "top_k"},
-		{"missing llm_provider", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", DatasetPath: "/d", TopK: 1, Ks: []int{1}, LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "llm_provider"},
-		{"missing workers", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", DatasetPath: "/d", TopK: 1, Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 0}, "workers"},
+		{"missing index_tag", EvalRequest{Tag: "t", QueryStrategy: "q", DatasetPath: "/d", Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "index_tag"},
+		{"missing tag", EvalRequest{IndexTag: "i", QueryStrategy: "q", DatasetPath: "/d", Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "tag"},
+		{"missing query_strategy", EvalRequest{IndexTag: "i", Tag: "t", DatasetPath: "/d", Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "query_strategy"},
+		{"missing dataset_path", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "dataset_path"},
+		{"missing llm_provider", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", DatasetPath: "/d", Ks: []int{1}, LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 1}, "llm_provider"},
+		{"missing workers", EvalRequest{IndexTag: "i", Tag: "t", QueryStrategy: "q", DatasetPath: "/d", Ks: []int{1}, LLMProvider: "o", LLMModel: "m", EmbeddingProvider: "o", EmbeddingModel: "m", JudgeProvider: "o", JudgeModel: "m", BatchSize: 1, Workers: 0}, "workers"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

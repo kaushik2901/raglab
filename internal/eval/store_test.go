@@ -47,7 +47,6 @@ func TestEvalStore_CreateRun(t *testing.T) {
 		cleanEvalTables(t, pool)
 		id, err := s.CreateRun(context.Background(), "eval-test-1", map[string]any{
 			"index_tag": "idx-1",
-			"top_k":     5,
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, id)
@@ -231,7 +230,6 @@ func TestEvalStore_FullRoundTrip(t *testing.T) {
 
 		runID, err := s.CreateRun(context.Background(), "eval-roundtrip", map[string]any{
 			"strategy": "naive-search",
-			"top_k":    5,
 		})
 		require.NoError(t, err)
 

@@ -72,7 +72,6 @@ type EvalRequest struct {
 	Tag               string `json:"tag"`
 	QueryStrategy     string `json:"query_strategy"`
 	DatasetPath       string `json:"dataset_path"`
-	TopK              int    `json:"top_k"`
 	Ks                []int  `json:"ks"`
 	LLMProvider       string `json:"llm_provider"`
 	LLMModel          string `json:"llm_model"`
@@ -96,9 +95,6 @@ func (r EvalRequest) Validate() error {
 	}
 	if r.DatasetPath == "" {
 		return &validationError{"dataset_path is required"}
-	}
-	if r.TopK <= 0 {
-		return &validationError{"top_k must be positive"}
 	}
 	if len(r.Ks) == 0 {
 		return &validationError{"ks is required"}
