@@ -456,3 +456,64 @@ func TestQdrant_ToPoint_PayloadTypes(t *testing.T) {
 	assert.IsType(t, int64(0), point.Payload["chunk_index"].GetIntegerValue())
 	assert.IsType(t, "", point.Payload["model"].GetStringValue())
 }
+
+func TestToPoint_MetadataInPayload(t *testing.T) {
+	doc := types.DocumentChunk{
+		Chunk: types.Chunk{
+			ID:           "test-doc.md-chunk-0000",
+			DocumentPath: "test-doc.md",
+			Content:      "chunk content here",
+			TokenCount:   5,
+			Index:        0,
+			Metadata: map[string]string{
+				"source_url": "https://example.com/test-doc/",
+				"title":      "Test Document",
+			},
+		},
+		Embedding: types.Embedding{
+			ChunkID:    "test-doc.md-chunk-0000",
+			Vector:     []float64{0.1, 0.2, 0.3},
+			Model:      "test-model",
+			Dimensions: 3,
+		},
+	}
+
+	point := toPoint(doc)
+	require.NotNil(t, point)
+	require.NotNil(t, point.Payload)
+
+	assert.Equal(t, "https://example.com/test-doc/", point.Payload["source_url"].GetStringValue())
+	assert.Equal(t, "Test Document", point.Payload["title"].GetStringValue())
+	assert.Equal(t, "test-doc.md", point.Payload["document_path"].GetStringValue())
+}
+
+func TestToPoint_NilMetadata_NoExtraPayload(t *testing.T) {
+	doc := types.DocumentChunk{
+		Chunk: types.Chunk{
+			ID:           "test-doc.md-chunk-0000",
+			DocumentPath: "test-doc.md",
+			Content:      "chunk content here",
+			TokenCount:   5,
+			Index:        0,
+		},
+		Embedding: types.Embedding{
+			ChunkID:    "test-doc.md-chunk-0000",
+			Vector:     []float64{0.1, 0.2, 0.3},
+			Model:      "test-model",
+			Dimensions: 3,
+		},
+	}
+
+	point := toPoint(doc)
+	require.NotNil(t, point)
+
+	// Known payload keys only
+	assert.NotNil(t, point.Payload["document_path"])
+	assert.NotNil(t, point.Payload["content"])
+	assert.NotNil(t, point.Payload["token_count"])
+	assert.NotNil(t, point.Payload["chunk_index"])
+	assert.NotNil(t, point.Payload["model"])
+	// No metadata-only keys
+	assert.Nil(t, point.Payload["source_url"])
+	assert.Nil(t, point.Payload["title"])
+}

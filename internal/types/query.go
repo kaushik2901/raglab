@@ -7,4 +7,5 @@ type SearchResult struct {
 	Score        float32
 	TokenCount   int
 	ChunkIndex   int
+	Metadata     map[string]string
 }

@@ -186,6 +186,15 @@ func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, que
 			if v, ok := payload["chunk_index"]; ok {
 				r.ChunkIndex = int(v.GetIntegerValue())
 			}
+			r.Metadata = make(map[string]string)
+			for k, v := range payload {
+				switch k {
+				case "content", "document_path", "token_count", "chunk_index", "model":
+					continue
+				default:
+					r.Metadata[k] = v.GetStringValue()
+				}
+			}
 		}
 		results = append(results, r)
 	}
@@ -236,18 +245,23 @@ func toPoint(doc types.DocumentChunk) *qdrant.PointStruct {
 		vectors[i] = float32(v)
 	}
 
+	payload := map[string]any{
+		"document_path": doc.Chunk.DocumentPath,
+		"content":       doc.Chunk.Content,
+		"token_count":   doc.Chunk.TokenCount,
+		"chunk_index":   doc.Chunk.Index,
+		"model":         doc.Embedding.Model,
+	}
+	for k, v := range doc.Chunk.Metadata {
+		payload[k] = v
+	}
+
 	return &qdrant.PointStruct{
 		Id: &qdrant.PointId{
 			PointIdOptions: &qdrant.PointId_Uuid{Uuid: chunkIDToUUID(doc.Chunk.ID)},
 		},
 		Vectors: qdrant.NewVectors(vectors...),
-		Payload: qdrant.NewValueMap(map[string]any{
-			"document_path": doc.Chunk.DocumentPath,
-			"content":       doc.Chunk.Content,
-			"token_count":   doc.Chunk.TokenCount,
-			"chunk_index":   doc.Chunk.Index,
-			"model":         doc.Embedding.Model,
-		}),
+		Payload: qdrant.NewValueMap(payload),
 	}
 }
 
