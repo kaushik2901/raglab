@@ -35,11 +35,12 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("connect postgres: %w", err)
 	}
 
-	qdrantStore := qstore.NewQdrantStore(cfg.QdrantAPIKey)
-	if err := qdrantStore.Connect(context.Background(), cfg.QdrantURL); err != nil {
+	qStore := qstore.NewQdrantStore(cfg.QdrantAPIKey)
+	if err := qStore.Connect(context.Background(), cfg.QdrantURL); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("connect qdrant: %w", err)
 	}
+	qdrantStore := qstore.NewCircuitBreakerVectorStore(qStore)
 
 	return NewWithDeps(cfg, pool, qdrantStore), nil
 }

@@ -1,16 +1,12 @@
 package embedder
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,12 +32,6 @@ type embedData struct {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
-}
-
-func newTestEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
-	e := newOpenAIEmbedder(baseURL, apiKey, model, batchSize)
-	e.retryBackoff = time.Millisecond
-	return e
 }
 
 func TestEmbed_Basic(t *testing.T) {
@@ -221,36 +211,12 @@ func TestEmbed_APIBadStatus(t *testing.T) {
 }
 
 func TestEmbed_RateLimit(t *testing.T) {
-	var callCount int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := atomic.AddInt32(&callCount, 1)
-		if c == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		writeJSON(w, embedResponse{
-			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
-			Model: "m",
-		})
-	}))
-	defer srv.Close()
-
-	e := newTestEmbedder(srv.URL, "", "m", 10)
-	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
-
-	embeddings, err := e.Embed(context.Background(), chunks)
-	require.NoError(t, err)
-	assert.Len(t, embeddings, 1)
-	assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
-}
-
-func TestEmbed_RateLimitExhausted(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 
-	e := newTestEmbedder(srv.URL, "", "m", 10)
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
 	chunks := []types.Chunk{{ID: "c1", Content: "x"}}
 
 	_, err := e.Embed(context.Background(), chunks)
@@ -335,72 +301,16 @@ func TestNewEmbedder_Defaults(t *testing.T) {
 	assert.Equal(t, 0, e.Dimensions())
 }
 
-func TestEmbed_RetryBodyPreserved(t *testing.T) {
-	var callCount int32
-	var bodies [][]byte
-	var mu sync.Mutex
-
+func TestEmbed_APIErrorPassthrough(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		r.Body.Close()
-
-		mu.Lock()
-		bodies = append(bodies, body)
-		count := atomic.AddInt32(&callCount, 1)
-		mu.Unlock()
-
-		if count < 3 {
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		writeJSON(w, embedResponse{
-			Data:  []embedData{{Index: 0, Embedding: []float64{0.1}}},
-			Model: "m",
-		})
-	}))
-	defer srv.Close()
-
-	e := newTestEmbedder(srv.URL, "", "m", 10)
-	e.retryMaxAttempts = 5
-	chunks := []types.Chunk{{ID: "c1", Content: "hello world"}}
-
-	_, err := e.Embed(context.Background(), chunks)
-	require.NoError(t, err)
-	assert.Equal(t, int32(3), atomic.LoadInt32(&callCount), "expected 3 calls (2 retries + success)")
-	require.Len(t, bodies, 3, "expected 3 request bodies")
-
-	for i := 1; i < len(bodies); i++ {
-		assert.True(t, bytes.Equal(bodies[0], bodies[i]),
-			"request body on attempt %d differs from attempt 0", i+1)
-	}
-}
-
-func TestEmbed_RetryBodyPreserved_Exhausted(t *testing.T) {
-	var bodies [][]byte
-	var mu sync.Mutex
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		r.Body.Close()
-
-		mu.Lock()
-		bodies = append(bodies, body)
-		mu.Unlock()
-
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 
-	e := newTestEmbedder(srv.URL, "", "m", 10)
-	e.retryMaxAttempts = 2
-	chunks := []types.Chunk{{ID: "c1", Content: "fail me"}}
+	e := newOpenAIEmbedder(srv.URL, "", "m", 10)
+	chunks := []types.Chunk{{ID: "c1", Content: "hello"}}
 
 	_, err := e.Embed(context.Background(), chunks)
 	require.Error(t, err)
-
-	require.Len(t, bodies, 3, "expected 3 attempts (initial + 2 retries)")
-	for i := 1; i < len(bodies); i++ {
-		assert.True(t, bytes.Equal(bodies[0], bodies[i]),
-			"request body on attempt %d differs from attempt 0", i+1)
-	}
+	assert.Contains(t, err.Error(), "embedding")
 }

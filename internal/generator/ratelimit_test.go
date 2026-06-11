@@ -14,8 +14,9 @@ import (
 )
 
 type mockGenerator struct {
-	generateFn  func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
-	modelNameFn func() string
+	generateFn       func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
+	generateStreamFn func(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error)
+	modelNameFn      func() string
 }
 
 func (m *mockGenerator) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
@@ -26,7 +27,10 @@ func (m *mockGenerator) Generate(ctx context.Context, params openai.ChatCompleti
 }
 
 func (m *mockGenerator) GenerateStream(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error) {
-	return m.Generate(ctx, params)
+	if m.generateStreamFn != nil {
+		return m.generateStreamFn(ctx, params, cb)
+	}
+	return &openai.ChatCompletion{}, nil
 }
 
 func (m *mockGenerator) ModelName() string {

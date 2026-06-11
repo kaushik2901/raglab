@@ -3,6 +3,7 @@ module github.com/kaushik2901/gitlab-handbook-rag-pipeline
 go 1.25.0
 
 require (
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
@@ -11,6 +12,7 @@ require (
 	github.com/riverqueue/river v0.38.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.38.0
 	github.com/riverqueue/river/rivertype v0.38.0
+	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0

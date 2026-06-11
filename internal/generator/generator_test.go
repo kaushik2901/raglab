@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/stretchr/testify/assert"
@@ -120,53 +118,7 @@ func TestGenerate_EmptyChoices(t *testing.T) {
 	assert.Empty(t, completion.Choices)
 }
 
-func TestGenerate_RateLimitRetry_Success(t *testing.T) {
-	var attempts int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cur := atomic.AddInt32(&attempts, 1)
-		if cur == 1 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error":{"message":"rate limit","type":"rate_limit_error","code":null,"param":null}}`))
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"id":      "chatcmpl-123",
-			"object":  "chat.completion",
-			"created": 1700000000,
-			"model":   "gpt-4o-mini",
-			"choices": []map[string]any{
-				{
-					"index":         0,
-					"finish_reason": "stop",
-					"message":       map[string]any{"role": "assistant", "content": "Hello!"},
-				},
-			},
-			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
-		})
-	}))
-	defer srv.Close()
-
-	g := NewOpenAI(srv.URL, "", "gpt-4o-mini")
-	gen := g.(*openAIGenerator)
-	gen.retryBackoff = time.Millisecond
-	gen.retryMaxAttempts = 3
-
-	params := openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage("hello"),
-		},
-	}
-
-	completion, err := g.Generate(context.Background(), params)
-	require.NoError(t, err)
-	require.Len(t, completion.Choices, 1)
-	assert.Equal(t, "Hello!", completion.Choices[0].Message.Content)
-	assert.Equal(t, int32(2), atomic.LoadInt32(&attempts))
-}
-
-func TestGenerate_RateLimitRetry_Exhausted(t *testing.T) {
+func TestGenerate_APIErrorPassthrough(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -175,10 +127,6 @@ func TestGenerate_RateLimitRetry_Exhausted(t *testing.T) {
 	defer srv.Close()
 
 	g := NewOpenAI(srv.URL, "", "gpt-4o-mini")
-	gen := g.(*openAIGenerator)
-	gen.retryBackoff = time.Millisecond
-	gen.retryMaxAttempts = 2
-
 	params := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("hello"),
@@ -187,7 +135,6 @@ func TestGenerate_RateLimitRetry_Exhausted(t *testing.T) {
 
 	_, err := g.Generate(context.Background(), params)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "429")
 }
 
 func TestNormalizeBaseURL(t *testing.T) {

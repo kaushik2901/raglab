@@ -147,11 +147,12 @@ func RunIndexing(ctx context.Context, args IndexArgs) error {
 		return fmt.Errorf("create chunker: %w", err)
 	}
 
-	qStore := qstore.NewQdrantStore(qdrantAPIKey)
-	if err := qStore.Connect(ctx, qdrantURL); err != nil {
+	rawStore := qstore.NewQdrantStore(qdrantAPIKey)
+	if err := rawStore.Connect(ctx, qdrantURL); err != nil {
 		return fmt.Errorf("connect qdrant: %w", err)
 	}
-	defer qStore.Close()
+	qStore := qstore.NewCircuitBreakerVectorStore(rawStore)
+	defer rawStore.Close()
 
 	collectionName := args.Tag
 

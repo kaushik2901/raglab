@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,22 +67,9 @@ func (s *QdrantStore) Connect(ctx context.Context, dsn string) error {
 }
 
 func (s *QdrantStore) EnsureCollection(ctx context.Context, name string, vectorSize int, distance string) error {
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			if err := s.reconnect(ctx); err != nil {
-				return fmt.Errorf("reconnect failed: %w", err)
-			}
-		}
-		err := s.ensureCollectionOnce(ctx, name, vectorSize, distance)
-		if err == nil {
-			return nil
-		}
-		if isConnError(err) {
-			continue
-		}
-		return err
-	}
-	return fmt.Errorf("ensure collection failed after 3 attempts")
+	return retryWithBackoff(ctx, 3, func(ctx context.Context) error {
+		return s.ensureCollectionOnce(ctx, name, vectorSize, distance)
+	}, func() error { return s.reconnect(ctx) })
 }
 
 func (s *QdrantStore) ensureCollectionOnce(ctx context.Context, name string, vectorSize int, distance string) error {
@@ -116,22 +105,9 @@ func (s *QdrantStore) ensureCollectionOnce(ctx context.Context, name string, vec
 }
 
 func (s *QdrantStore) Store(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			if err := s.reconnect(ctx); err != nil {
-				return fmt.Errorf("reconnect failed: %w", err)
-			}
-		}
-		err := s.storeOnce(ctx, collectionName, chunks)
-		if err == nil {
-			return nil
-		}
-		if isConnError(err) {
-			continue
-		}
-		return err
-	}
-	return fmt.Errorf("store failed after 3 attempts")
+	return retryWithBackoff(ctx, 3, func(ctx context.Context) error {
+		return s.storeOnce(ctx, collectionName, chunks)
+	}, func() error { return s.reconnect(ctx) })
 }
 
 func (s *QdrantStore) storeOnce(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error {
@@ -168,22 +144,13 @@ func (s *QdrantStore) storeOnce(ctx context.Context, collectionName string, chun
 }
 
 func (s *QdrantStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			if err := s.reconnect(ctx); err != nil {
-				return nil, fmt.Errorf("reconnect failed: %w", err)
-			}
-		}
-		results, err := s.searchOnce(ctx, collectionName, queryVector, topK)
-		if err == nil {
-			return results, nil
-		}
-		if isConnError(err) {
-			continue
-		}
-		return nil, err
-	}
-	return nil, fmt.Errorf("search failed after 3 attempts")
+	var results []types.SearchResult
+	err := retryWithBackoff(ctx, 3, func(ctx context.Context) error {
+		var err error
+		results, err = s.searchOnce(ctx, collectionName, queryVector, topK)
+		return err
+	}, func() error { return s.reconnect(ctx) })
+	return results, err
 }
 
 func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
@@ -302,6 +269,40 @@ func chunkIDToUUID(id string) string {
 	sum[8] = (sum[8] & 0x3f) | 0x80 // set RFC 4122 variant
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		sum[0:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
+}
+
+func retryWithBackoff(ctx context.Context, maxAttempts int, op func(context.Context) error, reconnect func() error) error {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 100 * time.Millisecond
+	b.Multiplier = 2.0
+	b.MaxInterval = 5 * time.Second
+	b.MaxElapsedTime = 0
+	b.RandomizationFactor = 0.5
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			next := b.NextBackOff()
+			if next == backoff.Stop {
+				return fmt.Errorf("retry stopped after %d attempts", attempt)
+			}
+			select {
+			case <-time.After(next):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			if err := reconnect(); err != nil {
+				return fmt.Errorf("reconnect failed: %w", err)
+			}
+		}
+		err := op(ctx)
+		if err == nil {
+			return nil
+		}
+		if !isConnError(err) {
+			return err
+		}
+	}
+	return fmt.Errorf("operation failed after %d attempts", maxAttempts)
 }
 
 func parseDistance(d string) qdrant.Distance {

@@ -2,12 +2,8 @@ package embedder
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"math/rand"
-	"net/http"
 	"sync/atomic"
-	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -17,12 +13,10 @@ import (
 )
 
 type embedder struct {
-	model            string
-	batchSize        int
-	client           openai.Client
-	retryMaxAttempts int
-	retryBackoff     time.Duration
-	dimensions       atomic.Int32
+	model      string
+	batchSize  int
+	client     openai.Client
+	dimensions atomic.Int32
 }
 
 func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
@@ -36,11 +30,9 @@ func newOpenAIEmbedder(baseURL, apiKey, model string, batchSize int) *embedder {
 	}
 	opts = append(opts, option.WithMaxRetries(0))
 	return &embedder{
-		client:           openai.NewClient(opts...),
-		model:            model,
-		batchSize:        batchSize,
-		retryMaxAttempts: 5,
-		retryBackoff:     200 * time.Millisecond,
+		client:    openai.NewClient(opts...),
+		model:     model,
+		batchSize: batchSize,
 	}
 }
 
@@ -77,31 +69,9 @@ func (e *embedder) embedBatch(ctx context.Context, chunks []types.Chunk) ([]type
 		},
 	}
 
-	var resp *openai.CreateEmbeddingResponse
-	var err error
-	for attempt := 0; attempt <= e.retryMaxAttempts; attempt++ {
-		resp, err = e.client.Embeddings.New(ctx, params)
-		if err == nil {
-			break
-		}
-
-		var apiErr *openai.Error
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests && attempt < e.retryMaxAttempts {
-			backoff := e.retryBackoff * (1 << attempt)
-			if apiErr.Response != nil {
-				if retryAfter := config.ParseRetryAfter(apiErr.Response.Header.Get("Retry-After")); retryAfter > backoff {
-					backoff = retryAfter
-				}
-			}
-			jitter := time.Duration(rand.Int63n(int64(backoff / 2)))
-			time.Sleep(backoff + jitter)
-			continue
-		}
-
-		return nil, fmt.Errorf("embedding: %w", err)
-	}
+	resp, err := e.client.Embeddings.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("rate limit exceeded after %d retries", e.retryMaxAttempts)
+		return nil, fmt.Errorf("embedding: %w", err)
 	}
 
 	if len(resp.Data) != len(chunks) {

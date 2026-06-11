@@ -2,13 +2,8 @@ package generator
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
-	"math/rand"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -25,10 +20,8 @@ type Generator interface {
 }
 
 type openAIGenerator struct {
-	client           openai.Client
-	model            string
-	retryMaxAttempts int
-	retryBackoff     time.Duration
+	client openai.Client
+	model  string
 }
 
 func NewOpenAI(baseURL, apiKey, model string) Generator {
@@ -43,53 +36,34 @@ func NewOpenAI(baseURL, apiKey, model string) Generator {
 	}
 	opts = append(opts, option.WithMaxRetries(0))
 	return &openAIGenerator{
-		client:           openai.NewClient(opts...),
-		model:            model,
-		retryMaxAttempts: 5,
-		retryBackoff:     200 * time.Millisecond,
+		client: openai.NewClient(opts...),
+		model:  model,
 	}
 }
 
 // New creates a Generator for the given provider and model.
 // It resolves the provider-specific base URL and API key from environment variables.
+// The returned generator is wrapped with retry, circuit breaker, and rate limiter decorators.
 func New(provider config.Provider, model string) (Generator, error) {
 	baseURL, apiKey := config.ResolveProviderConfig(provider)
 	if baseURL == "" {
 		return nil, fmt.Errorf("empty base URL for provider %q", provider)
 	}
-	gen := NewOpenAI(baseURL, apiKey, model)
+	var gen Generator = NewOpenAI(baseURL, apiKey, model)
+
+	gen = NewRetryGenerator(gen)
+	gen = NewCircuitBreakerGenerator(gen)
 	rpm := config.FloatEnvOrDefault("GENERATOR_RATE_LIMIT_RPM", 100)
 	return NewRateLimitedGenerator(gen, rpm), nil
 }
 
 func (g *openAIGenerator) Generate(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 	params.Model = openai.ChatModel(g.model)
-
-	for attempt := 0; attempt <= g.retryMaxAttempts; attempt++ {
-		completion, err := g.client.Chat.Completions.New(ctx, params)
-		if err == nil {
-			return completion, nil
-		}
-
-		var apiErr *openai.Error
-		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests && attempt < g.retryMaxAttempts {
-			backoff := g.retryBackoff * (1 << attempt)
-			if apiErr.Response != nil {
-				if retryAfter := config.ParseRetryAfter(apiErr.Response.Header.Get("Retry-After")); retryAfter > backoff {
-					backoff = retryAfter
-				}
-			}
-			jitter := time.Duration(rand.Int63n(int64(backoff / 2)))
-			slog.Warn("rate limit hit, retrying", "attempt", attempt+1, "backoff", backoff+jitter)
-			time.Sleep(backoff + jitter)
-			continue
-		}
-
+	completion, err := g.client.Chat.Completions.New(ctx, params)
+	if err != nil {
 		return nil, fmt.Errorf("chat completion: %w", err)
 	}
-
-	slog.Warn("rate limit retries exhausted", "max_attempts", g.retryMaxAttempts, "model", g.model)
-	return nil, fmt.Errorf("rate limit exceeded after %d retries", g.retryMaxAttempts)
+	return completion, nil
 }
 
 func (g *openAIGenerator) GenerateStream(ctx context.Context, params openai.ChatCompletionNewParams, cb StreamCallback) (*openai.ChatCompletion, error) {

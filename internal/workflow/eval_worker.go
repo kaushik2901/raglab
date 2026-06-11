@@ -121,15 +121,15 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 	vs := w.QStore
 	gen := w.Generator
 	judgeGen := w.JudgeGen
-	var qStore *qstore.QdrantStore
+	var rawStore *qstore.QdrantStore
 	if emb == nil || vs == nil || gen == nil {
 		var cerr error
-		emb, qStore, gen, judgeGen, cerr = createEvalDeps(ctx, args)
+		emb, rawStore, gen, judgeGen, cerr = createEvalDeps(ctx, args)
 		if cerr != nil {
 			return cerr
 		}
-		defer qStore.Close()
-		vs = qStore
+		defer rawStore.Close()
+		vs = qstore.NewCircuitBreakerVectorStore(rawStore)
 	}
 
 	file, err := os.Open(args.DatasetPath)
