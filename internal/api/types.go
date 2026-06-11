@@ -3,6 +3,7 @@ package api
 type PreprocessRequest struct {
 	RepoURL     string   `json:"repo_url"`
 	Tag         string   `json:"tag"`
+	BaseURL     string   `json:"base_url"`
 	IncludeDirs []string `json:"include_dirs,omitempty"`
 }
 

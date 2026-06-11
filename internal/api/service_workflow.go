@@ -41,6 +41,7 @@ func (s *WorkflowService) InsertPreprocess(ctx context.Context, req PreprocessRe
 	result, err := s.client.Insert(ctx, &workflow.PreprocessArgs{
 		Tag:         req.Tag,
 		RepoURL:     req.RepoURL,
+		BaseURL:     req.BaseURL,
 		IncludeDirs: req.IncludeDirs,
 	}, nil)
 	if err != nil {

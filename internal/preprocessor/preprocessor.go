@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func ProcessFile(filePath string, repoRoot string) (*types.Document, error) {
+func ProcessFile(filePath string, repoRoot string, baseURL string) (*types.Document, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
@@ -42,14 +42,27 @@ func ProcessFile(filePath string, repoRoot string) (*types.Document, error) {
 	}
 	relPath = filepath.ToSlash(relPath)
 
+	var sourceURL string
+	if baseURL != "" {
+		pagePath := strings.TrimSuffix(relPath, ".md")
+		pagePath = strings.TrimSuffix(pagePath, "_index")
+		pagePath = strings.TrimSuffix(pagePath, "/index")
+		sourceURL = strings.TrimRight(baseURL, "/") + "/" + pagePath
+		if !strings.HasSuffix(sourceURL, "/") {
+			sourceURL += "/"
+		}
+		content = InjectSourceURL(content, sourceURL)
+	}
+
 	return &types.Document{
-		Path:    relPath,
-		Content: content,
-		Size:    int64(len(content)),
+		Path:      relPath,
+		Content:   content,
+		Size:      int64(len(content)),
+		SourceURL: sourceURL,
 	}, nil
 }
 
-func ProcessAllFiles(ctx context.Context, srcRoot string, subdirs []string, dstDir string, concurrency int) (int, error) {
+func ProcessAllFiles(ctx context.Context, srcRoot string, subdirs []string, dstDir string, concurrency int, baseURL string) (int, error) {
 	if concurrency <= 0 {
 		concurrency = 10
 	}
@@ -105,7 +118,7 @@ func ProcessAllFiles(ctx context.Context, srcRoot string, subdirs []string, dstD
 	for _, filePath := range mdFiles {
 		fp := filePath
 		g.Go(func() error {
-			doc, err := ProcessFile(fp, srcRoot)
+			doc, err := ProcessFile(fp, srcRoot, baseURL)
 			if err != nil {
 				return fmt.Errorf("process %s: %w", fp, err)
 			}

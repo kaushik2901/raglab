@@ -23,6 +23,7 @@ import (
 type PreprocessArgs struct {
 	Tag         string   `json:"tag"`
 	RepoURL     string   `json:"repo_url"`
+	BaseURL     string   `json:"base_url"`
 	IncludeDirs []string `json:"include_dirs,omitempty"`
 }
 
@@ -58,7 +59,7 @@ func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessAr
 	if !checkpoint["preprocess_done"] {
 		logger.Debug("running preprocess step")
 		srcDir := filepath.Join(repoPath, "content")
-		_, err := preprocessor.ProcessAllFiles(ctx, srcDir, args.IncludeDirs, outputPath, 10)
+		_, err := preprocessor.ProcessAllFiles(ctx, srcDir, args.IncludeDirs, outputPath, 10, args.BaseURL)
 		if err != nil {
 			return fmt.Errorf("preprocess: %w", err)
 		}
