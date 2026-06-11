@@ -2,6 +2,7 @@ package parser
 
 import (
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -180,4 +181,133 @@ func TestMarkdownParser_Path(t *testing.T) {
 	defer r.Close()
 
 	assert.Equal(t, filepath.Join("testdata", "simple.md"), r.Path())
+}
+
+func TestMarkdownParser_FrontMatter_StrippedFromElements(t *testing.T) {
+	r, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "frontmatter.md"))
+	require.NoError(t, err)
+	defer r.Close()
+
+	var elems []types.Element
+	for {
+		e, err := r.ReadElement()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		elems = append(elems, e)
+	}
+
+	require.Len(t, elems, 2)
+	assert.Equal(t, types.ElementHeading, elems[0].Kind)
+	assert.Equal(t, "Hello", elems[0].Text)
+	assert.Equal(t, types.ElementParagraph, elems[1].Kind)
+	assert.Equal(t, "World.", elems[1].Text)
+
+	// No elements from front matter delimiters or YAML content
+	for _, e := range elems {
+		assert.NotContains(t, e.Text, "---")
+		assert.NotContains(t, e.Text, "title:")
+		assert.NotContains(t, e.Text, "source_url:")
+	}
+}
+
+func TestMarkdownParser_FrontMatter_Metadata(t *testing.T) {
+	r, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "frontmatter.md"))
+	require.NoError(t, err)
+	defer r.Close()
+
+	md := r.Metadata()
+	require.NotNil(t, md)
+	assert.Equal(t, "Test Page", md["title"])
+	assert.Equal(t, "https://example.com/test/", md["source_url"])
+}
+
+func TestMarkdownParser_FrontMatter_MetadataAccessibleAfterRead(t *testing.T) {
+	r, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "frontmatter.md"))
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Consume all elements
+	for {
+		_, err := r.ReadElement()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+	}
+
+	// Metadata still accessible after full read
+	md := r.Metadata()
+	require.NotNil(t, md)
+	assert.Equal(t, "https://example.com/test/", md["source_url"])
+}
+
+func TestMarkdownParser_NoFrontMatter_MetadataNil(t *testing.T) {
+	r, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "simple.md"))
+	require.NoError(t, err)
+	defer r.Close()
+
+	md := r.Metadata()
+	assert.Nil(t, md)
+}
+
+func TestMarkdownParser_FrontMatter_EmptyBlock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "emptyfm.md")
+	os.WriteFile(path, []byte("---\n---\n# Hello"), 0644)
+
+	r, err := (&MarkdownParser{}).Parse(path)
+	require.NoError(t, err)
+	defer r.Close()
+
+	md := r.Metadata()
+	require.NotNil(t, md)
+	assert.Empty(t, md)
+
+	elems := collectElements(t, &MarkdownParser{}, path)
+	require.Len(t, elems, 1)
+	assert.Equal(t, types.ElementHeading, elems[0].Kind)
+}
+
+func TestMarkdownParser_FrontMatter_SingleDashNoClosing(t *testing.T) {
+	r, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "simple.md"))
+	require.NoError(t, err)
+	defer r.Close()
+
+	// No FM, just regular content
+	md := r.Metadata()
+	assert.Nil(t, md)
+}
+
+func TestMarkdownParser_FrontMatter_MultipleKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "multi.md")
+	content := "---\ntitle: Multi\ndate: 2024-01-01\ncount: 3\ntags: [a, b, c]\n---\nBody"
+	os.WriteFile(path, []byte(content), 0644)
+
+	r, err := (&MarkdownParser{}).Parse(path)
+	require.NoError(t, err)
+	defer r.Close()
+
+	md := r.Metadata()
+	require.NotNil(t, md)
+	assert.Equal(t, "Multi", md["title"])
+	assert.NotEmpty(t, md["date"])
+	assert.NotEmpty(t, md["count"])
+	assert.NotEmpty(t, md["tags"])
+}
+
+func TestMarkdownParser_FrontMatter_OnlyInFirstFile(t *testing.T) {
+	// Verify that a file without FM still returns nil metadata
+	// even after parsing a file with FM in the same test run
+	r1, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "frontmatter.md"))
+	require.NoError(t, err)
+	r1.Close()
+	assert.NotNil(t, r1.Metadata())
+
+	r2, err := (&MarkdownParser{}).Parse(filepath.Join("testdata", "nometadata.md"))
+	require.NoError(t, err)
+	r2.Close()
+	assert.Nil(t, r2.Metadata())
 }

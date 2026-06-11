@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
+	"gopkg.in/yaml.v3"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -23,6 +25,12 @@ func (p *MarkdownParser) Parse(filePath string) (types.ElementReader, error) {
 		return nil, fmt.Errorf("markdown parse %s: %w", filePath, err)
 	}
 
+	var fmMap map[string]string
+	if body, fm, ok := splitFrontMatter(source); ok {
+		fmMap = parseYAMLFrontMatter(fm)
+		source = body
+	}
+
 	md := goldmark.New(goldmark.WithExtensions(extension.GFM))
 	reader := text.NewReader(source)
 	doc := md.Parser().Parse(reader)
@@ -30,15 +38,95 @@ func (p *MarkdownParser) Parse(filePath string) (types.ElementReader, error) {
 	elems := walkAST(doc, source)
 
 	return &markdownReader{
-		elems: elems,
-		path:  filePath,
+		elems:       elems,
+		path:        filePath,
+		frontMatter: fmMap,
 	}, nil
 }
 
+func (r *markdownReader) Metadata() map[string]string {
+	return r.frontMatter
+}
+
+// splitFrontMatter detects a --- delimited YAML front matter block at the
+// start of source and returns (body, fm, ok). The front matter YAML content
+// (excluding delimiters) is returned as fm, and body is everything after the
+// closing delimiter. If no valid front matter is found, ok is false and body
+// equals source.
+func splitFrontMatter(source []byte) (body, fm []byte, ok bool) {
+	text := string(source)
+	lines := strings.Split(text, "\n")
+
+	firstLineIdx := 0
+	for firstLineIdx < len(lines) && strings.TrimRight(lines[firstLineIdx], "\r") == "" {
+		firstLineIdx++
+	}
+	if firstLineIdx >= len(lines) || strings.TrimRight(lines[firstLineIdx], "\r") != "---" {
+		return source, nil, false
+	}
+	if firstLineIdx+1 >= len(lines) {
+		return source, nil, false
+	}
+
+	closingIdx := -1
+	for i := firstLineIdx + 1; i < len(lines); i++ {
+		trimmed := strings.TrimRight(lines[i], "\r")
+		if trimmed == "---" || trimmed == "..." {
+			closingIdx = i
+			break
+		}
+	}
+	if closingIdx < 0 {
+		return source, nil, false
+	}
+
+	var fmLines []string
+	for i := firstLineIdx + 1; i < closingIdx; i++ {
+		fmLines = append(fmLines, lines[i])
+	}
+	fmStr := strings.Join(fmLines, "\n")
+	fmStr = strings.TrimRight(fmStr, "\r")
+
+	var bodyLines []string
+	for i := closingIdx + 1; i < len(lines); i++ {
+		bodyLines = append(bodyLines, lines[i])
+	}
+	bodyStr := strings.Join(bodyLines, "\n")
+	bodyStr = strings.TrimLeft(bodyStr, "\r\n")
+
+	return []byte(bodyStr), []byte(fmStr), true
+}
+
+// parseYAMLFrontMatter unmarshals YAML bytes into a flat string map.
+// Nested or non-string values are stringified.
+// Returns nil on parse error (warning logged, never panics).
+func parseYAMLFrontMatter(data []byte) map[string]string {
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		slog.Warn("failed to parse YAML front matter", "error", err)
+		return nil
+	}
+	result := make(map[string]string, len(raw))
+	for k, v := range raw {
+		switch val := v.(type) {
+		case string:
+			result[k] = val
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, bool:
+			result[k] = fmt.Sprintf("%v", val)
+		case fmt.Stringer:
+			result[k] = val.String()
+		default:
+			result[k] = fmt.Sprintf("%v", val)
+		}
+	}
+	return result
+}
+
 type markdownReader struct {
-	elems []types.Element
-	pos   int
-	path  string
+	elems       []types.Element
+	pos         int
+	path        string
+	frontMatter map[string]string
 }
 
 func (r *markdownReader) ReadElement() (types.Element, error) {

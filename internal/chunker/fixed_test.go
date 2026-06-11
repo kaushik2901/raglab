@@ -36,6 +36,10 @@ func (r *sliceElementReader) Close() error {
 	return nil
 }
 
+func (r *sliceElementReader) Metadata() map[string]string {
+	return nil
+}
+
 func elementReaderFromText(path, text string) types.ElementReader {
 	return &sliceElementReader{
 		elems: []types.Element{{Kind: types.ElementParagraph, Text: text}},
