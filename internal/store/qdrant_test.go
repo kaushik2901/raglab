@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/qdrant/go-client/qdrant"
@@ -315,6 +316,101 @@ func TestQdrantStore_Retry_EnsureCollectionNonConnError(t *testing.T) {
 	s := NewQdrantStore("")
 	err := s.EnsureCollection(context.Background(), "test", 4, "Cosine")
 	assert.ErrorContains(t, err, "not connected")
+}
+
+func TestRetryWithBackoff_SuccessFirstAttempt(t *testing.T) {
+	opCount := atomic.Int32{}
+	err := retryWithBackoff(context.Background(), 3,
+		func(ctx context.Context) error {
+			opCount.Add(1)
+			return nil
+		},
+		func() error { return nil },
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), opCount.Load(), "should succeed on first attempt")
+}
+
+func TestRetryWithBackoff_RetryOnConnError(t *testing.T) {
+	opCount := atomic.Int32{}
+	reconnectCount := atomic.Int32{}
+	err := retryWithBackoff(context.Background(), 3,
+		func(ctx context.Context) error {
+			n := opCount.Add(1)
+			if n < 3 {
+				return status.Error(codes.Unavailable, "service unavailable")
+			}
+			return nil
+		},
+		func() error {
+			reconnectCount.Add(1)
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), opCount.Load(), "should retry on conn errors")
+	assert.Equal(t, int32(2), reconnectCount.Load(), "should reconnect before each retry")
+}
+
+func TestRetryWithBackoff_NonConnErrorFailsImmediately(t *testing.T) {
+	opCount := atomic.Int32{}
+	err := retryWithBackoff(context.Background(), 3,
+		func(ctx context.Context) error {
+			opCount.Add(1)
+			return fmt.Errorf("bad request")
+		},
+		func() error { return nil },
+	)
+	require.Error(t, err)
+	assert.Equal(t, int32(1), opCount.Load(), "should NOT retry non-connection error")
+}
+
+func TestRetryWithBackoff_ExhaustAttempts(t *testing.T) {
+	opCount := atomic.Int32{}
+	err := retryWithBackoff(context.Background(), 3,
+		func(ctx context.Context) error {
+			opCount.Add(1)
+			return status.Error(codes.Unavailable, "still unavailable")
+		},
+		func() error { return nil },
+	)
+	require.Error(t, err)
+	assert.Equal(t, int32(3), opCount.Load(), "should exhaust all 3 attempts")
+}
+
+func TestRetryWithBackoff_ContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	opCount := atomic.Int32{}
+	err := retryWithBackoff(ctx, 3,
+		func(ctx context.Context) error {
+			opCount.Add(1)
+			return status.Error(codes.Unavailable, "unavailable")
+		},
+		func() error { return nil },
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, int32(1), opCount.Load(), "should not retry after context cancel")
+}
+
+func TestRetryWithBackoff_ReconnectFailure(t *testing.T) {
+	opCount := atomic.Int32{}
+	reconnectCount := atomic.Int32{}
+	err := retryWithBackoff(context.Background(), 3,
+		func(ctx context.Context) error {
+			opCount.Add(1)
+			return status.Error(codes.Unavailable, "unavailable")
+		},
+		func() error {
+			reconnectCount.Add(1)
+			return fmt.Errorf("reconnect failed")
+		},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reconnect failed")
+	assert.Equal(t, int32(1), opCount.Load(), "operation should be attempted once")
+	assert.Equal(t, int32(1), reconnectCount.Load(), "one reconnect attempt")
 }
 
 func TestParseDistance(t *testing.T) {

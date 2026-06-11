@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/jackc/pgx/v5"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/preprocessor"
 	"github.com/riverqueue/river"
@@ -81,46 +83,113 @@ func (w *PreprocessWorker) Work(ctx context.Context, job *river.Job[PreprocessAr
 
 func cloneRepo(ctx context.Context, repoURL, repoPath string) error {
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
-		return gitClone(ctx, repoURL, repoPath)
+		return gitCloneWithRetry(ctx, repoURL, repoPath)
 	}
-	return gitUpdate(ctx, repoPath)
+	return gitUpdateWithRetry(ctx, repoPath)
 }
 
-func gitClone(ctx context.Context, url, path string) error {
+func gitCloneWithRetry(ctx context.Context, url, targetPath string) error {
+	b := backoff.WithContext(newGitBackoff(), ctx)
+
+	op := func() error {
+		return gitClone(ctx, url, targetPath)
+	}
+
+	return backoff.Retry(op, b)
+}
+
+func gitClone(ctx context.Context, url, targetPath string) error {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "git", "-c", "core.longpaths=true", "clone", "--depth", "1", "--single-branch", url, path)
+	cmd := exec.CommandContext(ctx, "git", "-c", "core.longpaths=true", "clone", "--depth", "1", "--single-branch", url, targetPath)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git clone: %w\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
+		if isTransientGitError(err, stderr.String()) {
+			return fmt.Errorf("git clone: %w\nstderr: %s", err, stderr.String())
+		}
+		return backoff.Permanent(fmt.Errorf("git clone: %w\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String()))
 	}
 	slog.Debug("git clone", "stdout", stdout.String(), "stderr", stderr.String())
 	return nil
 }
 
-func gitUpdate(ctx context.Context, path string) error {
-	if err := runGit(ctx, path, "git fetch --all", "fetch", "--all"); err != nil {
-		return err
+func gitUpdateWithRetry(ctx context.Context, repoPath string) error {
+	b := backoff.WithContext(newGitBackoff(), ctx)
+
+	op := func() error {
+		return gitUpdate(ctx, repoPath)
 	}
-	if err := runGit(ctx, path, "git checkout main", "checkout", "main"); err != nil {
-		if err2 := runGit(ctx, path, "git checkout -b main origin/main", "checkout", "-b", "main", "origin/main"); err2 != nil {
-			return fmt.Errorf("checkout main: %w (fetch fallback: %v)", err, err2)
-		}
-	}
-	return runGit(ctx, path, "git pull --ff-only", "pull", "--ff-only")
+
+	return backoff.Retry(op, b)
 }
 
-func runGit(ctx context.Context, path, desc string, args ...string) error {
+func gitUpdate(ctx context.Context, repoPath string) error {
+	if err := runGitTransient(ctx, repoPath, "git fetch --all", "fetch", "--all"); err != nil {
+		return err
+	}
+	if err := runGitTransient(ctx, repoPath, "git checkout main", "checkout", "main"); err != nil {
+		if err2 := runGitTransient(ctx, repoPath, "git checkout -b main origin/main", "checkout", "-b", "main", "origin/main"); err2 != nil {
+			return fmt.Errorf("checkout main: %w (fallback: %v)", err, err2)
+		}
+	}
+	return runGitTransient(ctx, repoPath, "git pull --ff-only", "pull", "--ff-only")
+}
+
+func runGitTransient(ctx context.Context, repoPath, desc string, args ...string) error {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = path
+	cmd.Dir = repoPath
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s: %w\nstdout: %s\nstderr: %s", desc, err, stdout.String(), stderr.String())
+		if isTransientGitError(err, stderr.String()) {
+			return fmt.Errorf("%s: %w\nstderr: %s", desc, err, stderr.String())
+		}
+		return backoff.Permanent(fmt.Errorf("%s: %w\nstdout: %s\nstderr: %s", desc, err, stdout.String(), stderr.String()))
 	}
 	slog.Debug(desc, "stdout", stdout.String(), "stderr", stderr.String())
 	return nil
+}
+
+func newGitBackoff() *backoff.ExponentialBackOff {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 2 * time.Second
+	b.Multiplier = 2.0
+	b.MaxInterval = 30 * time.Second
+	b.MaxElapsedTime = 2 * time.Minute
+	b.RandomizationFactor = 0.5
+	return b
+}
+
+var repoNotFoundRE = regexp.MustCompile(`repository '.+' not found`)
+
+func isTransientGitError(err error, stderr string) bool {
+	lower := strings.ToLower(stderr)
+
+	permanentSubstrings := []string{
+		"authentication failed",
+		"authentication required",
+		"permission denied (publickey)",
+		"could not be found",
+		"does not appear to be a git repository",
+		"not a git repository",
+		"could not read username",
+		"access denied",
+		"couldn't find remote ref",
+	}
+	for _, p := range permanentSubstrings {
+		if strings.Contains(lower, p) {
+			return false
+		}
+	}
+
+	if repoNotFoundRE.MatchString(stderr) {
+		return false
+	}
+
+	// If there's an error at all (non-zero exit), assume transient by default.
+	// Only known permanent patterns above skip retry.
+	return err != nil
 }
 
 // --- Verify helpers ---
