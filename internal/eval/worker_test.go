@@ -87,6 +87,13 @@ func TestBuildContextText(t *testing.T) {
 			contains: []string{"Document: doc1.md", "content one"},
 		},
 		{
+			name: "with source_url",
+			results: []types.SearchResult{
+				{DocumentPath: "doc.md", Content: "text", Metadata: map[string]string{"source_url": "https://example.com/doc/"}},
+			},
+			contains: []string{"Document: https://example.com/doc/", "text"},
+		},
+		{
 			name: "multiple docs",
 			results: []types.SearchResult{
 				{DocumentPath: "a.md", Content: "alpha"},

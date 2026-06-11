@@ -136,7 +136,11 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	if e.generator != nil {
 		var contextParts []string
 		for _, sr := range searchResults {
-			contextParts = append(contextParts, fmt.Sprintf("Document: %s\nContent:\n%s", sr.DocumentPath, sr.Content))
+			label := sr.DocumentPath
+			if url := sr.Metadata["source_url"]; url != "" {
+				label = url
+			}
+			contextParts = append(contextParts, fmt.Sprintf("Document: %s\nContent:\n%s", label, sr.Content))
 		}
 		contextText := strings.Join(contextParts, "\n\n---\n\n")
 

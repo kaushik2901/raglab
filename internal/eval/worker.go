@@ -117,7 +117,11 @@ func fillRetrievalResult(r *types.RetrievalResult, q types.EvalQuestion, searchR
 func buildContextText(searchResults []types.SearchResult) string {
 	var parts []string
 	for _, sr := range searchResults {
-		parts = append(parts, fmt.Sprintf("Document: %s\nContent:\n%s", sr.DocumentPath, sr.Content))
+		label := sr.DocumentPath
+		if url := sr.Metadata["source_url"]; url != "" {
+			label = url
+		}
+		parts = append(parts, fmt.Sprintf("Document: %s\nContent:\n%s", label, sr.Content))
 	}
 	return strings.Join(parts, "\n\n---\n\n")
 }
