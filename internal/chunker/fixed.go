@@ -102,6 +102,17 @@ func (c *FixedChunker) Chunk(ctx context.Context, reader types.ElementReader, do
 	return chunkCh, errCh
 }
 
+func init() {
+	RegisterChunker("fixed", func(cfg map[string]any) (Chunker, error) {
+		size := getInt(cfg, "size", 512)
+		overlap := getInt(cfg, "overlap", 64)
+		if size <= 0 {
+			return nil, fmt.Errorf("fixed chunker: size must be > 0")
+		}
+		return NewFixedChunker(size, overlap), nil
+	})
+}
+
 func estimateTokens(text string) int {
 	return len(text) / 4
 }

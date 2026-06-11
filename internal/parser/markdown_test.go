@@ -327,6 +327,26 @@ func TestMarkdownParser_FrontMatter_WindowsLineEndings(t *testing.T) {
 	assert.Equal(t, "World.", elems[1].Text)
 }
 
+func TestMarkdownParser_Links(t *testing.T) {
+	elems := collectElements(t, &MarkdownParser{}, filepath.Join("testdata", "links.md"))
+	require.Len(t, elems, 4)
+
+	assert.Equal(t, types.ElementParagraph, elems[0].Kind)
+	assert.Contains(t, elems[0].Text, "link")
+	assert.Contains(t, elems[0].Text, "https://example.com")
+
+	assert.Equal(t, types.ElementParagraph, elems[1].Kind)
+	assert.Contains(t, elems[1].Text, "https://handbook.gitlab.com")
+
+	assert.Equal(t, types.ElementParagraph, elems[2].Kind)
+	assert.Contains(t, elems[2].Text, "logo")
+	assert.Contains(t, elems[2].Text, "https://example.com/logo.png")
+
+	assert.Equal(t, types.ElementParagraph, elems[3].Kind)
+	assert.Contains(t, elems[3].Text, "relative link")
+	assert.Contains(t, elems[3].Text, "/handbook/travel-policy")
+}
+
 func TestMarkdownParser_FrontMatter_OnlyInFirstFile(t *testing.T) {
 	// Verify that a file without FM still returns nil metadata
 	// even after parsing a file with FM in the same test run

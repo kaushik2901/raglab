@@ -163,8 +163,7 @@
     </div>
     <div class="field-row">
       <div class="field"><label for="index_chunk_strategy">chunk_strategy *</label><input id="index_chunk_strategy" value="fixed" data-storage="index_chunk_strategy"></div>
-      <div class="field"><label for="index_chunk_size">chunk_size *</label><input id="index_chunk_size" value="512" style="width:80px" data-storage="index_chunk_size"></div>
-      <div class="field"><label for="index_chunk_overlap">chunk_overlap *</label><input id="index_chunk_overlap" value="64" style="width:80px" data-storage="index_chunk_overlap"></div>
+      <div class="field"><label for="index_chunk_config">chunk_config * (JSON object)</label><textarea id="index_chunk_config" rows="2" style="width:340px;font-family:monospace;font-size:0.8rem" data-storage="index_chunk_config" placeholder='{"size":512,"overlap":64}'>{"size":512,"overlap":64}</textarea></div>
     </div>
     <div class="field-row">
       <div class="field"><label for="index_embed_provider">embedding_provider *</label><input id="index_embed_provider" value="openai" data-storage="index_embed_provider"></div>
@@ -344,7 +343,8 @@ async function callEndpoint(name) {
         break;
       case 'index':
         method = 'POST';
-        body = { input_tag: getVal('index_input_tag'), tag: getVal('index_tag'), parser_strategy: getVal('index_parser_strategy'), chunk_strategy: getVal('index_chunk_strategy'), chunk_size: parseInt(getVal('index_chunk_size')), chunk_overlap: parseInt(getVal('index_chunk_overlap')), embedding_provider: getVal('index_embed_provider'), embedding_model: getVal('index_embed_model'), batch_size: parseInt(getVal('index_batch_size')), index_concurrency: parseInt(getVal('index_concurrency')), doc_timeout: getVal('index_doc_timeout') };
+        body = { input_tag: getVal('index_input_tag'), tag: getVal('index_tag'), parser_strategy: getVal('index_parser_strategy'), chunk_strategy: getVal('index_chunk_strategy'), embedding_provider: getVal('index_embed_provider'), embedding_model: getVal('index_embed_model'), batch_size: parseInt(getVal('index_batch_size')), index_concurrency: parseInt(getVal('index_concurrency')), doc_timeout: getVal('index_doc_timeout') };
+        try { body.chunk_config = JSON.parse(getVal('index_chunk_config')); } catch(e) { body.chunk_config = {"size":512,"overlap":64}; }
         url = '/api/v1/workflows/index';
         break;
       case 'eval-wf':

@@ -234,6 +234,24 @@ func collectText(n ast.Node, source []byte) string {
 			b.Write(v.Value(source))
 		case *ast.CodeSpan:
 			b.WriteString(collectText(v, source))
+		case *ast.Link:
+			url := string(v.Destination)
+			text := collectText(v, source)
+			if url != "" {
+				b.WriteString(text + " (" + url + ")")
+			} else {
+				b.WriteString(text)
+			}
+		case *ast.AutoLink:
+			b.Write(v.URL(source))
+		case *ast.Image:
+			url := string(v.Destination)
+			alt := collectText(v, source)
+			if alt != "" {
+				b.WriteString(alt + " (" + url + ")")
+			} else {
+				b.WriteString(url)
+			}
 		default:
 			b.WriteString(collectText(v, source))
 		}

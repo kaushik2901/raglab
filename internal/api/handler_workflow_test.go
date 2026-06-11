@@ -83,7 +83,7 @@ func TestPreprocessHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestIndexHandler_ValidRequest(t *testing.T) {
-	body := `{"input_tag": "pre-tag-123", "tag": "idx-fixed", "parser_strategy": "markdown", "chunk_strategy": "fixed", "chunk_size": 512, "chunk_overlap": 64, "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "batch_size": 20, "index_concurrency": 5, "doc_timeout": "30m"}`
+	body := `{"input_tag": "pre-tag-123", "tag": "idx-fixed", "parser_strategy": "markdown", "chunk_strategy": "fixed", "chunk_config": {"size": 512, "overlap": 64}, "embedding_provider": "openai", "embedding_model": "text-embedding-3-small", "batch_size": 20, "index_concurrency": 5, "doc_timeout": "30m"}`
 	req := httptest.NewRequest("POST", "/api/v1/workflows/index", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -244,8 +244,7 @@ func TestIndexRequest_Validate(t *testing.T) {
 		Tag:               "idx-tag",
 		ParserStrategy:    "markdown",
 		ChunkStrategy:     "fixed",
-		ChunkSize:         512,
-		ChunkOverlap:      64,
+		ChunkConfig:       map[string]any{"size": 512, "overlap": 64},
 		EmbeddingProvider: "openai",
 		EmbeddingModel:    "text-embedding-3-small",
 		BatchSize:         20,

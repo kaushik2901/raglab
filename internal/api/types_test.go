@@ -39,8 +39,7 @@ func TestIndexRequest_Validate_Valid(t *testing.T) {
 		Tag:               "idx-tag",
 		ParserStrategy:    "markdown",
 		ChunkStrategy:     "fixed",
-		ChunkSize:         512,
-		ChunkOverlap:      64,
+		ChunkConfig:       map[string]any{"size": 512, "overlap": 64},
 		EmbeddingProvider: "openai",
 		EmbeddingModel:    "text-embedding-3-small",
 		BatchSize:         20,
@@ -54,7 +53,8 @@ func TestIndexRequest_Validate_MissingInputTag(t *testing.T) {
 	t.Parallel()
 	err := IndexRequest{
 		Tag: "t", ParserStrategy: "m", ChunkStrategy: "f",
-		ChunkSize: 1, EmbeddingProvider: "o", EmbeddingModel: "m",
+		ChunkConfig: map[string]any{"size": 1},
+		EmbeddingProvider: "o", EmbeddingModel: "m",
 		BatchSize: 1, IndexConcurrency: 1, DocTimeout: "30m",
 	}.Validate()
 	assert.Error(t, err)
@@ -65,30 +65,44 @@ func TestIndexRequest_Validate_MissingTag(t *testing.T) {
 	t.Parallel()
 	err := IndexRequest{
 		InputTag: "pre", ParserStrategy: "m", ChunkStrategy: "f",
-		ChunkSize: 1, EmbeddingProvider: "o", EmbeddingModel: "m",
+		ChunkConfig: map[string]any{"size": 1},
+		EmbeddingProvider: "o", EmbeddingModel: "m",
 		BatchSize: 1, IndexConcurrency: 1, DocTimeout: "30m",
 	}.Validate()
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tag")
 }
 
-func TestIndexRequest_Validate_InvalidChunkSize(t *testing.T) {
+func TestIndexRequest_Validate_MissingChunkConfig(t *testing.T) {
 	t.Parallel()
 	err := IndexRequest{
 		InputTag: "pre", Tag: "t", ParserStrategy: "m",
-		ChunkStrategy: "f", ChunkSize: 0, ChunkOverlap: 0,
+		ChunkStrategy: "f",
 		EmbeddingProvider: "o", EmbeddingModel: "m",
 		BatchSize: 1, IndexConcurrency: 1, DocTimeout: "30m",
 	}.Validate()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "chunk_size")
+	assert.Contains(t, err.Error(), "chunk_config")
+}
+
+func TestIndexRequest_Validate_ChunkConfig(t *testing.T) {
+	t.Parallel()
+	err := IndexRequest{
+		InputTag: "pre", Tag: "t", ParserStrategy: "m",
+		ChunkStrategy: "recursive",
+		ChunkConfig:   map[string]any{"max_size": 512, "min_size": 50},
+		EmbeddingProvider: "o", EmbeddingModel: "m",
+		BatchSize: 1, IndexConcurrency: 1, DocTimeout: "30m",
+	}.Validate()
+	assert.NoError(t, err)
 }
 
 func TestIndexRequest_Validate_InvalidBatchSize(t *testing.T) {
 	t.Parallel()
 	err := IndexRequest{
 		InputTag: "pre", Tag: "t", ParserStrategy: "m",
-		ChunkStrategy: "f", ChunkSize: 512, ChunkOverlap: 64,
+		ChunkStrategy: "f",
+		ChunkConfig:   map[string]any{"size": 512, "overlap": 64},
 		EmbeddingProvider: "o", EmbeddingModel: "m",
 		BatchSize: 0, IndexConcurrency: 1, DocTimeout: "30m",
 	}.Validate()

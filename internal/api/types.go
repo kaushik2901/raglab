@@ -18,17 +18,16 @@ func (r PreprocessRequest) Validate() error {
 }
 
 type IndexRequest struct {
-	InputTag          string `json:"input_tag"`
-	Tag               string `json:"tag"`
-	ParserStrategy    string `json:"parser_strategy"`
-	ChunkStrategy     string `json:"chunk_strategy"`
-	ChunkSize         int    `json:"chunk_size"`
-	ChunkOverlap      int    `json:"chunk_overlap"`
-	EmbeddingProvider string `json:"embedding_provider"`
-	EmbeddingModel    string `json:"embedding_model"`
-	BatchSize         int    `json:"batch_size"`
-	IndexConcurrency  int    `json:"index_concurrency"`
-	DocTimeout        string `json:"doc_timeout"`
+	InputTag          string         `json:"input_tag"`
+	Tag               string         `json:"tag"`
+	ParserStrategy    string         `json:"parser_strategy"`
+	ChunkStrategy     string         `json:"chunk_strategy"`
+	ChunkConfig       map[string]any `json:"chunk_config"`
+	EmbeddingProvider string         `json:"embedding_provider"`
+	EmbeddingModel    string         `json:"embedding_model"`
+	BatchSize         int            `json:"batch_size"`
+	IndexConcurrency  int            `json:"index_concurrency"`
+	DocTimeout        string         `json:"doc_timeout"`
 }
 
 func (r IndexRequest) Validate() error {
@@ -44,11 +43,8 @@ func (r IndexRequest) Validate() error {
 	if r.ChunkStrategy == "" {
 		return &validationError{"chunk_strategy is required"}
 	}
-	if r.ChunkSize <= 0 {
-		return &validationError{"chunk_size must be positive"}
-	}
-	if r.ChunkOverlap < 0 {
-		return &validationError{"chunk_overlap must be non-negative"}
+	if r.ChunkConfig == nil {
+		return &validationError{"chunk_config is required"}
 	}
 	if r.EmbeddingProvider == "" {
 		return &validationError{"embedding_provider is required"}

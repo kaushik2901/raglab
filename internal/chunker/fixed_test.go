@@ -62,7 +62,7 @@ func words(n int) string {
 	return strings.Join(ws, " ")
 }
 
-func collectChunks(t *testing.T, ctx context.Context, c *FixedChunker, reader types.ElementReader, docPath string) []types.Chunk {
+func collectChunks(t *testing.T, ctx context.Context, c Chunker, reader types.ElementReader, docPath string) []types.Chunk {
 	t.Helper()
 	chunkCh, errCh := c.Chunk(ctx, reader, docPath)
 	var chunks []types.Chunk
