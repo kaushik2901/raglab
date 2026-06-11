@@ -144,6 +144,9 @@
       <div class="field" style="flex: 1;"><label for="preproc_repo_url">repo_url *</label><input id="preproc_repo_url" value="https://gitlab.com/gitlab-com/content-sites/handbook.git" data-storage="preproc_repo_url"></div>
     </div>
     <div class="field-row">
+      <div class="field" style="flex: 1;"><label for="preproc_base_url">base_url (optional, e.g. https://handbook.gitlab.com)</label><input id="preproc_base_url" placeholder="https://handbook.gitlab.com" style="width:320px" data-storage="preproc_base_url"></div>
+    </div>
+    <div class="field-row">
       <div class="field"><label for="preproc_tag">tag *</label><input id="preproc_tag" value="test-preprocess" style="width:160px" data-storage="preproc_tag"></div>
       <div class="field"><label for="preproc_include_dirs">include_dirs (JSON array, optional)</label><input id="preproc_include_dirs" placeholder='["content/handbook"]' style="width:240px" data-storage="preproc_include_dirs"></div>
     </div>
@@ -333,6 +336,8 @@ async function callEndpoint(name) {
       case 'preprocess':
         method = 'POST';
         body = { repo_url: getVal('preproc_repo_url'), tag: getVal('preproc_tag') };
+        const baseUrl = getValOpt('preproc_base_url');
+        if (baseUrl) body.base_url = baseUrl;
         const dirs = getValOpt('preproc_include_dirs');
         if (dirs) { try { body.include_dirs = JSON.parse(dirs); } catch(e) { body.include_dirs = [dirs]; } }
         url = '/api/v1/workflows/preprocess';
