@@ -1,11 +1,16 @@
 package parser
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	extast "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -13,35 +18,36 @@ import (
 type MarkdownParser struct{}
 
 func (p *MarkdownParser) Parse(filePath string) (types.ElementReader, error) {
-	f, err := os.Open(filePath)
+	source, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("markdown parse %s: %w", filePath, err)
 	}
-	return newMarkdownReader(f, filePath), nil
+
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM))
+	reader := text.NewReader(source)
+	doc := md.Parser().Parse(reader)
+
+	elems := walkAST(doc, source)
+
+	return &markdownReader{
+		elems: elems,
+		path:  filePath,
+	}, nil
 }
 
 type markdownReader struct {
-	scanner *bufio.Scanner
-	path    string
-	buf     strings.Builder
-	kind    string
-	inCode  bool
-	inTable bool
-	level   int
-	lang    string
-	err     error
-
-	pending     types.Element
-	hasPending  bool
-	pendingLine string
-	hasLine     bool
+	elems []types.Element
+	pos   int
+	path  string
 }
 
-func newMarkdownReader(r io.Reader, path string) *markdownReader {
-	return &markdownReader{
-		scanner: bufio.NewScanner(r),
-		path:    path,
+func (r *markdownReader) ReadElement() (types.Element, error) {
+	if r.pos >= len(r.elems) {
+		return types.Element{}, io.EOF
 	}
+	e := r.elems[r.pos]
+	r.pos++
+	return e, nil
 }
 
 func (r *markdownReader) Path() string {
@@ -52,163 +58,127 @@ func (r *markdownReader) Close() error {
 	return nil
 }
 
-func (r *markdownReader) ReadElement() (types.Element, error) {
-	if r.err != nil {
-		return types.Element{}, r.err
-	}
+func walkAST(doc ast.Node, source []byte) []types.Element {
+	var elems []types.Element
 
-	if r.hasPending {
-		r.hasPending = false
-		return r.pending, nil
-	}
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
 
-	for {
-		var line string
-		if r.hasLine {
-			line = r.pendingLine
-			r.hasLine = false
-		} else {
-			if !r.scanner.Scan() {
-				if err := r.scanner.Err(); err != nil {
-					r.err = err
-					return types.Element{}, err
-				}
-				if r.buf.Len() > 0 {
-					return r.flushElement(), nil
-				}
-				r.err = io.EOF
-				return types.Element{}, io.EOF
+		switch n.Kind() {
+		case ast.KindHeading:
+			h := n.(*ast.Heading)
+			text := collectText(h, source)
+			if text != "" {
+				elems = append(elems, types.Element{
+					Kind:  types.ElementHeading,
+					Text:  text,
+					Level: h.Level,
+				})
 			}
-			line = r.scanner.Text()
-		}
+			return ast.WalkSkipChildren, nil
 
-		if r.inCode {
-			if strings.HasPrefix(line, "```") {
-				elem := r.flushElement()
-				r.inCode = false
-				r.lang = ""
-				return elem, nil
+		case ast.KindParagraph:
+			text := collectText(n, source)
+			if text != "" {
+				elems = append(elems, types.Element{
+					Kind: types.ElementParagraph,
+					Text: text,
+				})
 			}
-			r.buf.WriteString(line + "\n")
-			continue
-		}
+			return ast.WalkSkipChildren, nil
 
-		if strings.HasPrefix(line, "```") {
-			if r.buf.Len() > 0 {
-				// line is inside a paragraph before a code fence — treat as paragraph content
-				r.buf.WriteString(line + "\n")
-				continue
+		case ast.KindFencedCodeBlock:
+			cb := n.(*ast.FencedCodeBlock)
+			text := collectLines(cb, source)
+			elem := types.Element{
+				Kind: types.ElementCodeBlock,
+				Text: text,
 			}
-			r.inCode = true
-			r.kind = types.ElementCodeBlock
-			lang := strings.TrimSpace(line[3:])
-			if lang != "" {
-				r.lang = lang
+			if lang := cb.Language(source); len(lang) > 0 {
+				elem.Meta = map[string]string{"language": string(lang)}
 			}
-			continue
-		}
+			elems = append(elems, elem)
+			return ast.WalkSkipChildren, nil
 
-		if isHeading(line) {
-			if r.buf.Len() > 0 {
-				elem := r.flushElement()
-				r.setHeading(line)
-				return elem, nil
+		case ast.KindCodeBlock:
+			cb := n.(*ast.CodeBlock)
+			text := collectLines(cb, source)
+			elems = append(elems, types.Element{
+				Kind: types.ElementCodeBlock,
+				Text: text,
+			})
+			return ast.WalkSkipChildren, nil
+
+		case extast.KindTable:
+			text := collectTable(n, source)
+			if text != "" {
+				elems = append(elems, types.Element{
+					Kind: types.ElementTable,
+					Text: text,
+				})
 			}
-			r.setHeading(line)
-			return r.flushElement(), nil
-		}
+			return ast.WalkSkipChildren, nil
 
-		if strings.TrimSpace(line) == "" {
-			if r.buf.Len() > 0 {
-				return r.flushElement(), nil
+		case ast.KindListItem:
+			text := collectText(n, source)
+			if text != "" {
+				elems = append(elems, types.Element{
+					Kind: types.ElementListItem,
+					Text: text,
+				})
 			}
-			continue
+			return ast.WalkSkipChildren, nil
 		}
 
-		if looksLikeTableRow(line) {
-			if r.buf.Len() > 0 && !r.inTable {
-				elem := r.flushElement()
-				r.inTable = true
-				r.kind = types.ElementTable
-				r.buf.WriteString(line + "\n")
-				return elem, nil
-			}
-			r.inTable = true
-			r.kind = types.ElementTable
-			r.buf.WriteString(line + "\n")
-			continue
-		}
+		return ast.WalkContinue, nil
+	})
 
-		if r.inTable {
-			r.inTable = false
-			elem := r.flushElement()
-			r.hasPending = true
-			r.pending = elem
-			r.hasLine = true
-			r.pendingLine = line
-			continue
-		}
-
-		if r.buf.Len() == 0 {
-			r.kind = types.ElementParagraph
-		}
-		if r.buf.Len() > 0 {
-			r.buf.WriteString(" ")
-		}
-		r.buf.WriteString(line)
-	}
+	return elems
 }
 
-func (r *markdownReader) flushElement() types.Element {
-	elem := types.Element{
-		Kind:  r.kind,
-		Text:  strings.TrimSpace(r.buf.String()),
-		Level: r.level,
-	}
-	if r.kind == types.ElementCodeBlock && r.lang != "" {
-		elem.Meta = map[string]string{"language": r.lang}
-	}
-	r.resetBuf()
-	return elem
-}
-
-func (r *markdownReader) setHeading(line string) {
-	level := 0
-	for _, ch := range line {
-		if ch == '#' {
-			level++
-		} else {
-			break
+func collectText(n ast.Node, source []byte) string {
+	var b strings.Builder
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		switch v := c.(type) {
+		case *ast.Text:
+			b.Write(v.Value(source))
+		case *ast.CodeSpan:
+			b.WriteString(collectText(v, source))
+		default:
+			b.WriteString(collectText(v, source))
 		}
 	}
-	r.level = level
-	r.kind = types.ElementHeading
-	text := strings.TrimSpace(line[level:])
-	r.buf.WriteString(text)
+	return strings.TrimSpace(b.String())
 }
 
-func (r *markdownReader) resetBuf() {
-	r.buf.Reset()
-	r.kind = ""
-	r.level = 0
-	r.lang = ""
-	r.inTable = false
+func collectLines(n ast.Node, source []byte) string {
+	lines := n.Lines()
+	var b strings.Builder
+	for i := 0; i < lines.Len(); i++ {
+		seg := lines.At(i)
+		b.Write(seg.Value(source))
+	}
+	return strings.TrimSpace(b.String())
 }
 
-func isHeading(line string) bool {
-	if len(line) == 0 || line[0] != '#' {
-		return false
+func collectTable(n ast.Node, source []byte) string {
+	var rows []string
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		switch c.Kind() {
+		case extast.KindTableHeader, extast.KindTableRow:
+			rows = append(rows, collectRow(c, source))
+		}
 	}
-	i := 0
-	for i < len(line) && line[i] == '#' {
-		i++
-	}
-	if i > 6 {
-		return false
-	}
-	return i < len(line) && line[i] == ' '
+	return strings.Join(rows, "\n")
 }
 
-func looksLikeTableRow(line string) bool {
-	return strings.HasPrefix(line, "|") && strings.HasSuffix(line, "|")
+func collectRow(n ast.Node, source []byte) string {
+	var cells []string
+	for cell := n.FirstChild(); cell != nil; cell = cell.NextSibling() {
+		cellText := collectText(cell, source)
+		cells = append(cells, cellText)
+	}
+	return strings.Join(cells, " ")
 }

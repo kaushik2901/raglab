@@ -90,9 +90,8 @@ func TestMarkdownParser_Tables(t *testing.T) {
 	require.Len(t, elems, 1)
 
 	assert.Equal(t, types.ElementTable, elems[0].Kind)
-	assert.Contains(t, elems[0].Text, "| A | B |")
-	assert.Contains(t, elems[0].Text, "|---|")
-	assert.Contains(t, elems[0].Text, "| 1 | 2 |")
+	assert.Contains(t, elems[0].Text, "A B")
+	assert.Contains(t, elems[0].Text, "1 2")
 }
 
 func TestMarkdownParser_EmptyFile(t *testing.T) {
@@ -143,7 +142,7 @@ func TestMarkdownParser_Mixed(t *testing.T) {
 		}
 		if e.Kind == types.ElementTable {
 			foundTable = true
-			assert.Contains(t, e.Text, "| foo")
+			assert.Contains(t, e.Text, "foo")
 		}
 	}
 	assert.True(t, foundCode, "expected a code block element")
@@ -152,14 +151,16 @@ func TestMarkdownParser_Mixed(t *testing.T) {
 
 func TestMarkdownParser_Lists(t *testing.T) {
 	elems := collectElements(t, &MarkdownParser{}, filepath.Join("testdata", "lists.md"))
-	require.Len(t, elems, 2)
+	require.Len(t, elems, 3)
 
-	assert.Equal(t, types.ElementParagraph, elems[0].Kind)
-	assert.Contains(t, elems[0].Text, "- item1")
-	assert.Contains(t, elems[0].Text, "- item2")
+	assert.Equal(t, types.ElementListItem, elems[0].Kind)
+	assert.Equal(t, "item1", elems[0].Text)
 
-	assert.Equal(t, types.ElementParagraph, elems[1].Kind)
-	assert.Equal(t, "Para", elems[1].Text)
+	assert.Equal(t, types.ElementListItem, elems[1].Kind)
+	assert.Equal(t, "item2", elems[1].Text)
+
+	assert.Equal(t, types.ElementParagraph, elems[2].Kind)
+	assert.Equal(t, "Para", elems[2].Text)
 }
 
 func TestMarkdownParser_Nometadata(t *testing.T) {
