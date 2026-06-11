@@ -11,6 +11,7 @@ type ElementReader interface {
 	ReadElement() (Element, error)
 	Path() string
 	Close() error
+	Metadata() map[string]string
 }
 
 const (
