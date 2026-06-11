@@ -2,33 +2,14 @@ package retriever
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
-
-type mockEmbedder struct {
-	mock.Mock
-}
-
-func (m *mockEmbedder) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
-	args := m.Called(ctx, chunks)
-	return args.Get(0).([]types.Embedding), args.Error(1)
-}
-
-func (m *mockEmbedder) Dimensions() int {
-	args := m.Called()
-	return args.Int(0)
-}
-
-func (m *mockEmbedder) ModelName() string {
-	args := m.Called()
-	return args.String(0)
-}
 
 type mockStore struct {
 	mock.Mock
@@ -65,87 +46,80 @@ func (m *mockStore) Close() error {
 }
 
 func TestNew(t *testing.T) {
-	e := new(mockEmbedder)
 	s := new(mockStore)
-	r, err := New(e, s, StrategyNaiveSearch)
+	r, err := New(s, StrategyNaiveSearch)
 	assert.NoError(t, err)
 	assert.NotNil(t, r)
 	assert.Equal(t, StrategyNaiveSearch, r.strategy)
 }
 
 func TestNew_UnknownStrategy(t *testing.T) {
-	e := new(mockEmbedder)
 	s := new(mockStore)
-	_, err := New(e, s, "hybrid-search")
-	assert.ErrorContains(t, err, "unknown query strategy")
+	_, err := New(s, "hybrid-search")
+	assert.ErrorContains(t, err, "unknown retrieval strategy")
 }
 
-func TestRetrieve(t *testing.T) {
-	e := new(mockEmbedder)
+func TestRetrieve_NaiveSearch(t *testing.T) {
 	s := new(mockStore)
-	r, err := New(e, s, StrategyNaiveSearch)
-	assert.NoError(t, err)
+	r, err := New(s, StrategyNaiveSearch)
+	require.NoError(t, err)
 
 	ctx := context.Background()
+	queryVector := []float32{0.1, 0.2, 0.3}
 	expectedResults := []types.SearchResult{
 		{ChunkID: "chunk1", DocumentPath: "doc1.md", Content: "content1", Score: 0.95},
 		{ChunkID: "chunk2", DocumentPath: "doc2.md", Content: "content2", Score: 0.85},
 	}
 
-	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "test query"}}).
-		Return([]types.Embedding{{Vector: []float64{0.1, 0.2, 0.3}}}, nil)
-
-	s.On("Search", ctx, "my-collection", []float32{0.1, 0.2, 0.3}, 5).
+	s.On("Search", ctx, "my-collection", queryVector, 5).
 		Return(expectedResults, nil)
 
-	results, err := r.Retrieve(ctx, "my-collection", "test query", 5)
+	results, err := r.Retrieve(ctx, "my-collection", queryVector, 5)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedResults, results)
-	e.AssertExpectations(t)
 	s.AssertExpectations(t)
 }
 
-func TestRetrieve_EmbedError(t *testing.T) {
-	e := new(mockEmbedder)
+func TestRetrieve_MMR_ReranksToTopK(t *testing.T) {
 	s := new(mockStore)
-	r, err := New(e, s, StrategyNaiveSearch)
-	assert.NoError(t, err)
+	r, err := New(s, StrategyMMR)
+	require.NoError(t, err)
 
 	ctx := context.Background()
-	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "query"}}).
-		Return([]types.Embedding{}, errors.New("api error"))
+	queryVector := []float32{1, 0}
 
-	_, err = r.Retrieve(ctx, "col", "query", 5)
-	assert.ErrorContains(t, err, "embed query")
+	// 5 candidates but fetchK=topK*3 means fetchK=15, but we only provide 5
+	results := []types.SearchResult{
+		{DocumentPath: "a.md", Score: 0.9, Content: "a", Vector: []float32{1, 0}},
+		{DocumentPath: "b.md", Score: 0.8, Content: "b", Vector: []float32{0.9, 0.1}},
+		{DocumentPath: "c.md", Score: 0.7, Content: "c", Vector: []float32{0, 1}},
+	}
+
+	s.On("Search", ctx, "col", queryVector, 3*mmrFetchMultiplier).Return(results, nil)
+
+	reranked, err := r.Retrieve(ctx, "col", queryVector, 3)
+	assert.NoError(t, err)
+	assert.Len(t, reranked, 3)
+	// Result order may differ from input due to MMR, but all 3 should be present
+	paths := make(map[string]bool)
+	for _, r := range reranked {
+		paths[r.DocumentPath] = true
+	}
+	assert.True(t, paths["a.md"])
+	assert.True(t, paths["b.md"])
+	assert.True(t, paths["c.md"])
 }
 
-func TestRetrieve_EmptyEmbeddings(t *testing.T) {
-	e := new(mockEmbedder)
-	s := new(mockStore)
-	r, err := New(e, s, StrategyNaiveSearch)
-	assert.NoError(t, err)
-
-	ctx := context.Background()
-	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "query"}}).
-		Return([]types.Embedding{}, nil)
-
-	_, err = r.Retrieve(ctx, "col", "query", 5)
-	assert.ErrorContains(t, err, "no embeddings returned")
+func TestRerankMMR_EmptyInput(t *testing.T) {
+	assert.Nil(t, RerankMMR(nil, []float32{0.1}, 0.7, 5))
+	assert.Empty(t, RerankMMR([]types.SearchResult{}, []float32{0.1}, 0.7, 5))
 }
 
-func TestRetrieve_SearchError(t *testing.T) {
-	e := new(mockEmbedder)
-	s := new(mockStore)
-	r, err := New(e, s, StrategyNaiveSearch)
-	assert.NoError(t, err)
-
-	ctx := context.Background()
-	e.On("Embed", ctx, []types.Chunk{{ID: "query", Content: "query"}}).
-		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
-
-	s.On("Search", ctx, "col", []float32{0.1}, 5).
-		Return([]types.SearchResult{}, errors.New("search failed"))
-
-	_, err = r.Retrieve(ctx, "col", "query", 5)
-	assert.ErrorContains(t, err, "search")
+func TestRerankMMR_LessThanTopK(t *testing.T) {
+	results := []types.SearchResult{
+		{DocumentPath: "a.md", Score: 0.9, Vector: []float32{1, 0}},
+	}
+	out := RerankMMR(results, []float32{1, 0}, 0.7, 5)
+	assert.Len(t, out, 1)
+	assert.Equal(t, "a.md", out[0].DocumentPath)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
 	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
@@ -53,7 +54,7 @@ type evalCheckpoint struct {
 type EvalWorkerDeps struct {
 	EvalDB    eval.EvalDB
 	Client    *river.Client[pgx.Tx]
-	QStore    eval.VectorSearcher
+	Retriever *retriever.Retriever
 	Embedder  embedder.Embedder
 	Generator generator.Generator
 	JudgeGen  generator.Generator
@@ -63,7 +64,7 @@ type EvalWorker struct {
 	river.WorkerDefaults[EvalArgs]
 	EvalDB    eval.EvalDB
 	Client    *river.Client[pgx.Tx]
-	QStore    eval.VectorSearcher
+	Retriever *retriever.Retriever
 	Embedder  embedder.Embedder
 	Generator generator.Generator
 	JudgeGen  generator.Generator
@@ -79,7 +80,7 @@ func NewEvalWorkerWithDeps(deps EvalWorkerDeps) *EvalWorker {
 	return &EvalWorker{
 		EvalDB:    deps.EvalDB,
 		Client:    deps.Client,
-		QStore:    deps.QStore,
+		Retriever: deps.Retriever,
 		Embedder:  deps.Embedder,
 		Generator: deps.Generator,
 		JudgeGen:  deps.JudgeGen,
@@ -118,18 +119,17 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 
 	// Resolve dependencies: prefer injected, fall back to real creation
 	emb := w.Embedder
-	vs := w.QStore
+	ret := w.Retriever
 	gen := w.Generator
 	judgeGen := w.JudgeGen
 	var rawStore *qstore.QdrantStore
-	if emb == nil || vs == nil || gen == nil {
+	if emb == nil || ret == nil || gen == nil {
 		var cerr error
-		emb, rawStore, gen, judgeGen, cerr = createEvalDeps(ctx, args)
+		emb, ret, rawStore, gen, judgeGen, cerr = createEvalDeps(ctx, args)
 		if cerr != nil {
 			return cerr
 		}
 		defer rawStore.Close()
-		vs = qstore.NewCircuitBreakerVectorStore(rawStore)
 	}
 
 	file, err := os.Open(args.DatasetPath)
@@ -163,7 +163,7 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		workerWg.Add(1)
 		g.Go(func() error {
 			defer workerWg.Done()
-			return evaluateQuestions(ctx, args, topK, vs, gen, judgeGen, workChan, resultChan)
+			return evaluateQuestions(ctx, args, topK, ret, gen, judgeGen, workChan, resultChan)
 		})
 	}
 
@@ -266,14 +266,27 @@ func embedQuestions(ctx context.Context, emb embedder.Embedder, questionChan <-c
 	}
 }
 
-func evaluateQuestions(ctx context.Context, args EvalArgs, topK int, qStore eval.VectorSearcher, gen generator.Generator, judgeGen generator.Generator, workChan <-chan workUnit, resultChan chan<- types.RetrievalResult) error {
+func evaluateQuestions(ctx context.Context, args EvalArgs, topK int, ret *retriever.Retriever, gen generator.Generator, judgeGen generator.Generator, workChan <-chan workUnit, resultChan chan<- types.RetrievalResult) error {
 	for {
 		select {
 		case wu, ok := <-workChan:
 			if !ok {
 				return nil
 			}
-			result, err := eval.EvaluateQuestion(ctx, wu.Question, wu.Embedding, qStore, gen, judgeGen, args.IndexTag, topK)
+
+			queryVector := eval.ToFloat32(wu.Embedding)
+			searchResults, err := ret.Retrieve(ctx, args.IndexTag, queryVector, topK)
+			if err != nil {
+				slog.Warn("retrieve failed", "question_id", wu.Question.ID, "err", err)
+				resultChan <- types.RetrievalResult{
+					QuestionID: wu.Question.ID,
+					Question:   wu.Question.Question,
+					Failed:     true,
+				}
+				continue
+			}
+
+			result, err := eval.EvaluateQuestion(ctx, wu.Question, searchResults, gen, judgeGen, topK)
 			if err != nil {
 				slog.Warn("evaluate question failed", "question_id", wu.Question.ID, "err", err)
 				result = types.RetrievalResult{
@@ -368,7 +381,7 @@ func collectResults(
 	}
 }
 
-func createEvalDeps(ctx context.Context, args EvalArgs) (embedder.Embedder, *qstore.QdrantStore, generator.Generator, generator.Generator, error) {
+func createEvalDeps(ctx context.Context, args EvalArgs) (embedder.Embedder, *retriever.Retriever, *qstore.QdrantStore, generator.Generator, generator.Generator, error) {
 	qdrantURL := os.Getenv("QDRANT_URL")
 	if qdrantURL == "" {
 		qdrantURL = "http://localhost:6334"
@@ -383,27 +396,35 @@ func createEvalDeps(ctx context.Context, args EvalArgs) (embedder.Embedder, *qst
 
 	emb, err := embedder.New(embeddingProvider, embeddingModel, args.BatchSize)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("create embedder: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("create embedder: %w", err)
 	}
 
-	qStore := qstore.NewQdrantStore(qdrantAPIKey)
-	if err := qStore.Connect(ctx, qdrantURL); err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("connect qdrant: %w", err)
+	rawStore := qstore.NewQdrantStore(qdrantAPIKey)
+	if err := rawStore.Connect(ctx, qdrantURL); err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("connect qdrant: %w", err)
+	}
+
+	cbStore := qstore.NewCircuitBreakerVectorStore(rawStore)
+
+	ret, err := retriever.New(cbStore, args.QueryStrategy)
+	if err != nil {
+		rawStore.Close()
+		return nil, nil, nil, nil, nil, fmt.Errorf("create retriever: %w", err)
 	}
 
 	gen, err := generator.New(llmProvider, args.LLMModel)
 	if err != nil {
-		qStore.Close()
-		return nil, nil, nil, nil, fmt.Errorf("create generator: %w", err)
+		rawStore.Close()
+		return nil, nil, nil, nil, nil, fmt.Errorf("create generator: %w", err)
 	}
 
 	judgeGen, err := generator.New(judgeProvider, args.JudgeModel)
 	if err != nil {
-		qStore.Close()
-		return nil, nil, nil, nil, fmt.Errorf("create judge generator: %w", err)
+		rawStore.Close()
+		return nil, nil, nil, nil, nil, fmt.Errorf("create judge generator: %w", err)
 	}
 
-	return emb, qStore, gen, judgeGen, nil
+	return emb, ret, rawStore, gen, judgeGen, nil
 }
 
 func readEvalCheckpoint(job *river.Job[EvalArgs]) evalCheckpoint {

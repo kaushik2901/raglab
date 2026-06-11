@@ -13,14 +13,6 @@ import (
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
-type mockVectorSearcher struct {
-	searchFn func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error)
-}
-
-func (m *mockVectorSearcher) Search(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-	return m.searchFn(ctx, collection, queryVector, topK)
-}
-
 type mockGen struct {
 	generateFn       func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error)
 	generateStreamFn func(ctx context.Context, params openai.ChatCompletionNewParams, cb generator.StreamCallback) (*openai.ChatCompletion, error)
@@ -60,7 +52,7 @@ func TestToFloat32(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := toFloat32(tt.input)
+			got := ToFloat32(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -271,13 +263,6 @@ func TestGenerateForQuestion_EmptyChoices(t *testing.T) {
 }
 
 func TestEvaluateQuestion_Hit(t *testing.T) {
-	searcher := &mockVectorSearcher{
-		searchFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-			return []types.SearchResult{
-				{DocumentPath: "doc1.md", Score: 0.95, Content: "relevant content"},
-			}, nil
-		},
-	}
 	gen := &mockGen{
 		generateFn: func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 			return &openai.ChatCompletion{
@@ -297,7 +282,11 @@ func TestEvaluateQuestion_Hit(t *testing.T) {
 		},
 	}
 
-	result, err := EvaluateQuestion(context.Background(), q, []float64{0.1, 0.2, 0.3}, searcher, gen, nil, "col", 5)
+	searchResults := []types.SearchResult{
+		{DocumentPath: "doc1.md", Score: 0.95, Content: "relevant content"},
+	}
+
+	result, err := EvaluateQuestion(context.Background(), q, searchResults, gen, nil, 5)
 	require.NoError(t, err)
 	assert.Equal(t, "q1", result.QuestionID)
 	assert.True(t, result.Hit[1])
@@ -310,13 +299,6 @@ func TestEvaluateQuestion_Hit(t *testing.T) {
 }
 
 func TestEvaluateQuestion_Miss(t *testing.T) {
-	searcher := &mockVectorSearcher{
-		searchFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-			return []types.SearchResult{
-				{DocumentPath: "docOther.md", Score: 0.9, Content: "irrelevant"},
-			}, nil
-		},
-	}
 	gen := &mockGen{
 		generateFn: func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 			return &openai.ChatCompletion{
@@ -336,33 +318,26 @@ func TestEvaluateQuestion_Miss(t *testing.T) {
 		},
 	}
 
-	result, err := EvaluateQuestion(context.Background(), q, []float64{0.1}, searcher, gen, nil, "col", 5)
+	searchResults := []types.SearchResult{
+		{DocumentPath: "docOther.md", Score: 0.9, Content: "irrelevant"},
+	}
+
+	result, err := EvaluateQuestion(context.Background(), q, searchResults, gen, nil, 5)
 	require.NoError(t, err)
 	assert.False(t, result.Hit[1])
 	assert.Equal(t, 0, result.RankFirst)
 }
 
 func TestEvaluateQuestion_SearchError(t *testing.T) {
-	searcher := &mockVectorSearcher{
-		searchFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-			return nil, errors.New("search failed")
-		},
-	}
-
+	// EvaluateQuestion no longer does search; search error is handled by caller.
+	// This test verifies it handles empty/nil results gracefully.
 	q := types.EvalQuestion{ID: "q1", Question: "test"}
-	_, err := EvaluateQuestion(context.Background(), q, []float64{0.1}, searcher, nil, nil, "col", 5)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "search")
+	result, err := EvaluateQuestion(context.Background(), q, nil, nil, nil, 5)
+	require.NoError(t, err)
+	assert.Empty(t, result.RetrievedPaths)
 }
 
 func TestEvaluateQuestion_WithJudge(t *testing.T) {
-	searcher := &mockVectorSearcher{
-		searchFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-			return []types.SearchResult{
-				{DocumentPath: "doc1.md", Score: 0.95, Content: "content"},
-			}, nil
-		},
-	}
 	gen := &mockGen{
 		generateFn: func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 			return &openai.ChatCompletion{
@@ -391,20 +366,17 @@ func TestEvaluateQuestion_WithJudge(t *testing.T) {
 		Relevance:      []types.RelevanceJudgment{{DocumentPath: "doc1.md", Grade: 3}},
 	}
 
-	result, err := EvaluateQuestion(context.Background(), q, []float64{0.1}, searcher, gen, judge, "col", 5)
+	searchResults := []types.SearchResult{
+		{DocumentPath: "doc1.md", Score: 0.95, Content: "content"},
+	}
+
+	result, err := EvaluateQuestion(context.Background(), q, searchResults, gen, judge, 5)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.85, result.AnswerScore, 0.001)
 	assert.False(t, result.Failed)
 }
 
 func TestEvaluateQuestion_GenErrorNonFatal(t *testing.T) {
-	searcher := &mockVectorSearcher{
-		searchFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-			return []types.SearchResult{
-				{DocumentPath: "doc1.md", Score: 0.9, Content: "content"},
-			}, nil
-		},
-	}
 	gen := &mockGen{
 		generateFn: func(ctx context.Context, params openai.ChatCompletionNewParams) (*openai.ChatCompletion, error) {
 			return nil, errors.New("gen error")
@@ -419,7 +391,11 @@ func TestEvaluateQuestion_GenErrorNonFatal(t *testing.T) {
 		},
 	}
 
-	result, err := EvaluateQuestion(context.Background(), q, []float64{0.1}, searcher, gen, nil, "col", 5)
+	searchResults := []types.SearchResult{
+		{DocumentPath: "doc1.md", Score: 0.9, Content: "content"},
+	}
+
+	result, err := EvaluateQuestion(context.Background(), q, searchResults, gen, nil, 5)
 	require.NoError(t, err)
 	assert.True(t, result.Hit[1])
 	assert.Empty(t, result.Answer)
@@ -427,14 +403,6 @@ func TestEvaluateQuestion_GenErrorNonFatal(t *testing.T) {
 }
 
 func TestEvaluateQuestion_NoGenerator(t *testing.T) {
-	searcher := &mockVectorSearcher{
-		searchFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
-			return []types.SearchResult{
-				{DocumentPath: "doc1.md", Score: 0.9, Content: "content"},
-			}, nil
-		},
-	}
-
 	q := types.EvalQuestion{
 		ID:       "q1",
 		Question: "test",
@@ -443,7 +411,11 @@ func TestEvaluateQuestion_NoGenerator(t *testing.T) {
 		},
 	}
 
-	result, err := EvaluateQuestion(context.Background(), q, []float64{0.1}, searcher, nil, nil, "col", 5)
+	searchResults := []types.SearchResult{
+		{DocumentPath: "doc1.md", Score: 0.9, Content: "content"},
+	}
+
+	result, err := EvaluateQuestion(context.Background(), q, searchResults, nil, nil, 5)
 	require.NoError(t, err)
 	assert.True(t, result.Hit[1])
 	assert.Empty(t, result.Answer, "no answer when generator is nil")

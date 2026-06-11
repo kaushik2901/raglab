@@ -8,4 +8,5 @@ type SearchResult struct {
 	TokenCount   int
 	ChunkIndex   int
 	Metadata     map[string]string
+	Vector       []float32
 }

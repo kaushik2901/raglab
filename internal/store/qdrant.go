@@ -163,6 +163,7 @@ func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, que
 		Vector:         queryVector,
 		Limit:          uint64(topK),
 		WithPayload:    qdrant.NewWithPayload(true),
+		WithVectors:    qdrant.NewWithVectors(true),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
@@ -194,6 +195,11 @@ func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, que
 				default:
 					r.Metadata[k] = v.GetStringValue()
 				}
+			}
+		}
+		if vectors := p.GetVectors(); vectors != nil {
+			if v := vectors.GetVector(); v != nil {
+				r.Vector = v.GetData()
 			}
 		}
 		results = append(results, r)

@@ -9,32 +9,36 @@ import (
 	"github.com/openai/openai-go"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
 type Retriever interface {
-	Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error)
+	Retrieve(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error)
 }
 
 type RetrievalEvaluator struct {
 	retriever Retriever
+	embedder  embedder.Embedder
 	generator generator.Generator
 	judge     generator.Generator
 	topK      int
 }
 
-func NewRetrievalEvaluator(ret Retriever, gen generator.Generator, topK int) *RetrievalEvaluator {
+func NewRetrievalEvaluator(ret Retriever, emb embedder.Embedder, gen generator.Generator, topK int) *RetrievalEvaluator {
 	return &RetrievalEvaluator{
 		retriever: ret,
+		embedder:  emb,
 		generator: gen,
 		topK:      topK,
 	}
 }
 
-func NewRetrievalEvaluatorWithJudge(ret Retriever, gen generator.Generator, judge generator.Generator, topK int) *RetrievalEvaluator {
+func NewRetrievalEvaluatorWithJudge(ret Retriever, emb embedder.Embedder, gen generator.Generator, judge generator.Generator, topK int) *RetrievalEvaluator {
 	return &RetrievalEvaluator{
 		retriever: ret,
+		embedder:  emb,
 		generator: gen,
 		judge:     judge,
 		topK:      topK,
@@ -71,7 +75,17 @@ func (e *RetrievalEvaluator) Evaluate(ctx context.Context, collection string, qu
 func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string, q types.EvalQuestion) (*types.RetrievalResult, error) {
 	start := time.Now()
 
-	searchResults, err := e.retriever.Retrieve(ctx, collection, q.Question, e.topK)
+	queryChunk := types.Chunk{ID: q.ID, Content: q.Question}
+	embeddings, err := e.embedder.Embed(ctx, []types.Chunk{queryChunk})
+	if err != nil {
+		return nil, fmt.Errorf("embed query: %w", err)
+	}
+	if len(embeddings) == 0 {
+		return nil, fmt.Errorf("no embeddings returned")
+	}
+	queryVector := ToFloat32(embeddings[0].Vector)
+
+	searchResults, err := e.retriever.Retrieve(ctx, collection, queryVector, e.topK)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve: %w", err)
 	}

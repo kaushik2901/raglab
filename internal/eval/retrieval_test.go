@@ -17,9 +17,28 @@ type mockRetriever struct {
 	mock.Mock
 }
 
-func (m *mockRetriever) Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error) {
-	args := m.Called(ctx, collection, query, topK)
+func (m *mockRetriever) Retrieve(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
+	args := m.Called(ctx, collection, queryVector, topK)
 	return args.Get(0).([]types.SearchResult), args.Error(1)
+}
+
+type mockEmbedder struct {
+	mock.Mock
+}
+
+func (m *mockEmbedder) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
+	args := m.Called(ctx, chunks)
+	return args.Get(0).([]types.Embedding), args.Error(1)
+}
+
+func (m *mockEmbedder) Dimensions() int {
+	args := m.Called()
+	return args.Int(0)
+}
+
+func (m *mockEmbedder) ModelName() string {
+	args := m.Called()
+	return args.String(0)
 }
 
 type mockGenerator struct {
@@ -49,8 +68,9 @@ func (m *mockGenerator) ModelName() string {
 
 func TestNewRetrievalEvaluator(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 5)
+	e := NewRetrievalEvaluator(r, emb, g, 5)
 	require.NotNil(t, e)
 	assert.Equal(t, 5, e.topK)
 	assert.Equal(t, r, e.retriever)
@@ -59,9 +79,10 @@ func TestNewRetrievalEvaluator(t *testing.T) {
 
 func TestNewRetrievalEvaluatorWithJudge(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
 	j := new(mockGenerator)
-	e := NewRetrievalEvaluatorWithJudge(r, g, j, 5)
+	e := NewRetrievalEvaluatorWithJudge(r, emb, g, j, 5)
 	require.NotNil(t, e)
 	assert.Equal(t, 5, e.topK)
 	assert.Equal(t, j, e.judge)
@@ -69,8 +90,9 @@ func TestNewRetrievalEvaluatorWithJudge(t *testing.T) {
 
 func TestEvaluate_SingleQuestion_Hit(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
@@ -83,7 +105,10 @@ func TestEvaluate_SingleQuestion_Hit(t *testing.T) {
 		},
 	}
 
-	r.On("Retrieve", mock.Anything, "my-collection", "test query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1, 0.2}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "my-collection", mock.Anything, 3).
 		Return([]types.SearchResult{
 			{DocumentPath: "doc1.md", Score: 0.95, Content: "relevant content"},
 			{DocumentPath: "doc2.md", Score: 0.85},
@@ -122,8 +147,9 @@ func TestEvaluate_SingleQuestion_Hit(t *testing.T) {
 
 func TestEvaluate_SingleQuestion_Miss(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
@@ -136,7 +162,10 @@ func TestEvaluate_SingleQuestion_Miss(t *testing.T) {
 		},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "test query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{
 			{DocumentPath: "doc1.md", Score: 0.9},
 			{DocumentPath: "doc2.md", Score: 0.8},
@@ -161,8 +190,9 @@ func TestEvaluate_SingleQuestion_Miss(t *testing.T) {
 
 func TestEvaluate_MultipleQuestions_Ordering(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
@@ -171,12 +201,11 @@ func TestEvaluate_MultipleQuestions_Ordering(t *testing.T) {
 		{ID: "q3", Question: "third", Relevance: []types.RelevanceJudgment{{DocumentPath: "d3.md", Grade: 1}}},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "first", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{{DocumentPath: "d1.md", Score: 0.9, Content: "x"}}, nil)
-	r.On("Retrieve", mock.Anything, "col", "second", 3).
-		Return([]types.SearchResult{{DocumentPath: "d2.md", Score: 0.9, Content: "x"}}, nil)
-	r.On("Retrieve", mock.Anything, "col", "third", 3).
-		Return([]types.SearchResult{{DocumentPath: "d3.md", Score: 0.9, Content: "x"}}, nil)
 
 	g.On("Generate", mock.Anything, mock.Anything).
 		Return(&openai.ChatCompletion{
@@ -197,8 +226,9 @@ func TestEvaluate_MultipleQuestions_Ordering(t *testing.T) {
 
 func TestEvaluate_Concurrent_AllProcessed(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := make([]types.EvalQuestion, 4)
@@ -212,7 +242,10 @@ func TestEvaluate_Concurrent_AllProcessed(t *testing.T) {
 		}
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{{DocumentPath: "doc.md", Score: 0.9, Content: "x"}}, nil)
 
 	g.On("Generate", mock.Anything, mock.Anything).
@@ -233,15 +266,19 @@ func TestEvaluate_Concurrent_AllProcessed(t *testing.T) {
 
 func TestEvaluate_RetrieverError(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
 		{ID: "q1", Question: "query", Relevance: []types.RelevanceJudgment{{DocumentPath: "doc.md", Grade: 1}}},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{}, assert.AnError)
 
 	_, err := e.Evaluate(ctx, "col", questions, 1)
@@ -251,15 +288,19 @@ func TestEvaluate_RetrieverError(t *testing.T) {
 
 func TestEvaluate_GeneratorError_NonFatal(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
 		{ID: "q1", Question: "query", Relevance: []types.RelevanceJudgment{{DocumentPath: "doc.md", Grade: 1}}},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{{DocumentPath: "doc.md", Score: 0.9, Content: "x"}}, nil)
 
 	g.On("Generate", mock.Anything, mock.Anything).
@@ -274,15 +315,19 @@ func TestEvaluate_GeneratorError_NonFatal(t *testing.T) {
 
 func TestEvaluate_EmptyResults_MapsHitCorrectly(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 5)
+	e := NewRetrievalEvaluator(r, emb, g, 5)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
 		{ID: "q1", Question: "query", Relevance: []types.RelevanceJudgment{{DocumentPath: "doc.md", Grade: 1}}},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "query", 5).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 5).
 		Return([]types.SearchResult{}, nil)
 
 	results, err := e.Evaluate(ctx, "col", questions, 1)
@@ -296,9 +341,10 @@ func TestEvaluate_EmptyResults_MapsHitCorrectly(t *testing.T) {
 
 func TestEvaluate_WithJudge_SetsAnswerScore(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
 	j := new(mockGenerator)
-	e := NewRetrievalEvaluatorWithJudge(r, g, j, 3)
+	e := NewRetrievalEvaluatorWithJudge(r, emb, g, j, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
@@ -310,7 +356,10 @@ func TestEvaluate_WithJudge_SetsAnswerScore(t *testing.T) {
 		},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "test query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{{DocumentPath: "doc1.md", Score: 0.9, Content: "content"}}, nil)
 
 	g.On("Generate", mock.Anything, mock.Anything).
@@ -338,8 +387,9 @@ func TestEvaluate_WithJudge_SetsAnswerScore(t *testing.T) {
 
 func TestEvaluate_SingleQuestion_WithSourceURL(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
@@ -351,7 +401,10 @@ func TestEvaluate_SingleQuestion_WithSourceURL(t *testing.T) {
 		},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "test query", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{
 			{
 				DocumentPath: "doc1.md",
@@ -385,15 +438,19 @@ func TestEvaluate_SingleQuestion_WithSourceURL(t *testing.T) {
 
 func TestEvaluate_ZeroConcurrency_Defaults(t *testing.T) {
 	r := new(mockRetriever)
+	emb := new(mockEmbedder)
 	g := new(mockGenerator)
-	e := NewRetrievalEvaluator(r, g, 3)
+	e := NewRetrievalEvaluator(r, emb, g, 3)
 
 	ctx := context.Background()
 	questions := []types.EvalQuestion{
 		{ID: "q1", Question: "q", Relevance: []types.RelevanceJudgment{{DocumentPath: "d.md", Grade: 1}}},
 	}
 
-	r.On("Retrieve", mock.Anything, "col", "q", 3).
+	emb.On("Embed", mock.Anything, mock.Anything).
+		Return([]types.Embedding{{Vector: []float64{0.1}}}, nil)
+
+	r.On("Retrieve", mock.Anything, "col", mock.Anything, 3).
 		Return([]types.SearchResult{{DocumentPath: "d.md", Score: 0.9, Content: "x"}}, nil)
 	g.On("Generate", mock.Anything, mock.Anything).
 		Return(&openai.ChatCompletion{

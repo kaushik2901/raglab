@@ -18,7 +18,7 @@ import (
 )
 
 type retrieverInterface interface {
-	Retrieve(ctx context.Context, collection string, query string, topK int) ([]types.SearchResult, error)
+	Retrieve(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error)
 }
 
 type ChatService struct {
@@ -28,7 +28,7 @@ type ChatService struct {
 
 	// Injectable factories for testing
 	newEmbedderFn  func(req ChatRequest) (embedder.Embedder, error)
-	newRetrieverFn func(emb embedder.Embedder) (retrieverInterface, error)
+	newRetrieverFn func() (retrieverInterface, error)
 	newGeneratorFn func(req ChatRequest) (generator.Generator, error)
 }
 
@@ -38,8 +38,8 @@ func NewChatService(cfg *config.Config, vs qstore.VectorStore) (*ChatService, er
 	s.newEmbedderFn = func(req ChatRequest) (embedder.Embedder, error) {
 		return embedder.New(config.Provider(req.EmbeddingProvider), req.EmbeddingModel, 1)
 	}
-	s.newRetrieverFn = func(emb embedder.Embedder) (retrieverInterface, error) {
-		return retriever.New(emb, s.vs, retriever.StrategyNaiveSearch)
+	s.newRetrieverFn = func() (retrieverInterface, error) {
+		return retriever.New(s.vs, retriever.StrategyNaiveSearch)
 	}
 	s.newGeneratorFn = func(req ChatRequest) (generator.Generator, error) {
 		return generator.New(config.Provider(req.LLMProvider), req.LLMModel)
@@ -52,12 +52,21 @@ func (s *ChatService) retrieveSources(ctx context.Context, req ChatRequest) ([]t
 	if err != nil {
 		return nil, nil, fmt.Errorf("create embedder: %w", err)
 	}
-	ret, err := s.newRetrieverFn(emb)
+	ret, err := s.newRetrieverFn()
 	if err != nil {
 		return nil, nil, fmt.Errorf("create retriever: %w", err)
 	}
 
-	results, err := ret.Retrieve(ctx, req.Tag, req.Query, req.TopK)
+	queryEmbeddings, err := emb.Embed(ctx, []types.Chunk{{ID: "query", Content: req.Query}})
+	if err != nil {
+		return nil, nil, fmt.Errorf("embed query: %w", err)
+	}
+	if len(queryEmbeddings) == 0 {
+		return nil, nil, fmt.Errorf("no embeddings returned")
+	}
+	queryVector := toFloat32(queryEmbeddings[0].Vector)
+
+	results, err := ret.Retrieve(ctx, req.Tag, queryVector, req.TopK)
 	if err != nil {
 		return nil, nil, fmt.Errorf("retrieve: %w", err)
 	}
@@ -182,4 +191,12 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 		},
 		LatencyMs: time.Since(start).Milliseconds(),
 	}, nil
+}
+
+func toFloat32(v []float64) []float32 {
+	out := make([]float32, len(v))
+	for i, f := range v {
+		out[i] = float32(f)
+	}
+	return out
 }

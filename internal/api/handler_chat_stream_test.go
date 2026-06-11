@@ -18,17 +18,17 @@ import (
 )
 
 type mockRetrieverForStream struct {
-	retrieveFn func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error)
+	retrieveFn func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error)
 }
 
-func (m *mockRetrieverForStream) Retrieve(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
-	return m.retrieveFn(ctx, collection, query, topK)
+func (m *mockRetrieverForStream) Retrieve(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
+	return m.retrieveFn(ctx, collection, queryVector, topK)
 }
 
 type mockEmbedderForStream struct{}
 
 func (m *mockEmbedderForStream) Embed(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
-	return make([]types.Embedding, len(chunks)), nil
+	return []types.Embedding{{Vector: []float64{0.1, 0.2}}}, nil
 }
 func (m *mockEmbedderForStream) Dimensions() int   { return 768 }
 func (m *mockEmbedderForStream) ModelName() string { return "mock" }
@@ -51,7 +51,7 @@ func newTestChatService(mockRet retrieverInterface, mockGen generator.Generator,
 		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
 			return &mockEmbedderForStream{}, nil
 		},
-		newRetrieverFn: func(emb embedder.Embedder) (retrieverInterface, error) {
+		newRetrieverFn: func() (retrieverInterface, error) {
 			return mockRet, nil
 		},
 		newGeneratorFn: func(req ChatRequest) (generator.Generator, error) {
@@ -62,7 +62,7 @@ func newTestChatService(mockRet retrieverInterface, mockGen generator.Generator,
 
 func TestChatStreamHandler_Success(t *testing.T) {
 	mockRet := &mockRetrieverForStream{
-		retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+		retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 			return []types.SearchResult{
 				{DocumentPath: "doc1.md", Content: "content", Score: 0.95},
 			}, nil
@@ -149,7 +149,7 @@ func TestChatStreamHandler_MissingFields(t *testing.T) {
 
 func TestChatStreamHandler_RetrievalError(t *testing.T) {
 	mockRet := &mockRetrieverForStream{
-		retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+		retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 			return nil, fmt.Errorf("qdrant error")
 		},
 	}
@@ -179,7 +179,7 @@ func TestChatStreamHandler_WithMemory(t *testing.T) {
 	mem.Add("conv-1", "previous question", "previous answer")
 
 	mockRet := &mockRetrieverForStream{
-		retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+		retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 			return []types.SearchResult{{DocumentPath: "doc1.md", Content: "content", Score: 0.95}}, nil
 		},
 	}

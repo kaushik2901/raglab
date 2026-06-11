@@ -64,11 +64,11 @@ func (m *mockGen) GenerateStream(ctx context.Context, params openai.ChatCompleti
 func (m *mockGen) ModelName() string { return "mock" }
 
 type mockRetrieverForService struct {
-	retrieveFn func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error)
+	retrieveFn func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error)
 }
 
-func (m *mockRetrieverForService) Retrieve(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
-	return m.retrieveFn(ctx, collection, query, topK)
+func (m *mockRetrieverForService) Retrieve(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
+	return m.retrieveFn(ctx, collection, queryVector, topK)
 }
 
 func TestChatService_BuildMessages(t *testing.T) {
@@ -178,9 +178,9 @@ func TestChatService_Chat_Success(t *testing.T) {
 				return []types.Embedding{{Vector: []float64{0.1, 0.2}}}, nil
 			}}, nil
 		},
-		newRetrieverFn: func(emb embedder.Embedder) (retrieverInterface, error) {
+		newRetrieverFn: func() (retrieverInterface, error) {
 			return &mockRetrieverForService{
-				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+				retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 					return []types.SearchResult{
 						{DocumentPath: "doc1.md", Content: "relevant", Score: 0.95},
 					}, nil
@@ -233,9 +233,9 @@ func TestChatService_Chat_SourceURLPopulated(t *testing.T) {
 				return []types.Embedding{{Vector: []float64{0.1, 0.2}}}, nil
 			}}, nil
 		},
-		newRetrieverFn: func(emb embedder.Embedder) (retrieverInterface, error) {
+		newRetrieverFn: func() (retrieverInterface, error) {
 			return &mockRetrieverForService{
-				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+				retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 					return []types.SearchResult{
 						{
 							DocumentPath: "doc1.md",
@@ -287,11 +287,13 @@ func TestChatService_Chat_WithMemory(t *testing.T) {
 	svc := &ChatService{
 		memory: mem,
 		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
-			return &mockEmbedder{}, nil
+			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
+				return []types.Embedding{{Vector: []float64{0.1}}}, nil
+			}}, nil
 		},
-		newRetrieverFn: func(emb embedder.Embedder) (retrieverInterface, error) {
+		newRetrieverFn: func() (retrieverInterface, error) {
 			return &mockRetrieverForService{
-				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+				retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 					return []types.SearchResult{{DocumentPath: "doc1.md", Content: "x", Score: 0.9}}, nil
 				},
 			}, nil
@@ -338,11 +340,13 @@ func TestChatService_Chat_RetrieverError(t *testing.T) {
 	svc := &ChatService{
 		memory: memory.NewRingBuffer(10),
 		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
-			return &mockEmbedder{}, nil
+			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
+				return []types.Embedding{{Vector: []float64{0.1}}}, nil
+			}}, nil
 		},
-		newRetrieverFn: func(emb embedder.Embedder) (retrieverInterface, error) {
+		newRetrieverFn: func() (retrieverInterface, error) {
 			return &mockRetrieverForService{
-				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+				retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 					return nil, errors.New("qdrant error")
 				},
 			}, nil
@@ -372,11 +376,13 @@ func TestChatService_Chat_GeneratorError(t *testing.T) {
 	svc := &ChatService{
 		memory: memory.NewRingBuffer(10),
 		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
-			return &mockEmbedder{}, nil
+			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
+				return []types.Embedding{{Vector: []float64{0.1}}}, nil
+			}}, nil
 		},
-		newRetrieverFn: func(emb embedder.Embedder) (retrieverInterface, error) {
+		newRetrieverFn: func() (retrieverInterface, error) {
 			return &mockRetrieverForService{
-				retrieveFn: func(ctx context.Context, collection, query string, topK int) ([]types.SearchResult, error) {
+				retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 					return []types.SearchResult{{DocumentPath: "d.md", Content: "c", Score: 0.9}}, nil
 				},
 			}, nil

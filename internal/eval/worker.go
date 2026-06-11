@@ -16,30 +16,19 @@ import (
 func EvaluateQuestion(
 	ctx context.Context,
 	q types.EvalQuestion,
-	embedding []float64,
-	searcher VectorSearcher,
+	searchResults []types.SearchResult,
 	gen generator.Generator,
 	judgeGen generator.Generator,
-	collection string,
 	topK int,
 ) (types.RetrievalResult, error) {
 	qStart := time.Now()
-
-	qCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-
-	queryVector := toFloat32(embedding)
-	searchResults, err := searcher.Search(qCtx, collection, queryVector, topK)
-	if err != nil {
-		return types.RetrievalResult{}, fmt.Errorf("search q=%s: %w", q.ID, err)
-	}
 
 	var result types.RetrievalResult
 	fillRetrievalResult(&result, q, searchResults, topK)
 
 	if gen != nil && len(searchResults) > 0 {
 		contextText := buildContextText(searchResults)
-		answer, promptTokens, completionTokens := generateForQuestion(qCtx, gen, q, contextText)
+		answer, promptTokens, completionTokens := generateForQuestion(ctx, gen, q, contextText)
 		result.Answer = answer
 		result.PromptTokens = promptTokens
 		result.CompletionTokens = completionTokens
@@ -49,7 +38,7 @@ func EvaluateQuestion(
 		}
 
 		if judgeGen != nil && answer != "" {
-			score, err := JudgeAnswer(qCtx, judgeGen, q.Question, contextText, q.ExpectedAnswer, answer)
+			score, err := JudgeAnswer(ctx, judgeGen, q.Question, contextText, q.ExpectedAnswer, answer)
 			if err != nil {
 				slog.Warn("judge error", "question_id", q.ID, "err", err)
 				result.Failed = true
@@ -63,7 +52,7 @@ func EvaluateQuestion(
 	return result, nil
 }
 
-func toFloat32(v []float64) []float32 {
+func ToFloat32(v []float64) []float32 {
 	out := make([]float32, len(v))
 	for i, f := range v {
 		out[i] = float32(f)
