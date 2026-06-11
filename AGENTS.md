@@ -93,4 +93,6 @@ Then restart the process (or `docker compose restart workerd`).
 
 ## Testing
 
-Tests requiring Postgres or Qdrant use `t.Skip(...)` and are excluded from `go test ./...` by default. Key coverage: preprocessor, chunker, embedder, generator, eval metrics, store, types, config, workflow, memory, retriever, db migrations.
+Unit tests **must not** interact with real infrastructure (Qdrant, Postgres, OpenAI, etc.) — not even locally. All external dependencies are behind Go interfaces (`VectorStore`, `Embedder`, `Generator`) and must be mocked in tests using testify mocks. Tests that genuinely need real infrastructure belong in a separate `_test.go` file with `t.Skip("requires X")` and are excluded from `go test ./...`.
+
+Key coverage: preprocessor, chunker, embedder, generator, eval metrics, store, types, config, workflow, memory, retriever, db migrations.
