@@ -300,3 +300,47 @@ func TestFixedChunker_ExactMultiple(t *testing.T) {
 	assert.Equal(t, 50, wc1)
 	assert.Equal(t, 50, wc2)
 }
+
+type metadataElementReader struct {
+	sliceElementReader
+	meta map[string]string
+}
+
+func (r *metadataElementReader) Metadata() map[string]string {
+	return r.meta
+}
+
+func TestFixedChunker_MetadataFromReader(t *testing.T) {
+	reader := &metadataElementReader{
+		sliceElementReader: sliceElementReader{
+			elems: []types.Element{
+				{Kind: types.ElementParagraph, Text: words(10)},
+			},
+			path: "handbook/travel-policy.md",
+		},
+		meta: map[string]string{
+			"source_url": "https://handbook.gitlab.com/handbook/travel-policy/",
+			"title":      "Travel Policy",
+		},
+	}
+
+	c := NewFixedChunker(50, 0)
+	chunks := collectChunks(t, context.Background(), c, reader, "handbook/travel-policy.md")
+
+	require.NotEmpty(t, chunks)
+	for _, ch := range chunks {
+		assert.Equal(t, "https://handbook.gitlab.com/handbook/travel-policy/", ch.Metadata["source_url"])
+		assert.Equal(t, "Travel Policy", ch.Metadata["title"])
+	}
+}
+
+func TestFixedChunker_NilMetadata(t *testing.T) {
+	reader := elementReaderFromText("doc.md", words(10))
+	c := NewFixedChunker(50, 0)
+	chunks := collectChunks(t, context.Background(), c, reader, "doc.md")
+
+	require.NotEmpty(t, chunks)
+	for _, ch := range chunks {
+		assert.Nil(t, ch.Metadata)
+	}
+}

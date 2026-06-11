@@ -58,13 +58,14 @@ func (c *FixedChunker) Chunk(ctx context.Context, reader types.ElementReader, do
 
 				for len(window) >= c.Size {
 					content := strings.Join(window[:c.Size], " ")
-					chunk := types.Chunk{
-						ID:           fmt.Sprintf("%s-chunk-%04d", docPath, idx),
-						DocumentPath: docPath,
-						Content:      content,
-						TokenCount:   estimateTokens(content),
-						Index:        idx,
-					}
+				chunk := types.Chunk{
+					ID:           fmt.Sprintf("%s-chunk-%04d", docPath, idx),
+					DocumentPath: docPath,
+					Content:      content,
+					Metadata:     reader.Metadata(),
+					TokenCount:   estimateTokens(content),
+					Index:        idx,
+				}
 					idx++
 
 					select {
@@ -85,6 +86,7 @@ func (c *FixedChunker) Chunk(ctx context.Context, reader types.ElementReader, do
 				ID:           fmt.Sprintf("%s-chunk-%04d", docPath, idx),
 				DocumentPath: docPath,
 				Content:      content,
+				Metadata:     reader.Metadata(),
 				TokenCount:   estimateTokens(content),
 				Index:        idx,
 			}
