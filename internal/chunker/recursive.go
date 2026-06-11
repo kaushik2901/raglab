@@ -29,7 +29,7 @@ func NewRecursiveChunker(maxSize, overlap int) *RecursiveChunker {
 		overlap = 0
 	}
 	if overlap >= maxSize {
-		overlap = maxSize / 4
+		overlap = maxSize / 5
 	}
 	return &RecursiveChunker{MaxSize: maxSize, Overlap: overlap}
 }
@@ -127,8 +127,13 @@ func (c *RecursiveChunker) splitBlocks(ctx context.Context, blocks []block, head
 			splitAtLevel = level
 			break
 		}
-		if len(groups) == 1 && len(groups[0]) > 0 && groups[0][0].level == level && groups[0][0].heading != "" {
-			path = append(path, groups[0][0].heading)
+		if len(groups) == 1 && len(groups[0]) > 0 {
+			for _, b := range groups[0] {
+				if b.level == level && b.heading != "" {
+					path = append(path, b.heading)
+					break
+				}
+			}
 		}
 	}
 
@@ -208,7 +213,7 @@ func groupByContentBlock(blocks []block) [][]block {
 	return groups
 }
 
-var sentenceSplitter = regexp.MustCompile(`[^.!?]*[.!?](?:\s|$)`)
+var sentenceSplitter = regexp.MustCompile(`[^.!?\n]+[.!?]+[\s\n]*|[^\n]+`)
 
 func groupBySentence(blocks []block) [][]block {
 	var groups [][]block
@@ -316,6 +321,9 @@ func (c *RecursiveChunker) emitChunk(ctx context.Context, blocks []block, headin
 func buildContentFromBlocks(blocks []block, headingPath []string) string {
 	var parts []string
 	for _, b := range blocks {
+		if b.heading != "" {
+			parts = append(parts, b.heading)
+		}
 		if b.text != "" {
 			parts = append(parts, b.text)
 		}
