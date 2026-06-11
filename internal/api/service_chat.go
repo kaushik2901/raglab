@@ -64,7 +64,11 @@ func (s *ChatService) retrieveSources(ctx context.Context, req ChatRequest) ([]t
 
 	sources := make([]SourceDoc, len(results))
 	for i, r := range results {
-		sources[i] = SourceDoc{DocumentPath: r.DocumentPath, Score: r.Score}
+		sources[i] = SourceDoc{
+			DocumentPath: r.DocumentPath,
+			Score:        r.Score,
+			SourceURL:    r.Metadata["source_url"],
+		}
 	}
 	return results, sources, nil
 }
@@ -83,7 +87,11 @@ func (s *ChatService) buildMessages(req ChatRequest, results []types.SearchResul
 
 	var contextParts []string
 	for _, r := range results {
-		contextParts = append(contextParts, fmt.Sprintf("Document: %s\n%s", r.DocumentPath, r.Content))
+		label := r.DocumentPath
+		if url := r.Metadata["source_url"]; url != "" {
+			label = url
+		}
+		contextParts = append(contextParts, fmt.Sprintf("Document: %s\n%s", label, r.Content))
 	}
 	userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", strings.Join(contextParts, "\n\n"), req.Query)
 	messages = append(messages, openai.UserMessage(userPrompt))

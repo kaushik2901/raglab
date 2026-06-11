@@ -203,6 +203,7 @@ type ChatResponse struct {
 type SourceDoc struct {
 	DocumentPath string  `json:"document_path"`
 	Score        float32 `json:"score"`
+	SourceURL    string  `json:"source_url"`
 }
 
 type TokenUsage struct {
