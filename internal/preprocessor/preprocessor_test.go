@@ -264,6 +264,24 @@ func TestProcessFile_WithBaseURL_InjectsSourceURL(t *testing.T) {
 			expected: "https://handbook.gitlab.com/faq/",
 		},
 		{
+			name:     "root _index.md maps to base URL",
+			path:     "_index.md",
+			baseURL:  "https://example.com",
+			expected: "https://example.com/",
+		},
+		{
+			name:     "root index.md maps to base URL",
+			path:     "index.md",
+			baseURL:  "https://example.com",
+			expected: "https://example.com/",
+		},
+		{
+			name:     "not a Hugo index file",
+			path:     "handbook/my_index.md",
+			baseURL:  "https://example.com",
+			expected: "https://example.com/handbook/my_index/",
+		},
+		{
 			name:     "empty base URL",
 			path:     "page.md",
 			baseURL:  "",
@@ -345,7 +363,7 @@ func TestProcessAllFiles_WithBaseURL_AllFilesGetSourceURL(t *testing.T) {
 
 	homeContent, err := os.ReadFile(filepath.Join(dstDir, "index.md"))
 	require.NoError(t, err)
-	assert.Contains(t, string(homeContent), "source_url: https://handbook.gitlab.com/index/")
+	assert.Contains(t, string(homeContent), "source_url: https://handbook.gitlab.com/")
 
 	policyContent, err := os.ReadFile(filepath.Join(dstDir, "handbook", "policy.md"))
 	require.NoError(t, err)

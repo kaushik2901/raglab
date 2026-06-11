@@ -45,8 +45,15 @@ func ProcessFile(filePath string, repoRoot string, baseURL string) (*types.Docum
 	var sourceURL string
 	if baseURL != "" {
 		pagePath := strings.TrimSuffix(relPath, ".md")
-		pagePath = strings.TrimSuffix(pagePath, "_index")
-		pagePath = strings.TrimSuffix(pagePath, "/index")
+		// Hugo convention: _index.md and /index.md map to their parent directory
+		if strings.HasSuffix(pagePath, "/_index") || pagePath == "_index" {
+			pagePath = strings.TrimSuffix(pagePath, "_index")
+			pagePath = strings.TrimSuffix(pagePath, "/")
+		}
+		if strings.HasSuffix(pagePath, "/index") || pagePath == "index" {
+			pagePath = strings.TrimSuffix(pagePath, "index")
+			pagePath = strings.TrimSuffix(pagePath, "/")
+		}
 		sourceURL = strings.TrimRight(baseURL, "/") + "/" + pagePath
 		if !strings.HasSuffix(sourceURL, "/") {
 			sourceURL += "/"

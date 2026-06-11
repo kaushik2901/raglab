@@ -298,6 +298,35 @@ func TestMarkdownParser_FrontMatter_MultipleKeys(t *testing.T) {
 	assert.NotEmpty(t, md["tags"])
 }
 
+func TestMarkdownParser_FrontMatter_WindowsLineEndings(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "win.md")
+	content := "---\r\ntitle: Win\r\nsource_url: https://example.com/\r\n---\r\n# Hello\r\n\r\nWorld.\r\n"
+	os.WriteFile(path, []byte(content), 0644)
+
+	r, err := (&MarkdownParser{}).Parse(path)
+	require.NoError(t, err)
+	defer r.Close()
+
+	md := r.Metadata()
+	require.NotNil(t, md)
+	assert.Equal(t, "Win", md["title"])
+	assert.Equal(t, "https://example.com/", md["source_url"])
+
+	var elems []types.Element
+	for {
+		e, err := r.ReadElement()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		elems = append(elems, e)
+	}
+	require.Len(t, elems, 2)
+	assert.Equal(t, "Hello", elems[0].Text)
+	assert.Equal(t, "World.", elems[1].Text)
+}
+
 func TestMarkdownParser_FrontMatter_OnlyInFirstFile(t *testing.T) {
 	// Verify that a file without FM still returns nil metadata
 	// even after parsing a file with FM in the same test run

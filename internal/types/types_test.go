@@ -9,13 +9,15 @@ import (
 
 func TestDocumentCreation(t *testing.T) {
 	doc := Document{
-		Path:    "content/docs/foo.md",
-		Content: "# Hello\nWorld",
-		Size:    18,
+		Path:      "content/docs/foo.md",
+		Content:   "# Hello\nWorld",
+		Size:      18,
+		SourceURL: "https://example.com/content/docs/foo/",
 	}
 	assert.Equal(t, "content/docs/foo.md", doc.Path)
 	assert.Equal(t, "# Hello\nWorld", doc.Content)
 	assert.Equal(t, int64(18), doc.Size)
+	assert.Equal(t, "https://example.com/content/docs/foo/", doc.SourceURL)
 }
 
 func TestDocumentZeroValue(t *testing.T) {
@@ -33,6 +35,7 @@ func TestSearchResultCreation(t *testing.T) {
 		Score:        0.95,
 		TokenCount:   42,
 		ChunkIndex:   1,
+		Metadata:     map[string]string{"source_url": "https://example.com/docs/page/"},
 	}
 	assert.Equal(t, "chunk-001", sr.ChunkID)
 	assert.Equal(t, "docs/page.md", sr.DocumentPath)
@@ -40,6 +43,7 @@ func TestSearchResultCreation(t *testing.T) {
 	assert.Equal(t, float32(0.95), sr.Score)
 	assert.Equal(t, 42, sr.TokenCount)
 	assert.Equal(t, 1, sr.ChunkIndex)
+	assert.Equal(t, "https://example.com/docs/page/", sr.Metadata["source_url"])
 }
 
 func TestSearchResultZeroValue(t *testing.T) {
@@ -50,6 +54,7 @@ func TestSearchResultZeroValue(t *testing.T) {
 	assert.Equal(t, float32(0), sr.Score)
 	assert.Equal(t, 0, sr.TokenCount)
 	assert.Equal(t, 0, sr.ChunkIndex)
+	assert.Nil(t, sr.Metadata)
 }
 
 func TestEvalQuestionCreation(t *testing.T) {

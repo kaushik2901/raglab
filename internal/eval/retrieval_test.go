@@ -336,6 +336,53 @@ func TestEvaluate_WithJudge_SetsAnswerScore(t *testing.T) {
 	assert.InDelta(t, 0.92, results[0].AnswerScore, 0.001)
 }
 
+func TestEvaluate_SingleQuestion_WithSourceURL(t *testing.T) {
+	r := new(mockRetriever)
+	g := new(mockGenerator)
+	e := NewRetrievalEvaluator(r, g, 3)
+
+	ctx := context.Background()
+	questions := []types.EvalQuestion{
+		{
+			ID:             "q1",
+			Question:       "test query",
+			ExpectedAnswer: "answer",
+			Relevance:      []types.RelevanceJudgment{{DocumentPath: "doc1.md", Grade: 3}},
+		},
+	}
+
+	r.On("Retrieve", mock.Anything, "col", "test query", 3).
+		Return([]types.SearchResult{
+			{
+				DocumentPath: "doc1.md",
+				Score:        0.9,
+				Content:      "relevant content",
+				Metadata:     map[string]string{"source_url": "https://example.com/doc1/"},
+			},
+		}, nil)
+
+	var capturedPrompt string
+	g.On("Generate", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			params := args.Get(1).(openai.ChatCompletionNewParams)
+			if content, ok := params.Messages[1].GetContent().AsAny().(*string); ok && content != nil {
+				capturedPrompt = *content
+			}
+		}).
+		Return(&openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{
+				{Message: openai.ChatCompletionMessage{Content: "answer"}},
+			},
+			Usage: openai.CompletionUsage{PromptTokens: 5, CompletionTokens: 10},
+		}, nil)
+
+	results, err := e.Evaluate(ctx, "col", questions, 1)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Contains(t, capturedPrompt, "https://example.com/doc1/")
+	assert.NotContains(t, capturedPrompt, "Document: doc1.md")
+}
+
 func TestEvaluate_ZeroConcurrency_Defaults(t *testing.T) {
 	r := new(mockRetriever)
 	g := new(mockGenerator)

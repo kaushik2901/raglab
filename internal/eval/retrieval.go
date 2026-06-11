@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/openai/openai-go"
@@ -134,15 +133,7 @@ func (e *RetrievalEvaluator) evaluateOne(ctx context.Context, collection string,
 	result.NDCGGraded = computeNDCGGradedForQuestion(q.Relevance, result.RetrievedPaths, e.topK)
 
 	if e.generator != nil {
-		var contextParts []string
-		for _, sr := range searchResults {
-			label := sr.DocumentPath
-			if url := sr.Metadata["source_url"]; url != "" {
-				label = url
-			}
-			contextParts = append(contextParts, fmt.Sprintf("Document: %s\nContent:\n%s", label, sr.Content))
-		}
-		contextText := strings.Join(contextParts, "\n\n---\n\n")
+		contextText := buildContextText(searchResults)
 
 		systemPrompt := SystemPrompt
 		userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s\n\nAnswer the question based on the context above.", contextText, q.Question)
