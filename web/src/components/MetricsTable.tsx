@@ -49,7 +49,8 @@ export function MetricsTable({ base, targets }: MetricsTableProps) {
     return best
   }, [allRuns, base, targets])
 
-  const getDeltaColor = (row: MetricRow, baseVal: number, compVal: number) => {
+  const getDeltaColor = (row: MetricRow, baseVal: number | undefined, compVal: number) => {
+    if (baseVal == null) return "text-muted-foreground"
     if (row.higherIsBetter === false && (row.key === "avg_prompt_tokens" || row.key === "avg_completion_tokens")) {
       return "text-muted-foreground"
     }
@@ -86,7 +87,7 @@ export function MetricsTable({ base, targets }: MetricsTableProps) {
                 return (
                   <TableCell key={t.id} className={cn(isBest && "font-semibold")}>
                     {compVal != null ? row.format(compVal) : "—"}
-                    {delta != null && (
+                    {delta != null && compVal != null && (
                       <span className={cn("ml-1.5 text-xs", getDeltaColor(row, baseVal!, compVal))}>
                         {delta >= 0 ? "+" : ""}
                         {row.higherIsBetter ? delta.toFixed(2) : (row.key === "avg_latency_ms" ? `${Math.round(delta)}ms` : Math.round(delta).toString())}

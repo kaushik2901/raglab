@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useArtifacts, useDeleteArtifact } from "@/hooks/useArtifacts"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -57,6 +57,7 @@ export default function Artifacts() {
           <TableBody>
             {data.map((a) => {
               const isPending = "pending" in a && a.pending
+              const pending = a as typeof a & { job: { id: number; state: string } }
               return (
                 <TableRow key={a.tag}>
                   <TableCell className="font-medium">{a.tag}</TableCell>
@@ -64,7 +65,7 @@ export default function Artifacts() {
                   <TableCell>{a.file_count != null ? a.file_count.toLocaleString() : "—"}</TableCell>
                   <TableCell>
                     {isPending ? (
-                      <JobBadge state={a.job.state} />
+                      <JobBadge state={pending.job.state} />
                     ) : (
                       <span className="text-xs text-muted-foreground">completed</span>
                     )}

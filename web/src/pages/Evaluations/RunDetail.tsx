@@ -7,13 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { MetricsCards } from "@/components/MetricsCards"
 import { RiArrowLeftLine } from "@remixicon/react"
 
-function metricVal(run: Record<string, unknown>, key: string): string {
-  const v = (run.metrics as Record<string, number> | null)?.[key]
-  if (v == null) return "—"
-  if (typeof v === "number") return v.toFixed(2)
-  return String(v)
-}
-
 export default function RunDetail() {
   const { id } = useParams<{ id: string }>()
   const [page, setPage] = useState(1)

@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
-import type { JobState } from "@/api/types"
 
 const STATE_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   available: "secondary",

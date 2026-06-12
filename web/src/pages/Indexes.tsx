@@ -58,6 +58,7 @@ export default function Indexes() {
           <TableBody>
             {data.map((idx) => {
               const isPending = "pending" in idx && idx.pending
+              const pending = idx as typeof idx & { job: { id: number; state: string } }
               return (
                 <TableRow key={idx.name}>
                   <TableCell className="font-medium">{idx.name}</TableCell>
@@ -67,7 +68,7 @@ export default function Indexes() {
                   <TableCell>{isPending ? "—" : idx.vector_size > 0 ? idx.vector_size : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{isPending ? "—" : idx.distance || "—"}</TableCell>
                   <TableCell>
-                    {isPending ? <JobBadge state={idx.job.state} /> : null}
+                    {isPending ? <JobBadge state={pending.job.state} /> : null}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

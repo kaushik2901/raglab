@@ -31,7 +31,7 @@ export function useDeleteEvalRun() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: api.deleteRun,
-    onSuccess: (_, id) => {
+    onSuccess: () => {
       toast.success(`Deleted eval run`)
       queryClient.invalidateQueries({ queryKey: ["eval-runs"] })
     },
