@@ -19,6 +19,7 @@ func NewArtifactRouter(artifactsDir string) *ArtifactRouter {
 
 func (r *ArtifactRouter) Register(mux chi.Router) {
 	mux.Get("/artifacts", r.listHandler)
+	mux.Delete("/artifacts/{type}/{tag}", r.deleteHandler)
 }
 
 func (r *ArtifactRouter) listHandler(w http.ResponseWriter, req *http.Request) {
@@ -74,6 +75,34 @@ func (r *ArtifactRouter) listHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	respondJSON(w, 200, map[string]any{"artifacts": artifacts})
+}
+
+func (r *ArtifactRouter) deleteHandler(w http.ResponseWriter, req *http.Request) {
+	artifactType := chi.URLParam(req, "type")
+	tag := chi.URLParam(req, "tag")
+
+	if artifactType == "" || tag == "" {
+		respondProblem(w, 400, "Invalid Parameter", "type and tag are required")
+		return
+	}
+
+	if strings.Contains(artifactType, "..") || strings.Contains(tag, "..") {
+		respondProblem(w, 400, "Invalid Parameter", "invalid type or tag")
+		return
+	}
+
+	dir := filepath.Join(r.artifactsDir, artifactType, tag)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		respondProblem(w, 404, "Not Found", "artifact not found")
+		return
+	}
+
+	if err := os.RemoveAll(dir); err != nil {
+		respondProblem(w, 500, "Internal Server Error", "failed to delete artifact: "+err.Error())
+		return
+	}
+
+	respondJSON(w, 200, map[string]string{"deleted": filepath.Join(artifactType, tag)})
 }
 
 func countFiles(dir, ext string) int {
