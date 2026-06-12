@@ -20,6 +20,9 @@ type mockVectorStore struct {
 	ensureCollectionFn func(ctx context.Context, name string, vectorSize int, distance string) error
 	storeFn            func(ctx context.Context, collectionName string, chunks []types.DocumentChunk) error
 	searchFn           func(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error)
+	listCollectionsFn  func(ctx context.Context) ([]CollectionInfo, error)
+	getCollectionFn    func(ctx context.Context, name string) (*CollectionInfo, error)
+	deleteCollectionFn func(ctx context.Context, name string) error
 	healthCheckFn      func(ctx context.Context) error
 	closeFn            func() error
 }
@@ -62,6 +65,27 @@ func (m *mockVectorStore) HealthCheck(ctx context.Context) error {
 func (m *mockVectorStore) Close() error {
 	if m.closeFn != nil {
 		return m.closeFn()
+	}
+	return nil
+}
+
+func (m *mockVectorStore) ListCollections(ctx context.Context) ([]CollectionInfo, error) {
+	if m.listCollectionsFn != nil {
+		return m.listCollectionsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockVectorStore) GetCollection(ctx context.Context, name string) (*CollectionInfo, error) {
+	if m.getCollectionFn != nil {
+		return m.getCollectionFn(ctx, name)
+	}
+	return nil, nil
+}
+
+func (m *mockVectorStore) DeleteCollection(ctx context.Context, name string) error {
+	if m.deleteCollectionFn != nil {
+		return m.deleteCollectionFn(ctx, name)
 	}
 	return nil
 }

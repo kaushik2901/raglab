@@ -74,6 +74,41 @@ func (c *CircuitBreakerVectorStore) Search(ctx context.Context, collectionName s
 	return results, nil
 }
 
+func (c *CircuitBreakerVectorStore) ListCollections(ctx context.Context) ([]CollectionInfo, error) {
+	result, err := c.searchBreaker.Execute(func() (any, error) {
+		return c.inner.ListCollections(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	collections, ok := result.([]CollectionInfo)
+	if !ok {
+		return nil, fmt.Errorf("circuit breaker: unexpected result type %T", result)
+	}
+	return collections, nil
+}
+
+func (c *CircuitBreakerVectorStore) GetCollection(ctx context.Context, name string) (*CollectionInfo, error) {
+	result, err := c.searchBreaker.Execute(func() (any, error) {
+		return c.inner.GetCollection(ctx, name)
+	})
+	if err != nil {
+		return nil, err
+	}
+	info, ok := result.(*CollectionInfo)
+	if !ok {
+		return nil, fmt.Errorf("circuit breaker: unexpected result type %T", result)
+	}
+	return info, nil
+}
+
+func (c *CircuitBreakerVectorStore) DeleteCollection(ctx context.Context, name string) error {
+	_, err := c.storeBreaker.Execute(func() (any, error) {
+		return nil, c.inner.DeleteCollection(ctx, name)
+	})
+	return err
+}
+
 func (c *CircuitBreakerVectorStore) HealthCheck(ctx context.Context) error {
 	return c.inner.HealthCheck(ctx)
 }

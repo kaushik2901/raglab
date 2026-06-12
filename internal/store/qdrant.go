@@ -208,6 +208,70 @@ func (s *QdrantStore) searchOnce(ctx context.Context, collectionName string, que
 	return results, nil
 }
 
+func (s *QdrantStore) ListCollections(ctx context.Context) ([]CollectionInfo, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	resp, err := s.client.Collections().List(ctx, &qdrant.ListCollectionsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list collections: %w", err)
+	}
+	collections := resp.GetCollections()
+	result := make([]CollectionInfo, 0, len(collections))
+	for _, c := range collections {
+		result = append(result, CollectionInfo{Name: c.GetName()})
+	}
+	return result, nil
+}
+
+func (s *QdrantStore) GetCollection(ctx context.Context, name string) (*CollectionInfo, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	resp, err := s.client.Collections().Get(ctx, &qdrant.GetCollectionInfoRequest{
+		CollectionName: name,
+	})
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st.Code() == codes.NotFound {
+			return nil, fmt.Errorf("%w: %s", ErrCollectionNotFound, name)
+		}
+		return nil, fmt.Errorf("get collection %s: %w", name, err)
+	}
+	info := &CollectionInfo{Name: name}
+	if result := resp.GetResult(); result != nil {
+		if config := result.GetConfig(); config != nil {
+			if params := config.GetParams(); params != nil {
+				if vc := params.GetVectorsConfig(); vc != nil {
+					if vp := vc.GetParams(); vp != nil {
+						info.VectorSize = vp.GetSize()
+						info.Distance = distanceString(vp.GetDistance())
+					}
+				}
+			}
+		}
+		info.VectorCount = result.GetPointsCount()
+	}
+	return info, nil
+}
+
+func (s *QdrantStore) DeleteCollection(ctx context.Context, name string) error {
+	if s.client == nil {
+		return fmt.Errorf("not connected")
+	}
+	_, err := s.client.Collections().Delete(ctx, &qdrant.DeleteCollection{
+		CollectionName: name,
+	})
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st.Code() == codes.NotFound {
+			return fmt.Errorf("%w: %s", ErrCollectionNotFound, name)
+		}
+		return fmt.Errorf("delete collection %s: %w", name, err)
+	}
+	return nil
+}
+
 func (s *QdrantStore) HealthCheck(ctx context.Context) error {
 	_, err := s.client.Collections().CollectionExists(ctx, &qdrant.CollectionExistsRequest{
 		CollectionName: "_health_check",
@@ -323,6 +387,21 @@ func retryWithBackoff(ctx context.Context, maxAttempts int, op func(context.Cont
 		}
 	}
 	return fmt.Errorf("operation failed after %d attempts", maxAttempts)
+}
+
+func distanceString(d qdrant.Distance) string {
+	switch d {
+	case qdrant.Distance_Cosine:
+		return "Cosine"
+	case qdrant.Distance_Euclid:
+		return "Euclid"
+	case qdrant.Distance_Dot:
+		return "Dot"
+	case qdrant.Distance_Manhattan:
+		return "Manhattan"
+	default:
+		return "Unknown"
+	}
 }
 
 func parseDistance(d string) qdrant.Distance {
