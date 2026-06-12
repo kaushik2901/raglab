@@ -20,6 +20,7 @@ func (r *EvalRouter) Register(mux chi.Router) {
 	mux.Get("/runs", r.listHandler)
 	mux.Get("/runs/{id}", r.detailHandler)
 	mux.Get("/runs/{id}/compare", r.compareHandler)
+	mux.Delete("/runs/{id}", r.deleteHandler)
 }
 
 func (r *EvalRouter) listHandler(w http.ResponseWriter, req *http.Request) {
@@ -51,6 +52,15 @@ func (r *EvalRouter) detailHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	respondJSON(w, 200, run)
+}
+
+func (r *EvalRouter) deleteHandler(w http.ResponseWriter, req *http.Request) {
+	id := chi.URLParam(req, "id")
+	if err := r.svc.DeleteRun(req.Context(), id); err != nil {
+		respondProblem(w, 404, "Not Found", "eval run not found")
+		return
+	}
+	respondJSON(w, 200, map[string]string{"deleted": id})
 }
 
 func (r *EvalRouter) compareHandler(w http.ResponseWriter, req *http.Request) {

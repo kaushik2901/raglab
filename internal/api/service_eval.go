@@ -109,6 +109,17 @@ func (s *EvalService) GetRuns(ctx context.Context, ids []string) (map[string]Run
 	return runs, nil
 }
 
+func (s *EvalService) DeleteRun(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM eval_runs WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete eval run %s: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("eval run %s: not found", id)
+	}
+	return nil
+}
+
 func (s *EvalService) GetRun(ctx context.Context, id string, limit, offset int) (*RunDetail, error) {
 	var r RunDetail
 	var strategyJSON, metricsJSON []byte
