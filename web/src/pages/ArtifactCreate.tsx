@@ -33,7 +33,7 @@ export default function ArtifactCreate() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild className="size-8">
           <Link to="/artifacts">

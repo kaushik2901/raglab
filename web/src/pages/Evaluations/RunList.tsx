@@ -91,7 +91,7 @@ export default function RunList() {
           </TableHeader>
           <TableBody>
             {runs.map((run) => {
-              const metrics = run.metrics as Record<string, number> | null
+              const metrics = run.metrics as Record<string, any> | null
               const dataset = (run.strategy as Record<string, unknown>)?.dataset_path as string ?? "—"
               return (
                 <TableRow key={run.id}>
@@ -113,9 +113,9 @@ export default function RunList() {
                     </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">{dataset}</TableCell>
-                  <TableCell>{metrics?.mrr != null ? metricDisplay(metrics.mrr) : "—"}</TableCell>
-                  <TableCell>{metrics?.["ndcg_5"] != null ? metricDisplay(metrics["ndcg_5"]) : "—"}</TableCell>
-                  <TableCell>{metrics?.avg_answer_score != null ? metricDisplay(metrics.avg_answer_score) : "—"}</TableCell>
+                  <TableCell>{metrics?.MRR != null ? metricDisplay(metrics.MRR) : "—"}</TableCell>
+                  <TableCell>{metrics?.NDCG?.["5"] != null ? metricDisplay(metrics.NDCG["5"]) : "—"}</TableCell>
+                  <TableCell>{metrics?.AvgAnswerScore != null ? metricDisplay(metrics.AvgAnswerScore) : "—"}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">
                     {run.created_at ? new Date(run.created_at).toLocaleDateString() : "—"}
                   </TableCell>

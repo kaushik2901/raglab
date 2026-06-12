@@ -16,20 +16,27 @@ interface MetricRow {
 }
 
 const METRICS: MetricRow[] = [
-  { label: "HitRate@1", key: "hit_rate_1", higherIsBetter: true, format: (v) => v.toFixed(2) },
-  { label: "HitRate@3", key: "hit_rate_3", higherIsBetter: true, format: (v) => v.toFixed(2) },
-  { label: "HitRate@5", key: "hit_rate_5", higherIsBetter: true, format: (v) => v.toFixed(2) },
-  { label: "MRR", key: "mrr", higherIsBetter: true, format: (v) => v.toFixed(2) },
-  { label: "NDCG@5", key: "ndcg_5", higherIsBetter: true, format: (v) => v.toFixed(2) },
-  { label: "Avg Answer Score", key: "avg_answer_score", higherIsBetter: true, format: (v) => v.toFixed(1) },
-  { label: "Avg Latency", key: "avg_latency_ms", higherIsBetter: false, format: (v) => `${Math.round(v)}ms` },
-  { label: "Avg Prompt Tok", key: "avg_prompt_tokens", higherIsBetter: false, format: (v) => Math.round(v).toString() },
-  { label: "Avg Comp Tok", key: "avg_completion_tokens", higherIsBetter: false, format: (v) => Math.round(v).toString() },
+  { label: "HitRate@1", key: "HitRate.1", higherIsBetter: true, format: (v) => v.toFixed(2) },
+  { label: "HitRate@3", key: "HitRate.3", higherIsBetter: true, format: (v) => v.toFixed(2) },
+  { label: "HitRate@5", key: "HitRate.5", higherIsBetter: true, format: (v) => v.toFixed(2) },
+  { label: "MRR", key: "MRR", higherIsBetter: true, format: (v) => v.toFixed(2) },
+  { label: "NDCG@5", key: "NDCG.5", higherIsBetter: true, format: (v) => v.toFixed(2) },
+  { label: "Avg Answer Score", key: "AvgAnswerScore", higherIsBetter: true, format: (v) => v.toFixed(1) },
+  { label: "Avg Latency", key: "AvgLatencyMs", higherIsBetter: false, format: (v) => `${Math.round(v)}ms` },
+  { label: "Avg Prompt Tok", key: "AvgPromptTokens", higherIsBetter: false, format: (v) => Math.round(v).toString() },
+  { label: "Avg Comp Tok", key: "AvgCompletionTokens", higherIsBetter: false, format: (v) => Math.round(v).toString() },
 ]
 
 function getMetric(run: RunSummary, key: string): number | undefined {
-  const metrics = run.metrics as Record<string, number> | null
-  return metrics?.[key]
+  const metrics = run.metrics as Record<string, any> | null
+  if (!metrics) return undefined
+  const parts = key.split(".")
+  let val: any = metrics
+  for (const part of parts) {
+    val = val?.[part]
+    if (val == null) return undefined
+  }
+  return typeof val === "number" ? val : undefined
 }
 
 export function MetricsTable({ base, targets }: MetricsTableProps) {
@@ -51,7 +58,7 @@ export function MetricsTable({ base, targets }: MetricsTableProps) {
 
   const getDeltaColor = (row: MetricRow, baseVal: number | undefined, compVal: number) => {
     if (baseVal == null) return "text-muted-foreground"
-    if (row.higherIsBetter === false && (row.key === "avg_prompt_tokens" || row.key === "avg_completion_tokens")) {
+    if (row.higherIsBetter === false && (row.key === "AvgPromptTokens" || row.key === "AvgCompletionTokens")) {
       return "text-muted-foreground"
     }
     const diff = compVal - baseVal
@@ -90,7 +97,7 @@ export function MetricsTable({ base, targets }: MetricsTableProps) {
                     {delta != null && compVal != null && (
                       <span className={cn("ml-1.5 text-xs", getDeltaColor(row, baseVal!, compVal))}>
                         {delta >= 0 ? "+" : ""}
-                        {row.higherIsBetter ? delta.toFixed(2) : (row.key === "avg_latency_ms" ? `${Math.round(delta)}ms` : Math.round(delta).toString())}
+                        {row.higherIsBetter ? delta.toFixed(2) : (row.key === "AvgLatencyMs" ? `${Math.round(delta)}ms` : Math.round(delta).toString())}
                         {" "}
                         {delta > 0 ? (row.higherIsBetter ? "↑" : "↓") : delta < 0 ? (row.higherIsBetter ? "↓" : "↑") : ""}
                       </span>

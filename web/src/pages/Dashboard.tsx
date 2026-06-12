@@ -66,14 +66,14 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2">
               {(evalRuns.data?.runs ?? []).map((run) => {
-                const metrics = run.metrics as Record<string, number> | null
+                const metrics = run.metrics as Record<string, any> | null
                 return (
                   <Link key={run.id} to={`/evaluations/${run.id}`}>
                     <Card className="hover:border-primary/50 transition-colors">
                       <CardContent className="p-3 flex justify-between items-center">
                         <span className="text-sm font-medium">{run.tag}</span>
                         <span className="text-xs text-muted-foreground">
-                          {metrics?.hit_rate_5 != null ? `HR@5: ${metrics.hit_rate_5.toFixed(2)}` : "—"}
+                          {metrics?.HitRate?.["5"] != null ? `HR@5: ${(metrics.HitRate["5"] as number).toFixed(2)}` : "—"}
                         </span>
                       </CardContent>
                     </Card>

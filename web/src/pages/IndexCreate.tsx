@@ -24,7 +24,7 @@ export default function IndexCreate() {
   const [inputTag, setInputTag] = useState("")
   const [tag, setTag] = useState("")
   const [parserStrategy] = useState("markdown")
-  const [chunkStrategy] = useState("fixed")
+  const [chunkStrategy, setChunkStrategy] = useState("fixed")
   const [chunkSize, setChunkSize] = useState(512)
   const [chunkOverlap, setChunkOverlap] = useState(64)
   const [provider, setProvider] = useState("openai")
@@ -46,7 +46,9 @@ export default function IndexCreate() {
         tag,
         parser_strategy: parserStrategy,
         chunk_strategy: chunkStrategy,
-        chunk_config: { size: chunkSize, overlap: chunkOverlap },
+        chunk_config: chunkStrategy === "recursive"
+          ? { max_size: chunkSize, overlap: chunkOverlap }
+          : { size: chunkSize, overlap: chunkOverlap },
         embedding_provider: provider,
         embedding_model: model,
         batch_size: batchSize,
@@ -61,7 +63,7 @@ export default function IndexCreate() {
   const readyArtifacts = (artifacts ?? []).filter((a) => !("pending" in a && a.pending))
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild className="size-8">
           <Link to="/indexes">
@@ -124,7 +126,15 @@ export default function IndexCreate() {
             </div>
             <div className="space-y-1.5">
               <Label>Chunk Strategy</Label>
-              <Input value={chunkStrategy} disabled />
+              <Select value={chunkStrategy} onValueChange={setChunkStrategy}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">fixed (word-window)</SelectItem>
+                  <SelectItem value="recursive">recursive (heading-aware)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

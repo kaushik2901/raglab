@@ -219,7 +219,12 @@ func (s *QdrantStore) ListCollections(ctx context.Context) ([]CollectionInfo, er
 	collections := resp.GetCollections()
 	result := make([]CollectionInfo, 0, len(collections))
 	for _, c := range collections {
-		result = append(result, CollectionInfo{Name: c.GetName()})
+		info, err := s.GetCollection(ctx, c.GetName())
+		if err != nil {
+			result = append(result, CollectionInfo{Name: c.GetName()})
+			continue
+		}
+		result = append(result, *info)
 	}
 	return result, nil
 }

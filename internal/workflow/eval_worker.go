@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -132,7 +133,8 @@ func (w *EvalWorker) Work(ctx context.Context, job *river.Job[EvalArgs]) error {
 		defer rawStore.Close()
 	}
 
-	file, err := os.Open(args.DatasetPath)
+	datasetPath := resolveDatasetPath(args.DatasetPath)
+	file, err := os.Open(datasetPath)
 	if err != nil {
 		return fmt.Errorf("open dataset: %w", err)
 	}
@@ -425,6 +427,17 @@ func createEvalDeps(ctx context.Context, args EvalArgs) (embedder.Embedder, *ret
 	}
 
 	return emb, ret, rawStore, gen, judgeGen, nil
+}
+
+func resolveDatasetPath(datasetPath string) string {
+	if filepath.IsAbs(datasetPath) {
+		return datasetPath
+	}
+	datasetsDir := os.Getenv("DATASETS_DIR")
+	if datasetsDir == "" {
+		datasetsDir = "/workspace/artifacts/datasets"
+	}
+	return filepath.Join(datasetsDir, datasetPath)
 }
 
 func readEvalCheckpoint(job *river.Job[EvalArgs]) evalCheckpoint {

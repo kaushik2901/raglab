@@ -65,7 +65,7 @@ func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorSto
 	NewHealthRouter(pool, qdrant).Register(r)
 	NewArtifactRouter(cfg.ArtifactsDir).Register(r)
 
-	datasetsDir := config.EnvOrDefault("DATASETS_DIR", "workspace/datasets")
+	datasetsDir := config.EnvOrDefault("DATASETS_DIR", "/workspace/artifacts/datasets")
 
 	r.Route("/api/v1", func(r chi.Router) {
 		NewIndexRouter(qdrant).Register(r)

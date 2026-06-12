@@ -23,7 +23,7 @@ export default function RunDetail() {
     )
   }
 
-  const metrics = run.metrics as Record<string, number> | null
+  const metrics = run.metrics as Record<string, any> | null
 
   return (
     <div className="space-y-6">
@@ -43,10 +43,10 @@ export default function RunDetail() {
 
       <MetricsCards
         metrics={[
-          { label: "HitRate@5", value: metrics?.hit_rate_5?.toFixed(2) ?? "—" },
-          { label: "MRR", value: metrics?.mrr?.toFixed(3) ?? "—" },
-          { label: "NDCG@5", value: metrics?.ndcg_5?.toFixed(3) ?? "—" },
-          { label: "Answer Score", value: metrics?.avg_answer_score?.toFixed(1) ?? "—", subtitle: "avg" },
+          { label: "HitRate@5", value: metrics?.HitRate?.["5"] != null ? (metrics.HitRate["5"] as number).toFixed(2) : "—" },
+          { label: "MRR", value: metrics?.MRR != null ? (metrics.MRR as number).toFixed(3) : "—" },
+          { label: "NDCG@5", value: metrics?.NDCG?.["5"] != null ? (metrics.NDCG["5"] as number).toFixed(3) : "—" },
+          { label: "Answer Score", value: metrics?.AvgAnswerScore != null ? (metrics.AvgAnswerScore as number).toFixed(1) : "—", subtitle: "avg" },
         ]}
       />
 

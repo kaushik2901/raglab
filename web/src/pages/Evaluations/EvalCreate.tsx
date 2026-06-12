@@ -8,10 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import { RiArrowLeftLine } from "@remixicon/react"
-
-const K_OPTIONS = [1, 3, 5, 10, 20]
 
 const LLM_PRESETS: Record<string, string> = {
   openai: "gpt-4o-mini",
@@ -36,8 +33,8 @@ export default function EvalCreate() {
   const [indexTag, setIndexTag] = useState("")
   const [datasetPath, setDatasetPath] = useState("")
   const [tag, setTag] = useState("")
-  const [queryStrategy] = useState("naive-search")
-  const [ks, setKs] = useState<number[]>([1, 3, 5])
+  const [queryStrategy, setQueryStrategy] = useState("naive-search")
+  const [ksInput, setKsInput] = useState("1, 3, 5")
   const [llmProvider, setLlmProvider] = useState("openai")
   const [llmModel, setLlmModel] = useState("gpt-4o-mini")
   const [embedProvider, setEmbedProvider] = useState("openai")
@@ -47,14 +44,15 @@ export default function EvalCreate() {
   const [batchSize, setBatchSize] = useState(20)
   const [workers, setWorkers] = useState(5)
 
-  const toggleK = (k: number) => {
-    setKs((prev) => (prev.includes(k) ? prev.filter((v) => v !== k) : [...prev, k].sort((a, b) => a - b)))
-  }
-
   const readyIndexes = (indexes ?? []).filter((i) => !("pending" in i && i.pending))
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const ks = ksInput
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n > 0)
+    if (ks.length === 0) return
     mutation.mutate(
       {
         index_tag: indexTag,
@@ -76,7 +74,7 @@ export default function EvalCreate() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" asChild className="size-8">
           <Link to="/evaluations">
@@ -136,25 +134,24 @@ export default function EvalCreate() {
             </div>
             <div className="space-y-1.5">
               <Label>Query Strategy</Label>
-              <Input value={queryStrategy} disabled />
+              <Select value={queryStrategy} onValueChange={setQueryStrategy}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="naive-search">naive-search (vector similarity)</SelectItem>
+                  <SelectItem value="mmr-rerank">mmr-rerank (diversity-aware)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>K Values</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {K_OPTIONS.map((k) => {
-                  const active = ks.includes(k)
-                  return (
-                    <Badge
-                      key={k}
-                      variant={active ? "default" : "outline"}
-                      className="cursor-pointer select-none"
-                      onClick={() => toggleK(k)}
-                    >
-                      {k}
-                    </Badge>
-                  )
-                })}
-              </div>
+              <Label htmlFor="ks">K Values</Label>
+              <Input
+                id="ks"
+                value={ksInput}
+                onChange={(e) => setKsInput(e.target.value)}
+                placeholder="e.g. 1, 3, 5, 10"
+              />
             </div>
           </CardContent>
         </Card>
