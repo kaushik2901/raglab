@@ -223,6 +223,13 @@ type RunDetail struct {
 	Total     int              `json:"total"`
 }
 
+type DatasetEntry struct {
+	Name          string `json:"name"`
+	Size          int64  `json:"size"`
+	QuestionCount int    `json:"question_count"`
+	CreatedAt     string `json:"created_at,omitempty"`
+}
+
 type ArtifactEntry struct {
 	Type      string `json:"type"`
 	Tag       string `json:"tag"`
