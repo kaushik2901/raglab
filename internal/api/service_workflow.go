@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -99,7 +100,19 @@ func (s *WorkflowService) ListJobs(ctx context.Context, kind, state string, limi
 		params = params.Kinds(kind)
 	}
 	if state != "" {
-		params = params.States(parseJobState(state))
+		var states []rivertype.JobState
+		for _, s := range strings.Split(state, ",") {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if ps := parseJobState(s); ps != "" {
+				states = append(states, ps)
+			}
+		}
+		if len(states) > 0 {
+			params = params.States(states...)
+		}
 	}
 	params = params.First(limit)
 
