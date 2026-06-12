@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom"
 import { Layout } from "@/components/Layout"
+import { CommandPalette } from "@/components/CommandPalette"
 import Dashboard from "@/pages/Dashboard"
 import Artifacts from "@/pages/Artifacts"
 import ArtifactCreate from "@/pages/ArtifactCreate"
@@ -15,23 +16,26 @@ import Chat from "@/pages/Chat"
 
 export function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="artifacts" element={<Artifacts />} />
-        <Route path="artifacts/new" element={<ArtifactCreate />} />
-        <Route path="datasets" element={<Datasets />} />
-        <Route path="indexes" element={<Indexes />} />
-        <Route path="indexes/new" element={<IndexCreate />} />
-        <Route path="evaluations" element={<Evaluations />}>
-          <Route index element={<RunList />} />
-          <Route path="new" element={<EvalCreate />} />
-          <Route path=":id" element={<RunDetail />} />
-          <Route path=":id/compare" element={<RunCompare />} />
+    <>
+      <CommandPalette />
+      <Routes>
+        <Route element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="artifacts" element={<Artifacts />} />
+          <Route path="artifacts/new" element={<ArtifactCreate />} />
+          <Route path="datasets" element={<Datasets />} />
+          <Route path="indexes" element={<Indexes />} />
+          <Route path="indexes/new" element={<IndexCreate />} />
+          <Route path="evaluations" element={<Evaluations />}>
+            <Route index element={<RunList />} />
+            <Route path="new" element={<EvalCreate />} />
+            <Route path=":id" element={<RunDetail />} />
+            <Route path=":id/compare" element={<RunCompare />} />
+          </Route>
+          <Route path="chat" element={<Chat />} />
         </Route>
-        <Route path="chat" element={<Chat />} />
-      </Route>
-    </Routes>
+      </Routes>
+    </>
   )
 }
 

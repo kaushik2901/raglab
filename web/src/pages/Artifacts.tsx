@@ -2,12 +2,18 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useArtifacts, useDeleteArtifact } from "@/hooks/useArtifacts"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { EmptyState } from "@/components/EmptyState"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { JobBadge } from "@/components/JobBadge"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { DataTable, type Column } from "@/components/DataTable"
+import { RiAddLine, RiMoreLine, RiFolderOpenLine } from "@remixicon/react"
+import type { ArtifactEntry } from "@/api/types"
+
+interface PendingArtifact extends ArtifactEntry {
+  pending: boolean
+  job: { id: number; state: string }
+}
 
 export default function Artifacts() {
   const { data, isLoading } = useArtifacts()
@@ -19,79 +25,101 @@ export default function Artifacts() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Artifacts</h2>
-        </div>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-64 w-full rounded-lg" />
       </div>
     )
   }
 
+  const columns: Column<(typeof data)[number]>[] = [
+    {
+      key: "tag",
+      header: "Tag",
+      sortable: true,
+      accessor: (a) => <span className="font-medium text-sm">{a.tag}</span>,
+    },
+    {
+      key: "type",
+      header: "Type",
+      sortable: true,
+      accessor: (a) => <span className="text-xs text-muted-foreground capitalize">{a.type}</span>,
+    },
+    {
+      key: "files",
+      header: "Files",
+      sortable: true,
+      numeric: true,
+      accessor: (a) => <span className="text-sm tabular-nums">{a.file_count != null ? a.file_count.toLocaleString() : "—"}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      accessor: (a) => {
+        const isPending = "pending" in a && a.pending
+        if (isPending) {
+          const pending = a as PendingArtifact
+          return <JobBadge state={pending.job.state} />
+        }
+        return <span className="text-xs text-muted-foreground">Ready</span>
+      },
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "w-10",
+      accessor: (a) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="size-8">
+              <RiMoreLine className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => setDeleteTarget({ type: a.type, tag: a.tag })}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ]
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Artifacts</h2>
-        <Button onClick={() => navigate("/artifacts/new")}>+ New Artifact</Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Artifacts</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Preprocessed repositories ready for indexing.
+          </p>
+        </div>
+        <Button onClick={() => navigate("/artifacts/new")}>
+          <RiAddLine className="size-4" />
+          New Artifact
+        </Button>
       </div>
 
       {data.length === 0 ? (
-        <EmptyState
-          title="No artifacts yet"
-          description="Preprocess a repository to get started."
-          actionLabel="Create Artifact"
-          onAction={() => navigate("/artifacts/new")}
-        />
+        <div className="flex flex-col items-center justify-center py-24 border rounded-lg bg-muted/20">
+          <RiFolderOpenLine className="size-10 text-muted-foreground/40 mb-4" />
+          <p className="text-sm font-medium">No artifacts yet</p>
+          <p className="text-xs text-muted-foreground mt-1 mb-4">Preprocess a repository to get started.</p>
+          <Button onClick={() => navigate("/artifacts/new")}>
+            <RiAddLine className="size-4" />
+            Create Artifact
+          </Button>
+        </div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tag</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Files</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-12" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((a) => {
-              const isPending = "pending" in a && a.pending
-              const pending = a as typeof a & { job: { id: number; state: string } }
-              return (
-                <TableRow key={a.tag}>
-                  <TableCell className="font-medium">{a.tag}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.type}</TableCell>
-                  <TableCell>{a.file_count != null ? a.file_count.toLocaleString() : "—"}</TableCell>
-                  <TableCell>
-                    {isPending ? (
-                      <JobBadge state={pending.job.state} />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">completed</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-8">
-                          ⋮
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteTarget({ type: a.type, tag: a.tag })}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+        <DataTable
+          columns={columns}
+          data={data}
+          rowKey={(a) => a.tag}
+          searchPlaceholder="Filter artifacts..."
+          searchAccessor={(a) => a.tag}
+        />
       )}
 
       <ConfirmDialog
