@@ -1,6 +1,8 @@
 # GitLab Handbook RAG Pipeline
 
-Durable, multi-stage pipeline that converts GitLab's Hugo-based handbook (~4,500 markdown files) into a searchable RAG system. Preprocessing → vector indexing → evaluation → chat, orchestrated via [River](https://riverqueue.com) (Postgres-backed job queue with at-least-once execution and retry).
+End-to-end pipeline that transforms GitLab's Hugo-based handbook (~4,500 pages) into a searchable RAG system with evaluation and streaming chat. Orchestrated by [River](https://riverqueue.com) on Postgres, with vectors stored in Qdrant and an OpenAI-compatible LLM backend.
+
+<sup>**Stack:** Go · Postgres 16 · Qdrant · React (TypeScript, shadcn/ui, Recharts) · Docker</sup>
 
 ## Quick Start
 
@@ -8,19 +10,19 @@ Durable, multi-stage pipeline that converts GitLab's Hugo-based handbook (~4,500
 docker compose up -d
 ```
 
-This starts **Postgres 16**, **Qdrant**, the **API server** (`:8080`), and the **workerd** daemon. For local development, set `DATABASE_URL` and `QDRANT_URL` to point at the containers and run binaries directly:
-
-```bash
-go build -o bin\workerd.exe .\cmd\workerd
-go build -o bin\api.exe .\cmd\api
-```
-
-Or use `make.cmd build`.
+Starts Postgres, Qdrant, the API server (`:8080`), and the workerd daemon. Then trigger the preprocessing pipeline:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/workflows/preprocess \
   -H "Content-Type: application/json" \
-  -d '{"repo_url":"https://gitlab.com/gitlab-com/content-hash/handbook.git","tag":"v1"}'
+  -d '{"repo_url":"https://gitlab.com/gitlab-com/content-sites/handbook.git","tag":"v1"}'
+```
+
+For local Go development:
+
+```powershell
+go build -o bin\api.exe .\cmd\api
+go build -o bin\workerd.exe .\cmd\workerd
 ```
 
 ## Architecture
@@ -28,36 +30,38 @@ curl -X POST http://localhost:8080/api/v1/workflows/preprocess \
 ```mermaid
 flowchart LR
     API["REST API (cmd/api)"] --> PG[("Postgres<br/>River + State")]
-    PG --> PREW["Clone → Preprocess → Verify"]
-    PG --> INDW["Parse → Chunk → Embed → Store"]
-    PG --> EVALW["Batch Embed → Parallel Eval"]
+    PG --> PREW["Preprocess<br/>Clone → Clean → Verify"]
+    PG --> INDW["Index<br/>Parse → Chunk → Embed → Store"]
+    PG --> EVALW["Eval<br/>Batch Embed → Parallel Eval"]
     INDW --> QDRANT[("Qdrant<br/>gRPC")]
     PREW -.->|cleaned markdown<br/>on disk| INDW
     EVALW --> QDRANT
     API --> QDRANT
 ```
 
-Two processes: **`api.exe`** (HTTP server) and **`workerd.exe`** (River worker pool).  
-The API inserts River jobs; workers execute them. Postgres is the single source of truth for workflow state, eval results, and River's internal job tracking.
+Two binaries: **`api.exe`** (HTTP server) and **`workerd.exe`** (River worker pool). The API inserts jobs into River; workers pick them up with at-least-once execution and retry. Postgres is the single source of truth for workflow state, eval results, and job tracking. All four LLM providers (OpenAI, Gemini, OpenRouter, LM Studio) speak the same OpenAI-compatible API format.
+
+The React dashboard (`web/`) is a standalone Vite SPA with collapsible sidebar navigation.
+
+![Dashboard](docs/images/001-Dashboard.png)
 
 ## Pipelines
 
-### Preprocessing (`POST /api/v1/workflows/preprocess`)
+### 1. Preprocess — `POST /api/v1/workflows/preprocess`
 
-Clones the handbook repo (shallow, `--depth 1`) and transforms Hugo markdown into clean LLM-friendly markdown:
+Shallow clone the handbook repo, transform Hugo into clean markdown, and write a verification report.
 
-| Step           | What it does                                                                                         |
-| -------------- | ---------------------------------------------------------------------------------------------------- |
-| **Clone**      | `git clone --depth 1`; if exists: fetch + checkout main + pull --ff-only                             |
-| **Preprocess** | Resolve `{{% include %}}`, strip Hugo shortcodes, clean HTML, resolve `{{< ref >}}`/`{{< relref >}}` |
-| **Verify**     | Writes `_verification_report.json` (file count, dir structure, stray shortcodes/HTML, content size)  |
+| Step | Description |
+|------|-------------|
+| Clone | `git clone --depth 1` or fast-forward if already cloned |
+| Preprocess | Resolve `{{% include %}}`, strip shortcodes, clean HTML, resolve `{{< ref >}}` links |
+| Verify | Write `_verification_report.json` (file count, stray artifacts, size distribution) |
 
-Output: `artifacts/preprocessing/<tag>/output/` — 10 parallel goroutines per file batch.  
-Checkpointing: resumes from last completed step on crash (River job output stores `clone_done`/`preprocess_done` flags).
+Output lands in `artifacts/preprocessing/<tag>/output/`. Checkpoints (`clone_done`/`preprocess_done`) stored in River job metadata allow crash recovery from the last completed step.
 
-### Indexing (`POST /api/v1/workflows/index`)
+### 2. Index — `POST /api/v1/workflows/index`
 
-Reads the preprocessed output, chunks documents, embeds via any OpenAI-compatible API, and stores vectors in Qdrant.
+Reads preprocessed markdown, chunks documents, embeds via any OpenAI-compatible API, and upserts vectors into Qdrant.
 
 ```json
 {
@@ -70,131 +74,114 @@ Reads the preprocessed output, chunks documents, embeds via any OpenAI-compatibl
   "embedding_provider": "openai",
   "embedding_model": "text-embedding-3-small",
   "batch_size": 20,
-  "index_concurrency": 5,
-  "doc_timeout": "5m"
+  "index_concurrency": 5
 }
 ```
 
-Files processed concurrently via `errgroup.SetLimit(concurrency)`. Each file: parser reads elements → fixed-window word chunker → batch embed → upsert to Qdrant. Probe query auto-detects vector dimension and `EnsureCollection` creates the Qdrant collection on first run.
+Files are processed concurrently via `errgroup.SetLimit(concurrency)`. A probe query auto-detects vector dimensions, and `EnsureCollection` creates the Qdrant collection on first run. **Note:** if the collection already exists, dimensions are not validated — use a different `tag` when switching models.
 
-### Evaluation (`POST /api/v1/workflows/eval`)
+### 3. Eval — `POST /api/v1/workflows/eval`
 
-Measures retrieval + generation quality against ground-truth datasets (JSONL format, one `EvalQuestion` per line). Uses a **batch-embed-then-parallel-eval** strategy:
+Measures retrieval and generation quality against a ground-truth dataset (JSONL, one question per line). Uses a two-phase strategy: batch-embed all queries, then evaluate in parallel with configurable workers.
 
-1. **Batch embed** all query texts (reduces API calls from N to N/batchSize)
-2. **Parallel eval**: N workers each run search → generate → judge per question
+Metrics stored in Postgres (`eval_runs`, `eval_queries`):
 
-Metrics stored in Postgres (`eval_runs`, `eval_queries` tables).
-
-| Metric                 | Description                                           |
-| ---------------------- | ----------------------------------------------------- |
-| HitRate@K              | Proportion of questions with ≥1 relevant doc in top-K |
-| MRR                    | Mean Reciprocal Rank of first relevant result         |
-| NDCG@K                 | Binary relevance NDCG                                 |
-| NDCGGraded@K           | Graded (0–3) relevance NDCG                           |
-| Precision@K / Recall@K | Standard retrieval metrics                            |
-| AvgAnswerScore         | LLM-as-judge correctness (0–1)                        |
+| Metric | Description |
+|--------|-------------|
+| HitRate@K | Proportion of questions with ≥1 relevant doc in top-K |
+| MRR | Mean Reciprocal Rank of the first relevant result |
+| NDCG@K | Binary and graded (0–3) NDCG |
+| Precision@K / Recall@K | Standard retrieval metrics |
+| AvgAnswerScore | LLM-as-judge correctness (0–1) |
 
 Relevance judgments use `document_path` (e.g. `handbook/travel-policy.md`).
 
-### Chat API
+![Comparison](docs/images/002-Comparison.png)
 
-| Endpoint                        | Description                                |
-| ------------------------------- | ------------------------------------------ |
-| `POST /api/v1/chat/chat`        | Non-streaming RAG answer                   |
-| `POST /api/v1/chat/chat/stream` | SSE streaming (`event: token/data: {...}`) |
+### 4. Chat
 
-Both take `tag`, `query`, `top_k`, `temperature`, `max_tokens`, `embedding_*`, `llm_*`, and optional `conversation_id` for ring-buffer history. The streaming version also emits `event: retrieval` (sources) and `event: done` (final usage).
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/v1/chat/chat` | Non-streaming RAG answer with sources, tokens, latency |
+| `POST /api/v1/chat/chat/stream` | SSE streaming (`retrieval` → `token`* → `done` events) |
+
+Both accept `tag`, `query`, `top_k`, `temperature`, `max_tokens`, and an optional `conversation_id` for ring-buffer chat history (configurable via `CHAT_MEMORY_SIZE`, default 10 turns).
 
 ## API Reference
 
-| Method | Path                                            | Purpose                                         |
-| ------ | ----------------------------------------------- | ----------------------------------------------- |
-| `GET`  | `/health`                                       | Postgres + Qdrant health check                  |
-| `GET`  | `/`                                             | Landing page (embedded HTML)                    |
-| `GET`  | `/api/v1/artifacts?type=&tag=`                  | List preprocessed artifacts                     |
-| `POST` | `/api/v1/workflows/preprocess`                  | Start preprocess job                            |
-| `POST` | `/api/v1/workflows/index`                       | Start index job                                 |
-| `POST` | `/api/v1/workflows/eval`                        | Start eval job                                  |
-| `GET`  | `/api/v1/workflows/{id}`                        | Job status (available/running/completed/failed) |
-| `POST` | `/api/v1/chat/chat`                             | RAG chat                                        |
-| `POST` | `/api/v1/chat/chat/stream`                      | Streaming RAG chat                              |
-| `GET`  | `/api/v1/eval/runs`                             | List eval runs                                  |
-| `GET`  | `/api/v1/eval/runs/{id}`                        | Eval run detail (paginated)                     |
-| `GET`  | `/api/v1/eval/runs/{id}/compare?compare_to=...` | Compare eval runs                               |
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Embedded API test harness |
+| `GET` | `/health` | Postgres + Qdrant health check |
+| `GET` | `/api/v1/artifacts` | List preprocessed artifacts (`?type=&tag=`) |
+| `GET` | `/api/v1/workflows` | List River jobs (`?kind=&state=&limit=&offset=`) |
+| `GET` | `/api/v1/workflows/{id}` | Job status (available/running/completed/failed) |
+| `POST` | `/api/v1/workflows/preprocess` | Start preprocess pipeline |
+| `POST` | `/api/v1/workflows/index` | Start index pipeline |
+| `POST` | `/api/v1/workflows/eval` | Start eval pipeline |
+| `POST` | `/api/v1/chat/chat` | Synchronous RAG chat |
+| `POST` | `/api/v1/chat/chat/stream` | Streaming RAG chat (SSE) |
+| `GET` | `/api/v1/eval/runs` | List eval runs |
+| `GET` | `/api/v1/eval/runs/{id}` | Eval run detail (paginated) |
+| `GET` | `/api/v1/eval/runs/{id}/compare` | Compare up to 5 eval runs |
+| `DELETE` | `/api/v1/eval/runs/{id}` | Delete eval run |
 
 ## Configuration
 
-System-level config via environment variables (also overridable via CLI flags for `--max-retries`, `--retry-backoff`, `--log-level`):
-
-| Env Var                    | Default                                                 | Purpose                            |
-| -------------------------- | ------------------------------------------------------- | ---------------------------------- |
-| `DATABASE_URL`             | `postgres://rag:rag@localhost:5432/rag?sslmode=disable` | Postgres connection                |
-| `QDRANT_URL`               | `http://localhost:6334`                                 | Qdrant gRPC endpoint               |
-| `QDRANT_API_KEY`           | `""`                                                    | Qdrant auth (optional)             |
-| `MAX_RETRIES`              | `3`                                                     | Stage max retry count              |
-| `RETRY_BACKOFF`            | `5s`                                                    | Retry backoff duration             |
-| `LOG_LEVEL`                | `info`                                                  | Log level (debug/info/warn/error)  |
-| `WORKER_CONCURRENCY`       | `20`                                                    | River worker pool size             |
-| `API_PORT`                 | `8080`                                                  | HTTP server port                   |
-| `API_REQUEST_TIMEOUT`      | `60s`                                                   | Per-request timeout                |
-| `CHAT_MEMORY_SIZE`         | `10`                                                    | Ring buffer turns per conversation |
-| `ARTIFACTS_DIR`            | `artifacts`                                             | Preprocessing output root          |
-| `EMBEDDER_RATE_LIMIT_RPM`  | `100`                                                   | Proactive token bucket (embedder)  |
-| `GENERATOR_RATE_LIMIT_RPM` | `100`                                                   | Proactive token bucket (generator) |
+| Env Var | Default | Purpose |
+|---------|---------|---------|
+| `DATABASE_URL` | `postgres://rag:rag@localhost:5432/rag?sslmode=disable` | Postgres connection |
+| `QDRANT_URL` | `http://localhost:6334` | Qdrant gRPC endpoint |
+| `QDRANT_API_KEY` | — | Qdrant auth |
+| `API_PORT` | `8080` | HTTP server port |
+| `WORKER_CONCURRENCY` | `20` | River worker pool size |
+| `EMBEDDER_RATE_LIMIT_RPM` | `100` | Proactive token bucket (embedder) |
+| `GENERATOR_RATE_LIMIT_RPM` | `100` | Proactive token bucket (generator) |
+| `CHAT_MEMORY_SIZE` | `10` | Ring buffer turns per conversation |
+| `ARTIFACTS_DIR` | `artifacts` | Preprocessing output root |
+| `LOG_LEVEL` | `info` | debug / info / warn / error |
+| `MAX_RETRIES` | `3` | Stage max retry count |
+| `RETRY_BACKOFF` | `5s` | Retry backoff duration |
 
 ### LLM Providers
 
-All providers use OpenAI-compatible API format internally. The `--llm-provider` flag / provider name selects which env vars to read:
-
-| Provider     | API Key                          | Base URL                                                                      |
-| ------------ | -------------------------------- | ----------------------------------------------------------------------------- |
-| `openai`     | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` → `https://api.openai.com`                 |
-| `gemini`     | `GEMINI_API_KEY`                 | `GEMINI_BASE_URL` → `https://generativelanguage.googleapis.com/v1beta/openai` |
-| `openrouter` | `OPENROUTER_API_KEY`             | `OPENROUTER_BASE_URL` → `https://openrouter.ai/api/v1`                        |
-| `lmstudio`   | _(none)_                         | `LMSTUDIO_BASE_URL` → `http://localhost:1234/v1`                              |
+| Provider | API Key | Base URL |
+|----------|---------|----------|
+| `openai` | `OPENAI_API_KEY` → `LLM_API_KEY` | `OPENAI_BASE_URL` → `LLM_BASE_URL` → `https://api.openai.com` |
+| `gemini` | `GEMINI_API_KEY` | `GEMINI_BASE_URL` → `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `openrouter` | `OPENROUTER_API_KEY` | `OPENROUTER_BASE_URL` → `https://openrouter.ai/api/v1` |
+| `lmstudio` | — | `LMSTUDIO_BASE_URL` → `http://localhost:1234/v1` |
 
 ### Rate Limiting
 
-Two layers: **proactive** (token bucket via `EMBEDDER_RATE_LIMIT_RPM`/`GENERATOR_RATE_LIMIT_RPM`) + **reactive** (exponential backoff with jitter + `Retry-After` header respect on 429). Generator: up to 5 retries. Embedder: up to 5 retries.
+Two layers: **proactive** (token bucket) + **reactive** (exponential backoff with jitter, respects `Retry-After` on 429). Up to 5 retries for both embedder and generator.
 
 ## Project Structure
 
 ```
 cmd/
-  api/main.go           — HTTP API server (chi router)
-  workerd/main.go       — River worker daemon (preprocess + index + eval workers)
-
+  api/main.go           HTTP server (chi router)
+  workerd/main.go       River worker daemon
 internal/
-  api/                  — REST handlers, services, middleware, types
-  workflow/             — River workers + checkpointing
-  preprocessor/         — Hugo→clean markdown (includes, shortcodes, HTML, refs)
-  parser/               — .md → ElementReader (strategy: markdown)
-  chunker/              — Word-window splitting (strategy: fixed)
-  embedder/             — OpenAI-compatible embedder with batching + rate-limit retry
-  generator/            — OpenAI-compatible generator (chat + streaming)
-  store/                — Qdrant gRPC backend (VectorStore interface)
-  retriever/            — Retrieval strategies (strategy: naive-search)
-  memory/               — Per-conversation ring buffer
-  eval/                 — Pipeline, metrics, judge, store (eval_runs/query tables)
-  types/                — Document, Chunk, Embedding, EvalQuestion, etc.
-  config/               — Flag + env var loading, provider resolution
-  db/                   — PG pool, River client, migrations
-
-docker-compose.yml      — Postgres 16 + Qdrant (+ optional api/workerd containers)
+  api/                  Handlers, services, middleware, types
+  workflow/             River workers + checkpointing
+  preprocessor/         Hugo → clean markdown transforms
+  parser/               Markdown → element reader
+  chunker/              Fixed-size word-window chunker
+  embedder/             OpenAI-compatible embedder (batch + retry)
+  generator/            OpenAI-compatible chat (sync + streaming)
+  store/                Qdrant gRPC backend
+  retriever/            Retrieval strategies
+  eval/                 Pipeline, metrics, judge, Postgres store
+  memory/               Per-conversation ring buffer
+  types/                Document, Chunk, Embedding, SearchResult, etc.
+  config/               Flag + env loading, provider resolution
+  db/                   PG pool, River client, migrations
+web/
+  src/                  React dashboard (Vite + shadcn/ui + Recharts)
 ```
 
-### Extensibility
-
-Parser, chunker, and retriever use a registry pattern with `Register*` functions:
-
-- `parser.RegisterParser("name", fn)` — add a new parser strategy
-- `chunker.RegisterChunker("name", fn)` — add a new chunker strategy
-- `retriever.RegisterRetriever("name", fn)` — add a new retrieval strategy
-
-## Embedding Dimension Mismatch
-
-`EnsureCollection` returns immediately if the Qdrant collection exists — it **does not** validate vector dimensions. Switching embedding models may cause upsert failures. Workaround: use a unique `tag` (collection name) per model, or delete the collection manually.
+Parser, chunker, and retriever use a registry pattern: `RegisterParser("name", fn)`, `RegisterChunker("name", fn)`, `RegisterRetriever("name", fn)`.
 
 ## Testing
 
@@ -202,7 +189,7 @@ Parser, chunker, and retriever use a registry pattern with `Register*` functions
 go test ./...
 ```
 
-Tests requiring Postgres or Qdrant use `t.Skip(...)` and are excluded by default. Key areas: preprocessor, chunker, embedder, generator, eval metrics, store, types, config, workflow, memory, retriever, db migrations.
+Unit tests use testify mocks and require no infrastructure. Integration tests that need Postgres or Qdrant use `t.Skip(...)` and are excluded from default runs.
 
 ## License
 
