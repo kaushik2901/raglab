@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -33,6 +34,21 @@ func (m *mockStore) Store(ctx context.Context, collectionName string, chunks []t
 func (m *mockStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	args := m.Called(ctx, collectionName, queryVector, topK)
 	return args.Get(0).([]types.SearchResult), args.Error(1)
+}
+
+func (m *mockStore) ListCollections(ctx context.Context) ([]store.CollectionInfo, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]store.CollectionInfo), args.Error(1)
+}
+
+func (m *mockStore) GetCollection(ctx context.Context, name string) (*store.CollectionInfo, error) {
+	args := m.Called(ctx, name)
+	return args.Get(0).(*store.CollectionInfo), args.Error(1)
+}
+
+func (m *mockStore) DeleteCollection(ctx context.Context, name string) error {
+	args := m.Called(ctx, name)
+	return args.Error(0)
 }
 
 func (m *mockStore) HealthCheck(ctx context.Context) error {

@@ -123,6 +123,17 @@ func (r EvalRequest) Validate() error {
 	return nil
 }
 
+type JobEntry struct {
+	ID          int64  `json:"id"`
+	Kind        string `json:"kind"`
+	State       string `json:"state"`
+	Tag         string `json:"tag"`
+	Attempt     int    `json:"attempt"`
+	MaxAttempts int    `json:"max_attempts"`
+	CreatedAt   string `json:"created_at"`
+	FinalizedAt string `json:"finalized_at,omitempty"`
+}
+
 type validationError struct {
 	msg string
 }

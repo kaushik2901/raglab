@@ -11,6 +11,23 @@ import (
 	"github.com/riverqueue/river"
 )
 
+func (r *WorkflowRouter) listHandler(w http.ResponseWriter, req *http.Request) {
+	kind := req.URL.Query().Get("kind")
+	state := req.URL.Query().Get("state")
+	limit, _ := strconv.Atoi(req.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(req.URL.Query().Get("offset"))
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	jobs, total, err := r.svc.ListJobs(req.Context(), kind, state, limit, offset)
+	if err != nil {
+		respondProblem(w, 500, "Internal Server Error", err.Error())
+		return
+	}
+	respondJSON(w, 200, map[string]any{"jobs": jobs, "total": total})
+}
+
 type WorkflowRouter struct {
 	svc *WorkflowService
 }
@@ -20,6 +37,7 @@ func NewWorkflowRouter(svc *WorkflowService) *WorkflowRouter {
 }
 
 func (r *WorkflowRouter) Register(mux chi.Router) {
+	mux.Get("/", r.listHandler)
 	mux.Post("/preprocess", r.preprocessHandler)
 	mux.Post("/index", r.indexHandler)
 	mux.Post("/eval", r.evalHandler)

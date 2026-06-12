@@ -15,8 +15,9 @@ import (
 )
 
 type mockJobClient struct {
-	insertFn func(context.Context, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error)
-	jobGetFn func(context.Context, int64) (*rivertype.JobRow, error)
+	insertFn  func(context.Context, river.JobArgs, *river.InsertOpts) (*rivertype.JobInsertResult, error)
+	jobGetFn  func(context.Context, int64) (*rivertype.JobRow, error)
+	jobListFn func(context.Context, *river.JobListParams) (*river.JobListResult, error)
 }
 
 func (m *mockJobClient) Insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
@@ -25,6 +26,13 @@ func (m *mockJobClient) Insert(ctx context.Context, args river.JobArgs, opts *ri
 
 func (m *mockJobClient) JobGet(ctx context.Context, id int64) (*rivertype.JobRow, error) {
 	return m.jobGetFn(ctx, id)
+}
+
+func (m *mockJobClient) JobList(ctx context.Context, params *river.JobListParams) (*river.JobListResult, error) {
+	if m.jobListFn != nil {
+		return m.jobListFn(ctx, params)
+	}
+	return &river.JobListResult{Jobs: []*rivertype.JobRow{}}, nil
 }
 
 func TestInsertPreprocess_Success(t *testing.T) {

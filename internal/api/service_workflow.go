@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -27,6 +28,7 @@ func parseDocTimeout(s string) time.Duration {
 type jobInserter interface {
 	Insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error)
 	JobGet(ctx context.Context, id int64) (*rivertype.JobRow, error)
+	JobList(ctx context.Context, params *river.JobListParams) (*river.JobListResult, error)
 }
 
 type WorkflowService struct {
@@ -91,6 +93,43 @@ func (s *WorkflowService) InsertEval(ctx context.Context, req EvalRequest) (*Wor
 	return jobToResponse(result.Job, req.Tag), nil
 }
 
+func (s *WorkflowService) ListJobs(ctx context.Context, kind, state string, limit, offset int) ([]JobEntry, int, error) {
+	params := river.NewJobListParams()
+	if kind != "" {
+		params = params.Kinds(kind)
+	}
+	if state != "" {
+		params = params.States(parseJobState(state))
+	}
+	params = params.First(limit)
+
+	result, err := s.client.JobList(ctx, params)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list jobs: %w", err)
+	}
+
+	jobs := make([]JobEntry, 0, len(result.Jobs))
+	for _, j := range result.Jobs {
+		entry := JobEntry{
+			ID:          j.ID,
+			Kind:        j.Kind,
+			State:       jobStateString(j.State),
+			Attempt:     j.Attempt,
+			MaxAttempts: j.MaxAttempts,
+			Tag:         extractTagFromJob(j),
+		}
+		if !j.CreatedAt.IsZero() {
+			entry.CreatedAt = j.CreatedAt.Format(time.RFC3339)
+		}
+		if j.FinalizedAt != nil && !j.FinalizedAt.IsZero() {
+			entry.FinalizedAt = j.FinalizedAt.Format(time.RFC3339)
+		}
+		jobs = append(jobs, entry)
+	}
+
+	return jobs, len(result.Jobs), nil
+}
+
 func (s *WorkflowService) GetJob(ctx context.Context, id int64) (*JobStatusResponse, error) {
 	row, err := s.client.JobGet(ctx, id)
 	if err != nil {
@@ -152,4 +191,33 @@ func formatErrors(errs []rivertype.AttemptError) []string {
 		out[i] = fmt.Sprintf("attempt %d: %s", e.Attempt, e.Error)
 	}
 	return out
+}
+
+func extractTagFromJob(j *rivertype.JobRow) string {
+	var args struct {
+		Tag string `json:"tag"`
+	}
+	if err := json.Unmarshal(j.EncodedArgs, &args); err != nil {
+		return ""
+	}
+	return args.Tag
+}
+
+func parseJobState(s string) rivertype.JobState {
+	switch s {
+	case "available":
+		return rivertype.JobStateAvailable
+	case "running":
+		return rivertype.JobStateRunning
+	case "retrying":
+		return rivertype.JobStateRetryable
+	case "completed":
+		return rivertype.JobStateCompleted
+	case "cancelled":
+		return rivertype.JobStateCancelled
+	case "failed":
+		return rivertype.JobStateDiscarded
+	default:
+		return ""
+	}
 }

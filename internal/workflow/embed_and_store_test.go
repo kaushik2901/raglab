@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -35,8 +36,13 @@ func (m *mockStore) Store(ctx context.Context, collectionName string, chunks []t
 func (m *mockStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	return nil, nil
 }
-func (m *mockStore) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockStore) Close() error                          { return nil }
+func (m *mockStore) ListCollections(ctx context.Context) ([]qstore.CollectionInfo, error) { return nil, nil }
+func (m *mockStore) GetCollection(ctx context.Context, name string) (*qstore.CollectionInfo, error) {
+	return nil, nil
+}
+func (m *mockStore) DeleteCollection(ctx context.Context, name string) error { return nil }
+func (m *mockStore) HealthCheck(ctx context.Context) error                   { return nil }
+func (m *mockStore) Close() error                                            { return nil }
 
 func TestEmbedAndStore_ContextCancel(t *testing.T) {
 	emb := &mockEmbedder{
