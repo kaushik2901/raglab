@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -26,8 +27,13 @@ func (m *mockQdrant) Store(ctx context.Context, collectionName string, chunks []
 func (m *mockQdrant) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	return nil, nil
 }
-func (m *mockQdrant) HealthCheck(ctx context.Context) error { return m.healthFn(ctx) }
-func (m *mockQdrant) Close() error                          { return nil }
+func (m *mockQdrant) ListCollections(ctx context.Context) ([]qstore.CollectionInfo, error) { return nil, nil }
+func (m *mockQdrant) GetCollection(ctx context.Context, name string) (*qstore.CollectionInfo, error) {
+	return nil, nil
+}
+func (m *mockQdrant) DeleteCollection(ctx context.Context, name string) error { return nil }
+func (m *mockQdrant) HealthCheck(ctx context.Context) error                   { return m.healthFn(ctx) }
+func (m *mockQdrant) Close() error                                            { return nil }
 
 func TestHealthHandler_NilPool(t *testing.T) {
 	w := httptest.NewRecorder()

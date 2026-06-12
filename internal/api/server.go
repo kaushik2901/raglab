@@ -65,6 +65,10 @@ func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorSto
 	NewHealthRouter(pool, qdrant).Register(r)
 	NewArtifactRouter(cfg.ArtifactsDir).Register(r)
 
+	r.Route("/api/v1", func(r chi.Router) {
+		NewIndexRouter(qdrant).Register(r)
+	})
+
 	evalSvc := NewEvalService(pool)
 	r.Route("/api/v1/eval", func(r chi.Router) {
 		NewEvalRouter(evalSvc).Register(r)

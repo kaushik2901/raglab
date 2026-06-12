@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
+	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
 	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
 )
 
@@ -24,8 +25,13 @@ func (m *mockVectorStore) Store(ctx context.Context, collectionName string, chun
 func (m *mockVectorStore) Search(ctx context.Context, collectionName string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 	return nil, nil
 }
-func (m *mockVectorStore) HealthCheck(ctx context.Context) error { return nil }
-func (m *mockVectorStore) Close() error                          { return nil }
+func (m *mockVectorStore) ListCollections(ctx context.Context) ([]qstore.CollectionInfo, error) { return nil, nil }
+func (m *mockVectorStore) GetCollection(ctx context.Context, name string) (*qstore.CollectionInfo, error) {
+	return nil, nil
+}
+func (m *mockVectorStore) DeleteCollection(ctx context.Context, name string) error { return nil }
+func (m *mockVectorStore) HealthCheck(ctx context.Context) error                   { return nil }
+func (m *mockVectorStore) Close() error                                            { return nil }
 
 func TestNewWithDeps_ServerInitialized(t *testing.T) {
 	t.Parallel()
