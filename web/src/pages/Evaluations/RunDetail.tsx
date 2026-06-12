@@ -4,12 +4,25 @@ import { useEvalRunDetail } from "@/hooks/useEvaluations"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
 import { MetricsCards } from "@/components/MetricsCards"
-import { RiArrowLeftLine } from "@remixicon/react"
+import { RiArrowLeftLine, RiArrowDownSLine, RiArrowRightSLine } from "@remixicon/react"
+
+function cell(v: unknown): string {
+  if (v == null) return "—"
+  return String(v)
+}
+
+function num(v: unknown, digits = 2): string {
+  if (v == null) return "—"
+  if (typeof v === "number") return v.toFixed(digits)
+  return String(v)
+}
 
 export default function RunDetail() {
   const { id } = useParams<{ id: string }>()
   const [page, setPage] = useState(1)
+  const [expanded, setExpanded] = useState<number | null>(null)
   const { data: run, isLoading } = useEvalRunDetail(id, page)
 
   if (isLoading || !run) {
@@ -53,31 +66,67 @@ export default function RunDetail() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-8" />
             <TableHead className="w-12">#</TableHead>
+            <TableHead className="w-24">QID</TableHead>
             <TableHead>Question</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>NDCG</TableHead>
-            <TableHead>Score</TableHead>
+            <TableHead className="w-24">Category</TableHead>
+            <TableHead className="w-20">Diff.</TableHead>
+            <TableHead className="w-16">Rank</TableHead>
+            <TableHead className="w-20">NDCG</TableHead>
+            <TableHead className="w-20">Score</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {run.questions.map((q: Record<string, unknown>, i: number) => (
-            <TableRow key={i}>
-              <TableCell className="text-muted-foreground text-xs">{(page - 1) * 50 + i + 1}</TableCell>
-              <TableCell className="max-w-md truncate font-medium">
-                {String(q.question ?? "—")}
-              </TableCell>
-              <TableCell className="text-muted-foreground text-xs">
-                {String(q.category ?? "—")}
-              </TableCell>
-              <TableCell>
-                {typeof q.ndcg_graded === "number" ? (q.ndcg_graded as number).toFixed(3) : "—"}
-              </TableCell>
-              <TableCell>
-                {typeof q.answer_score === "number" ? (q.answer_score as number).toFixed(1) : "—"}
-              </TableCell>
-            </TableRow>
-          ))}
+          {run.questions.map((q: Record<string, unknown>, i: number) => {
+            const isOpen = expanded === i
+            return (
+              <>
+                <TableRow
+                  key={`row-${i}`}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setExpanded(isOpen ? null : i)}
+                >
+                  <TableCell className="text-muted-foreground">
+                    {isOpen ? <RiArrowDownSLine className="size-4" /> : <RiArrowRightSLine className="size-4" />}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-xs">{(page - 1) * 50 + i + 1}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs font-mono">{cell(q.question_id)}</TableCell>
+                  <TableCell className="max-w-md truncate font-medium">{cell(q.question)}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">{cell(q.category)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-xs capitalize">{cell(q.difficulty)}</Badge>
+                  </TableCell>
+                  <TableCell className="text-center">{cell(q.rank_first)}</TableCell>
+                  <TableCell className="font-mono">{num(q.ndcg_graded, 3)}</TableCell>
+                  <TableCell className="font-mono">{num(q.answer_score, 1)}</TableCell>
+                </TableRow>
+                {isOpen && (
+                  <TableRow key={`detail-${i}`}>
+                    <TableCell colSpan={9} className="bg-muted/20 p-4">
+                      <div className="grid grid-cols-1 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Expected Answer</p>
+                          <p className="leading-relaxed whitespace-pre-wrap">{cell(q.expected_answer)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground mb-1">Generated Answer</p>
+                          <p className="leading-relaxed whitespace-pre-wrap">{cell(q.generated_answer)}</p>
+                        </div>
+                        <div className="flex gap-6 text-xs text-muted-foreground border-t pt-3">
+                          <span>Prompt tokens: <strong className="text-foreground">{cell(q.prompt_tokens)}</strong></span>
+                          <span>Completion tokens: <strong className="text-foreground">{cell(q.completion_tokens)}</strong></span>
+                          <span>Latency: <strong className="text-foreground">{typeof q.latency_ms === "number" ? `${(q.latency_ms as number)}ms` : "—"}</strong></span>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </>
+            )
+          })}
         </TableBody>
       </Table>
 

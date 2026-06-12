@@ -81,7 +81,6 @@ export default function RunList() {
               <TableHead className="w-10">Base</TableHead>
               <TableHead className="w-10">Incl</TableHead>
               <TableHead>Tag</TableHead>
-              <TableHead>Dataset</TableHead>
               <TableHead>MRR</TableHead>
               <TableHead>NDCG@5</TableHead>
               <TableHead>Answer Score</TableHead>
@@ -92,7 +91,6 @@ export default function RunList() {
           <TableBody>
             {runs.map((run) => {
               const metrics = run.metrics as Record<string, any> | null
-              const dataset = (run.strategy as Record<string, unknown>)?.dataset_path as string ?? "—"
               return (
                 <TableRow key={run.id}>
                   <TableCell>
@@ -112,7 +110,6 @@ export default function RunList() {
                       {run.tag}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{dataset}</TableCell>
                   <TableCell>{metrics?.MRR != null ? metricDisplay(metrics.MRR) : "—"}</TableCell>
                   <TableCell>{metrics?.NDCG?.["5"] != null ? metricDisplay(metrics.NDCG["5"]) : "—"}</TableCell>
                   <TableCell>{metrics?.AvgAnswerScore != null ? metricDisplay(metrics.AvgAnswerScore) : "—"}</TableCell>
