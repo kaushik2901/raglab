@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type Parser interface {

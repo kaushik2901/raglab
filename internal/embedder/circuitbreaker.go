@@ -8,7 +8,7 @@ import (
 
 	"github.com/sony/gobreaker"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type CircuitBreakerEmbedder struct {

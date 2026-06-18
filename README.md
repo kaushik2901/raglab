@@ -1,4 +1,4 @@
-# GitLab Handbook RAG Pipeline
+# RAG Lab
 
 End-to-end pipeline that transforms GitLab's Hugo-based handbook (~4,500 pages) into a searchable RAG system with evaluation and streaming chat. Orchestrated by [River](https://riverqueue.com) on Postgres, with vectors stored in Qdrant and an OpenAI-compatible LLM backend.
 

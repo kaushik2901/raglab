@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/types"
 	"golang.org/x/sync/errgroup"
 )
 

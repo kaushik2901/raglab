@@ -4,7 +4,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 func computeHitRate(results []types.RetrievalResult, ks []int) map[int]float64 {

@@ -12,9 +12,9 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
+	"github.com/kaushik2901/raglab/internal/config"
+	"github.com/kaushik2901/raglab/internal/db"
+	qstore "github.com/kaushik2901/raglab/internal/store"
 )
 
 const version = "0.1.0"

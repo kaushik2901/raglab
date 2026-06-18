@@ -14,13 +14,13 @@ import (
 	"github.com/riverqueue/river"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/retriever"
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/config"
+	"github.com/kaushik2901/raglab/internal/embedder"
+	"github.com/kaushik2901/raglab/internal/eval"
+	"github.com/kaushik2901/raglab/internal/generator"
+	"github.com/kaushik2901/raglab/internal/retriever"
+	qstore "github.com/kaushik2901/raglab/internal/store"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type EvalArgs struct {

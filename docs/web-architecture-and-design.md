@@ -2,7 +2,7 @@
 
 ## Overview
 
-A single-page application (SPA) for managing the GitLab Handbook RAG pipeline. Covers preprocessing artifacts, golden datasets, Qdrant indexes, evaluation runs with comparison, and job lifecycle monitoring. Served statically by nginx, API calls proxied to the Go API server on the internal Docker network.
+A single-page application (SPA) for managing the RAG Lab pipeline. Covers preprocessing artifacts, golden datasets, Qdrant indexes, evaluation runs with comparison, and job lifecycle monitoring. Served statically by nginx, API calls proxied to the Go API server on the internal Docker network.
 
 ## Tech Stack
 

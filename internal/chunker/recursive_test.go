@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 func collectRecursiveChunks(t *testing.T, ctx context.Context, c *RecursiveChunker, reader types.ElementReader, docPath string) []types.Chunk {

@@ -1,4 +1,4 @@
-# AGENTS.md — GitLab Handbook RAG Pipeline
+# AGENTS.md — RAG Lab
 
 ## Commands
 

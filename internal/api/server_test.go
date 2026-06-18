@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/config"
+	qstore "github.com/kaushik2901/raglab/internal/store"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type mockVectorStore struct{}

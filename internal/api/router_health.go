@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
+	qstore "github.com/kaushik2901/raglab/internal/store"
 )
 
 type HealthRouter struct {

@@ -13,12 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/chunker"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/parser"
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/chunker"
+	"github.com/kaushik2901/raglab/internal/config"
+	"github.com/kaushik2901/raglab/internal/embedder"
+	"github.com/kaushik2901/raglab/internal/parser"
+	qstore "github.com/kaushik2901/raglab/internal/store"
+	"github.com/kaushik2901/raglab/internal/types"
 	"github.com/riverqueue/river"
 	"golang.org/x/sync/errgroup"
 )

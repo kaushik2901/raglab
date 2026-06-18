@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/db"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 func connectOrSkip(t *testing.T) *pgxpool.Pool {

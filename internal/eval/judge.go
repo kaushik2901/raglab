@@ -8,7 +8,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared/constant"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
+	"github.com/kaushik2901/raglab/internal/generator"
 )
 
 type judgeResponse struct {

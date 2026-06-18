@@ -15,8 +15,8 @@ package retriever
 
 import (
     "context"
-    "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-    "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+    "github.com/kaushik2901/raglab/internal/store"
+    "github.com/kaushik2901/raglab/internal/types"
 )
 
 func init() {

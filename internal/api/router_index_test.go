@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	qstore "github.com/kaushik2901/raglab/internal/store"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type mockIndexStore struct {

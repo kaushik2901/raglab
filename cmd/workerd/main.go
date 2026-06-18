@@ -10,10 +10,10 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/db"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/eval"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
+	"github.com/kaushik2901/raglab/internal/config"
+	"github.com/kaushik2901/raglab/internal/db"
+	"github.com/kaushik2901/raglab/internal/eval"
+	"github.com/kaushik2901/raglab/internal/workflow"
 )
 
 func main() {

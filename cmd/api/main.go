@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/api"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
+	"github.com/kaushik2901/raglab/internal/api"
+	"github.com/kaushik2901/raglab/internal/config"
 )
 
 func main() {

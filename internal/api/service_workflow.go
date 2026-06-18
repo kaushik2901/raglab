@@ -11,7 +11,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/workflow"
+	"github.com/kaushik2901/raglab/internal/workflow"
 )
 
 func parseDocTimeout(s string) time.Duration {

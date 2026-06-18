@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
+	qstore "github.com/kaushik2901/raglab/internal/store"
 )
 
 type IndexRouter struct {

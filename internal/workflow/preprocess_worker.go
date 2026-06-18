@@ -16,7 +16,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/jackc/pgx/v5"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/preprocessor"
+	"github.com/kaushik2901/raglab/internal/preprocessor"
 	"github.com/riverqueue/river"
 )
 

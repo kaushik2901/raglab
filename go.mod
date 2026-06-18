@@ -1,4 +1,4 @@
-module github.com/kaushik2901/gitlab-handbook-rag-pipeline
+module github.com/kaushik2901/raglab
 
 go 1.25.0
 

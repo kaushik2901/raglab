@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/config"
+	"github.com/kaushik2901/raglab/internal/config"
 )
 
 func TestGeneratorFactory_WrapsWithRateLimiter(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/generator"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type mockRetriever struct {

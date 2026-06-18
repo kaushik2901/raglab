@@ -9,9 +9,9 @@ import (
 	"github.com/openai/openai-go"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/embedder"
+	"github.com/kaushik2901/raglab/internal/generator"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type Retriever interface {

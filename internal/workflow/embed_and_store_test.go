@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	qstore "github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/store"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	qstore "github.com/kaushik2901/raglab/internal/store"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type mockEmbedder struct {

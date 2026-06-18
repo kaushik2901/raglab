@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/embedder"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/generator"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/memory"
-	"github.com/kaushik2901/gitlab-handbook-rag-pipeline/internal/types"
+	"github.com/kaushik2901/raglab/internal/embedder"
+	"github.com/kaushik2901/raglab/internal/generator"
+	"github.com/kaushik2901/raglab/internal/memory"
+	"github.com/kaushik2901/raglab/internal/types"
 )
 
 type mockEmbedder struct {
