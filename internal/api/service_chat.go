@@ -2,16 +2,17 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/openai/openai-go"
 
 	"github.com/kaushik2901/raglab/internal/config"
 	"github.com/kaushik2901/raglab/internal/embedder"
 	"github.com/kaushik2901/raglab/internal/generator"
-	"github.com/kaushik2901/raglab/internal/memory"
 	"github.com/kaushik2901/raglab/internal/retriever"
 	qstore "github.com/kaushik2901/raglab/internal/store"
 	"github.com/kaushik2901/raglab/internal/types"
@@ -22,19 +23,17 @@ type retrieverInterface interface {
 }
 
 type ChatService struct {
-	vs     qstore.VectorStore
-	cfg    *config.Config
-	memory memory.Memory
+	vs   qstore.VectorStore
+	cfg  *config.Config
+	repo *ChatRepository
 
-	// Injectable factories for testing
 	newEmbedderFn  func(req ChatRequest) (embedder.Embedder, error)
 	newRetrieverFn func() (retrieverInterface, error)
 	newGeneratorFn func(req ChatRequest) (generator.Generator, error)
 }
 
-func NewChatService(cfg *config.Config, vs qstore.VectorStore) (*ChatService, error) {
-	mem := memory.NewRingBuffer(cfg.ChatMemorySize)
-	s := &ChatService{cfg: cfg, vs: vs, memory: mem}
+func NewChatService(cfg *config.Config, vs qstore.VectorStore, repo *ChatRepository) (*ChatService, error) {
+	s := &ChatService{cfg: cfg, vs: vs, repo: repo}
 	s.newEmbedderFn = func(req ChatRequest) (embedder.Embedder, error) {
 		return embedder.New(config.Provider(req.EmbeddingProvider), req.EmbeddingModel, 1)
 	}
@@ -57,7 +56,7 @@ func (s *ChatService) retrieveSources(ctx context.Context, req ChatRequest) ([]t
 		return nil, nil, fmt.Errorf("create retriever: %w", err)
 	}
 
-	queryEmbeddings, err := emb.Embed(ctx, []types.Chunk{{ID: "query", Content: req.Query}})
+	queryEmbeddings, err := emb.Embed(ctx, []types.Chunk{{ID: "query", Content: req.QueryText()}})
 	if err != nil {
 		return nil, nil, fmt.Errorf("embed query: %w", err)
 	}
@@ -87,10 +86,22 @@ func (s *ChatService) buildMessages(req ChatRequest, results []types.SearchResul
 		openai.SystemMessage("You are a helpful assistant that answers questions based on the provided context. If the context does not contain enough information to answer, say so."),
 	}
 
-	if req.ConversationID != "" {
-		for _, turn := range s.memory.Get(req.ConversationID) {
-			messages = append(messages, openai.UserMessage(turn.User.Content))
-			messages = append(messages, openai.AssistantMessage(turn.Assistant.Content))
+	if len(req.Messages) > 0 {
+		history := req.Messages
+		if len(history) > 0 && history[len(history)-1].Role == "user" {
+			history = history[:len(history)-1]
+		}
+		for _, msg := range history {
+			text := msg.TextContent()
+			if text == "" {
+				continue
+			}
+			switch msg.Role {
+			case "user":
+				messages = append(messages, openai.UserMessage(text))
+			case "assistant":
+				messages = append(messages, openai.AssistantMessage(text))
+			}
 		}
 	}
 
@@ -102,7 +113,7 @@ func (s *ChatService) buildMessages(req ChatRequest, results []types.SearchResul
 		}
 		contextParts = append(contextParts, fmt.Sprintf("Document: %s\n%s", label, r.Content))
 	}
-	userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", strings.Join(contextParts, "\n\n"), req.Query)
+	userPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", strings.Join(contextParts, "\n\n"), req.QueryText())
 	messages = append(messages, openai.UserMessage(userPrompt))
 
 	return messages
@@ -132,12 +143,15 @@ func (s *ChatService) ChatStream(ctx context.Context, req ChatRequest, results [
 	}
 
 	answer := completion.Choices[0].Message.Content
-	if req.ConversationID != "" {
-		s.memory.Add(req.ConversationID, req.Query, answer)
+
+	convID, err := s.persistMessages(ctx, req, answer, sources, completion.Usage)
+	if err != nil {
+		return nil, fmt.Errorf("persist messages: %w", err)
 	}
 
 	return &ChatResponse{
 		Answer:          answer,
+		ConversationID:  convID,
 		SourceDocuments: sources,
 		TokenUsage: TokenUsage{
 			Prompt:     int(completion.Usage.PromptTokens),
@@ -177,12 +191,15 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 	}
 
 	answer := completion.Choices[0].Message.Content
-	if req.ConversationID != "" {
-		s.memory.Add(req.ConversationID, req.Query, answer)
+
+	convID, err := s.persistMessages(ctx, req, answer, sources, completion.Usage)
+	if err != nil {
+		return nil, fmt.Errorf("persist messages: %w", err)
 	}
 
 	return &ChatResponse{
 		Answer:          answer,
+		ConversationID:  convID,
 		SourceDocuments: sources,
 		TokenUsage: TokenUsage{
 			Prompt:     int(completion.Usage.PromptTokens),
@@ -191,6 +208,51 @@ func (s *ChatService) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 		},
 		LatencyMs: time.Since(start).Milliseconds(),
 	}, nil
+}
+
+func (s *ChatService) persistMessages(ctx context.Context, req ChatRequest, answer string, sources []SourceDoc, usage openai.CompletionUsage) (string, error) {
+	if s.repo == nil {
+		return "", nil
+	}
+
+	convID, err := s.resolveConversationID(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	sourcesJSON, _ := json.Marshal(sources)
+	tokenUsageJSON, _ := json.Marshal(TokenUsage{
+		Prompt:     int(usage.PromptTokens),
+		Completion: int(usage.CompletionTokens),
+		Total:      int(usage.TotalTokens),
+	})
+
+	query := req.QueryText()
+	if err := s.repo.AddMessage(ctx, convID, "user", query, nil, nil); err != nil {
+		return "", err
+	}
+	if err := s.repo.AddMessage(ctx, convID, "assistant", answer, sourcesJSON, tokenUsageJSON); err != nil {
+		return "", err
+	}
+	return convID.String(), nil
+}
+
+func (s *ChatService) resolveConversationID(ctx context.Context, req ChatRequest) (uuid.UUID, error) {
+	if req.ConversationID != "" {
+		id, err := uuid.Parse(req.ConversationID)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("invalid conversation_id: %w", err)
+		}
+		if err := s.repo.GetOrCreateConversation(ctx, id); err != nil {
+			return uuid.Nil, err
+		}
+		return id, nil
+	}
+	id, err := s.repo.CreateConversation(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return id, nil
 }
 
 func toFloat32(v []float64) []float32 {

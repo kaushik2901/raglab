@@ -156,24 +156,62 @@ type JobStatusResponse struct {
 	Errors      []string `json:"errors,omitempty"`
 }
 
+type ChatMessagePart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type ChatMessage struct {
+	Role    string            `json:"role"`
+	Content string            `json:"content"`
+	Parts   []ChatMessagePart `json:"parts,omitempty"`
+}
+
+func (m ChatMessage) TextContent() string {
+	if m.Content != "" {
+		return m.Content
+	}
+	for _, p := range m.Parts {
+		if p.Type == "text" {
+			return p.Text
+		}
+	}
+	return ""
+}
+
 type ChatRequest struct {
-	Tag               string  `json:"tag"`
-	Query             string  `json:"query"`
-	ConversationID    string  `json:"conversation_id,omitempty"`
-	TopK              int     `json:"top_k"`
-	Temperature       float64 `json:"temperature"`
-	MaxTokens         int     `json:"max_tokens"`
-	LLMProvider       string  `json:"llm_provider"`
-	LLMModel          string  `json:"llm_model"`
-	EmbeddingProvider string  `json:"embedding_provider"`
-	EmbeddingModel    string  `json:"embedding_model"`
+	Messages          []ChatMessage `json:"messages"`
+	Tag               string        `json:"tag"`
+	Query             string        `json:"query,omitempty"`
+	ConversationID    string        `json:"conversation_id,omitempty"`
+	TopK              int           `json:"top_k"`
+	Temperature       float64       `json:"temperature"`
+	MaxTokens         int           `json:"max_tokens"`
+	LLMProvider       string        `json:"llm_provider"`
+	LLMModel          string        `json:"llm_model"`
+	EmbeddingProvider string        `json:"embedding_provider"`
+	EmbeddingModel    string        `json:"embedding_model"`
+}
+
+func (r ChatRequest) QueryText() string {
+	if r.Query != "" {
+		return r.Query
+	}
+	for i := len(r.Messages) - 1; i >= 0; i-- {
+		if r.Messages[i].Role == "user" {
+			if text := r.Messages[i].TextContent(); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
 }
 
 func (r ChatRequest) Validate() error {
 	if r.Tag == "" {
 		return &validationError{"tag is required"}
 	}
-	if r.Query == "" {
+	if r.QueryText() == "" {
 		return &validationError{"query is required"}
 	}
 	if r.TopK <= 0 {
@@ -202,6 +240,7 @@ func (r ChatRequest) Validate() error {
 
 type ChatResponse struct {
 	Answer          string      `json:"answer"`
+	ConversationID  string      `json:"conversation_id"`
 	SourceDocuments []SourceDoc `json:"source_documents"`
 	TokenUsage      TokenUsage  `json:"token_usage"`
 	LatencyMs       int64       `json:"latency_ms"`

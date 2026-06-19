@@ -53,6 +53,12 @@ func (w *statusWriter) WriteHeader(status int) {
 	w.ResponseWriter.WriteHeader(status)
 }
 
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {

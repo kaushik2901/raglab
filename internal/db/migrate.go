@@ -13,9 +13,15 @@ import (
 //go:embed migrations/001_initial.sql
 var initialMigration string
 
+//go:embed migrations/002_chat.sql
+var chatMigration string
+
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, initialMigration); err != nil {
 		return fmt.Errorf("execute initial migration: %w", err)
+	}
+	if _, err := pool.Exec(ctx, chatMigration); err != nil {
+		return fmt.Errorf("execute chat migration: %w", err)
 	}
 
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)

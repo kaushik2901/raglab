@@ -9,3 +9,9 @@ func TestInitialMigrationEmbedded(t *testing.T) {
 		t.Fatal("initial migration SQL must not be empty")
 	}
 }
+
+func TestChatMigrationEmbedded(t *testing.T) {
+	if chatMigration == "" {
+		t.Fatal("chat migration SQL must not be empty")
+	}
+}

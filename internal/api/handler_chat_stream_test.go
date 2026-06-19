@@ -13,7 +13,6 @@ import (
 
 	"github.com/kaushik2901/raglab/internal/embedder"
 	"github.com/kaushik2901/raglab/internal/generator"
-	"github.com/kaushik2901/raglab/internal/memory"
 	"github.com/kaushik2901/raglab/internal/types"
 )
 
@@ -45,9 +44,9 @@ func (m *mockGenForStream) GenerateStream(ctx context.Context, params openai.Cha
 }
 func (m *mockGenForStream) ModelName() string { return "mock" }
 
-func newTestChatService(mockRet retrieverInterface, mockGen generator.Generator, mem memory.Memory) *ChatService {
+func newTestChatServiceWithMocks(mockRet retrieverInterface, mockGen generator.Generator) *ChatService {
 	return &ChatService{
-		memory: mem,
+		repo: nil,
 		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
 			return &mockEmbedderForStream{}, nil
 		},
@@ -81,9 +80,7 @@ func TestChatStreamHandler_Success(t *testing.T) {
 			}, nil
 		},
 	}
-	cr := &ChatRouter{
-		svc: newTestChatService(mockRet, mockGen, memory.NewRingBuffer(10)),
-	}
+	cr := NewChatRouter(newTestChatServiceWithMocks(mockRet, mockGen), nil)
 
 	body := `{"tag": "test-collection", "query": "test query", "top_k": 5, "max_tokens": 1024, "temperature": 0.3, "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small"}`
 	req := httptest.NewRequest("POST", "/api/v1/chat/stream", strings.NewReader(body))
@@ -96,19 +93,40 @@ func TestChatStreamHandler_Success(t *testing.T) {
 	assert.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
 
 	scanner := bufio.NewScanner(rec.Body)
-	var events []string
+	var parts []map[string]any
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "event: ") {
-			events = append(events, strings.TrimPrefix(line, "event: "))
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			var part map[string]any
+			if err := jsonUnmarshal([]byte(data), &part); err == nil {
+				parts = append(parts, part)
+			}
 		}
 	}
 
-	assert.Equal(t, []string{"retrieval", "token", "token", "token", "done"}, events)
+	assert.GreaterOrEqual(t, len(parts), 5) // source-document + text-start + 3 text-delta + text-end
+
+	var sourceCount, deltaCount int
+	var hasTextEnd bool
+	for _, p := range parts {
+		switch p["type"] {
+		case "source-document":
+			sourceCount++
+			assert.Equal(t, "doc1.md", p["sourceId"])
+		case "text-delta":
+			deltaCount++
+		case "text-end":
+			hasTextEnd = true
+		}
+	}
+	assert.Equal(t, 1, sourceCount)
+	assert.Equal(t, 3, deltaCount)
+	assert.True(t, hasTextEnd)
 }
 
 func TestChatStreamHandler_InvalidJSON(t *testing.T) {
-	cr := &ChatRouter{}
+	cr := NewChatRouter(nil, nil)
 
 	body := `{bad json`
 	req := httptest.NewRequest("POST", "/api/v1/chat/stream", strings.NewReader(body))
@@ -124,7 +142,7 @@ func TestChatStreamHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestChatStreamHandler_MissingFields(t *testing.T) {
-	cr := &ChatRouter{}
+	cr := NewChatRouter(nil, nil)
 
 	tests := []struct {
 		name string
@@ -153,9 +171,7 @@ func TestChatStreamHandler_RetrievalError(t *testing.T) {
 			return nil, fmt.Errorf("qdrant error")
 		},
 	}
-	cr := &ChatRouter{
-		svc: newTestChatService(mockRet, &mockGenForStream{}, memory.NewRingBuffer(10)),
-	}
+	cr := NewChatRouter(newTestChatServiceWithMocks(mockRet, &mockGenForStream{}), nil)
 
 	body := `{"tag": "col", "query": "test", "top_k": 5, "max_tokens": 1024, "temperature": 0.3, "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small"}`
 	req := httptest.NewRequest("POST", "/api/v1/chat/stream", strings.NewReader(body))
@@ -174,10 +190,7 @@ func TestChatStreamHandler_RetrievalError(t *testing.T) {
 	assert.True(t, hasError)
 }
 
-func TestChatStreamHandler_WithMemory(t *testing.T) {
-	mem := memory.NewRingBuffer(10)
-	mem.Add("conv-1", "previous question", "previous answer")
-
+func TestChatStreamHandler_WithMessages(t *testing.T) {
 	mockRet := &mockRetrieverForStream{
 		retrieveFn: func(ctx context.Context, collection string, queryVector []float32, topK int) ([]types.SearchResult, error) {
 			return []types.SearchResult{{DocumentPath: "doc1.md", Content: "content", Score: 0.95}}, nil
@@ -194,19 +207,30 @@ func TestChatStreamHandler_WithMemory(t *testing.T) {
 			}, nil
 		},
 	}
-	cr := &ChatRouter{
-		svc: newTestChatService(mockRet, mockGen, mem),
-	}
+	cr := NewChatRouter(newTestChatServiceWithMocks(mockRet, mockGen), nil)
 
-	body := `{"tag": "col", "query": "new question", "conversation_id": "conv-1", "top_k": 5, "max_tokens": 1024, "temperature": 0.3, "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small"}`
+	body := `{"tag": "col", "messages": [{"role":"user","content":"previous question"},{"role":"assistant","content":"previous answer"},{"role":"user","content":"new question"}], "top_k": 5, "max_tokens": 1024, "temperature": 0.3, "llm_provider": "openai", "llm_model": "gpt-4o-mini", "embedding_provider": "openai", "embedding_model": "text-embedding-3-small"}`
 	req := httptest.NewRequest("POST", "/api/v1/chat/stream", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
 	cr.chatStreamHandler(rec, req)
 
-	turns := mem.Get("conv-1")
-	assert.Len(t, turns, 2)
-	assert.Equal(t, "new question", turns[1].User.Content)
-	assert.Contains(t, turns[1].Assistant.Content, "Hello world")
+	assert.Equal(t, 200, rec.Code)
+	scanner := bufio.NewScanner(rec.Body)
+	var hasTextStart, hasTextEnd bool
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			if strings.Contains(data, `"type":"text-start"`) {
+				hasTextStart = true
+			}
+			if strings.Contains(data, `"type":"text-end"`) {
+				hasTextEnd = true
+			}
+		}
+	}
+	assert.True(t, hasTextStart)
+	assert.True(t, hasTextEnd)
 }
