@@ -13,7 +13,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { RiDashboardLine, RiArchiveLine, RiDatabase2Line, RiSearch2Line, RiLineChartLine, RiChat3Line, RiGitBranchLine } from "@remixicon/react"
+import { RiDashboardLine, RiArchiveLine, RiDatabase2Line, RiSearch2Line, RiLineChartLine, RiChat3Line } from "@remixicon/react"
 
 interface NavGroup {
   label: string
@@ -76,11 +76,11 @@ export function Layout() {
         <Sidebar collapsible="icon">
           <SidebarHeader className="px-3 py-4">
             <Link to="/" className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
-              <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground shrink-0">
-                <RiGitBranchLine className="size-4.5" />
+              <div className="flex size-8 items-center justify-center shrink-0">
+                <img src="/icon.svg" alt="" className="size-4.5" />
               </div>
               <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-                Handbook RAG
+                RAG Lab
               </span>
             </Link>
           </SidebarHeader>
