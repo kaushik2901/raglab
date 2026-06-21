@@ -4,25 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type ChatRouter struct {
-	svc  *ChatService
-	repo *ChatRepository
+	svc *ChatService
 }
 
-func NewChatRouter(svc *ChatService, repo *ChatRepository) *ChatRouter {
-	return &ChatRouter{svc: svc, repo: repo}
+func NewChatRouter(svc *ChatService) *ChatRouter {
+	return &ChatRouter{svc: svc}
 }
 
 func (r *ChatRouter) Register(mux chi.Router) {
 	mux.Post("/", r.chatHandler)
 	mux.Post("/stream", r.chatStreamHandler)
-	mux.Get("/conversations/{id}", r.getConversationHandler)
 }
 
 func (r *ChatRouter) chatHandler(w http.ResponseWriter, req *http.Request) {
@@ -42,7 +39,6 @@ func (r *ChatRouter) chatHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	w.Header().Set("X-Conversation-ID", resp.ConversationID)
 	respondJSON(w, 200, resp)
 }
 
@@ -91,17 +87,16 @@ func (r *ChatRouter) chatStreamHandler(w http.ResponseWriter, req *http.Request)
 		})
 	}
 
-	msgID := uuid.NewString()
+	msgID := "text-" + uuid.NewString()
 	r.writeStreamPart(w, flusher, map[string]any{
 		"type": "text-start",
 		"id":   msgID,
 	})
 
-	start := time.Now()
-
-	chatResp, err := r.svc.ChatStream(req.Context(), body, results, sources, func(token string) error {
+	_, err = r.svc.ChatStream(req.Context(), body, results, sources, func(token string) error {
 		r.writeStreamPart(w, flusher, map[string]any{
 			"type":  "text-delta",
+			"id":    msgID,
 			"delta": token,
 		})
 		return nil
@@ -113,41 +108,17 @@ func (r *ChatRouter) chatStreamHandler(w http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	finishPayload := map[string]any{
-		"type":         "text-end",
-		"finishReason": "stop",
-	}
-	if chatResp.TokenUsage.Total > 0 {
-		finishPayload["usage"] = map[string]int{
-			"promptTokens":     chatResp.TokenUsage.Prompt,
-			"completionTokens": chatResp.TokenUsage.Completion,
-		}
-	}
-	r.writeStreamPart(w, flusher, finishPayload)
+	r.writeStreamPart(w, flusher, map[string]any{
+		"type": "text-end",
+		"id":   msgID,
+	})
 
-	w.Header().Set("X-Conversation-ID", chatResp.ConversationID)
-	w.Header().Set("X-Latency-Ms", fmt.Sprintf("%d", time.Since(start).Milliseconds()))
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 func (r *ChatRouter) writeStreamPart(w http.ResponseWriter, flusher http.Flusher, part any) {
 	jsonData, _ := json.Marshal(part)
 	fmt.Fprintf(w, "data: %s\n\n", string(jsonData))
 	flusher.Flush()
-}
-
-func (r *ChatRouter) getConversationHandler(w http.ResponseWriter, req *http.Request) {
-	idStr := chi.URLParam(req, "id")
-	convID, err := uuid.Parse(idStr)
-	if err != nil {
-		respondProblem(w, 400, "Invalid Parameter", "invalid conversation id")
-		return
-	}
-
-	conv, err := r.repo.GetConversation(req.Context(), convID)
-	if err != nil {
-		respondProblem(w, 404, "Not Found", "conversation not found")
-		return
-	}
-
-	respondJSON(w, 200, conv)
 }

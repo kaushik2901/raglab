@@ -183,7 +183,6 @@ type ChatRequest struct {
 	Messages          []ChatMessage `json:"messages"`
 	Tag               string        `json:"tag"`
 	Query             string        `json:"query,omitempty"`
-	ConversationID    string        `json:"conversation_id,omitempty"`
 	TopK              int           `json:"top_k"`
 	Temperature       float64       `json:"temperature"`
 	MaxTokens         int           `json:"max_tokens"`
@@ -240,7 +239,6 @@ func (r ChatRequest) Validate() error {
 
 type ChatResponse struct {
 	Answer          string      `json:"answer"`
-	ConversationID  string      `json:"conversation_id"`
 	SourceDocuments []SourceDoc `json:"source_documents"`
 	TokenUsage      TokenUsage  `json:"token_usage"`
 	LatencyMs       int64       `json:"latency_ms"`

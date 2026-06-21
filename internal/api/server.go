@@ -84,10 +84,9 @@ func NewWithDeps(cfg *config.Config, pool *pgxpool.Pool, qdrant qstore.VectorSto
 		})
 	}
 
-	chatRepo := NewChatRepository(pool)
-	chatSvc, _ := NewChatService(cfg, qdrant, chatRepo)
+	chatSvc := NewChatService(cfg, qdrant)
 	r.Route("/api/v1/chat", func(r chi.Router) {
-		NewChatRouter(chatSvc, chatRepo).Register(r)
+		NewChatRouter(chatSvc).Register(r)
 	})
 
 	r.Get("/", indexHandler)

@@ -253,7 +253,7 @@ export default function Chat() {
                             Sources
                           </p>
                           <div className="space-y-1.5">
-                            {sources.map((src, si) => (
+                              {sources.map((src, si) => (
                               <div key={si} className="flex items-start gap-2 text-xs">
                                 <RiFileTextLine className="size-3 mt-0.5 text-muted-foreground shrink-0" />
                                 <div className="min-w-0">

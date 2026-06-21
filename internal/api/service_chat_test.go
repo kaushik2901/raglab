@@ -71,7 +71,7 @@ func (m *mockRetrieverForService) Retrieve(ctx context.Context, collection strin
 }
 
 func newTestChatService() *ChatService {
-	return &ChatService{repo: nil}
+	return &ChatService{}
 }
 
 func TestChatService_BuildMessages(t *testing.T) {
@@ -211,8 +211,7 @@ func TestChatService_Chat_Success(t *testing.T) {
 	t.Parallel()
 
 	svc := &ChatService{
-		repo: nil,
-		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
+			newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
 			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
 				return []types.Embedding{{Vector: []float64{0.1, 0.2}}}, nil
 			}}, nil
@@ -266,8 +265,7 @@ func TestChatService_Chat_SourceURLPopulated(t *testing.T) {
 	t.Parallel()
 
 	svc := &ChatService{
-		repo: nil,
-		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
+			newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
 			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
 				return []types.Embedding{{Vector: []float64{0.1, 0.2}}}, nil
 			}}, nil
@@ -323,8 +321,7 @@ func TestChatService_Chat_RetrieverError(t *testing.T) {
 	t.Parallel()
 
 	svc := &ChatService{
-		repo: nil,
-		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
+			newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
 			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
 				return []types.Embedding{{Vector: []float64{0.1}}}, nil
 			}}, nil
@@ -359,8 +356,7 @@ func TestChatService_Chat_GeneratorError(t *testing.T) {
 	t.Parallel()
 
 	svc := &ChatService{
-		repo: nil,
-		newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
+			newEmbedderFn: func(req ChatRequest) (embedder.Embedder, error) {
 			return &mockEmbedder{embedFn: func(ctx context.Context, chunks []types.Chunk) ([]types.Embedding, error) {
 				return []types.Embedding{{Vector: []float64{0.1}}}, nil
 			}}, nil
